@@ -1,0 +1,22 @@
+# Fast compilation configuration for Bevy development
+# Reference: https://bevyengine.org/learn/quick-start/getting-started/setup/
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[target.aarch64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"
+
+# Enable dynamic linking for faster iterative builds
+# Run with: cargo run --features bevy/dynamic_linking

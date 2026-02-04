@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build outputs
+dist/
+build/
+*.o
+*.a
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Note: thoughts/ is NOT in .gitignore
+# Instead, a pre-commit hook prevents accidental commits
+# This allows the thoughts directory to remain visible and usable
+
+
+# Rust
+/target/
+
+# Assets (keep .gitkeep files)
+assets/**/*
+!assets/**/.gitkeep

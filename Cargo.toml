@@ -1,0 +1,36 @@
+[package]
+name = "auto-battle"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+
+[dependencies]
+bevy = { version = "0.18", default-features = false, features = ["2d"] }
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+# Allow common patterns in game dev
+needless_pass_by_value = "allow"  # Bevy systems take ownership
+too_many_arguments = "allow"      # Bevy queries can have many params
+type_complexity = "allow"         # Bevy queries can be complex
+
+# Development profile - fast compile, slow runtime
+[profile.dev]
+opt-level = 1
+
+# Optimize dependencies even in dev
+[profile.dev.package."*"]
+opt-level = 3
+
+# Release profile - slow compile, fast runtime
+[profile.release]
+lto = "thin"
+codegen-units = 1
