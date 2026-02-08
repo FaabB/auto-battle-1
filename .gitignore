@@ -37,10 +37,6 @@ tmp/
 temp/
 *.tmp
 
-# Note: thoughts/ is NOT in .gitignore
-# Instead, a pre-commit hook prevents accidental commits
-# This allows the thoughts directory to remain visible and usable
-
 
 # Rust
 /target/

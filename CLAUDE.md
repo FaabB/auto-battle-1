@@ -28,6 +28,7 @@ thoughts/
 | Command | Description |
 |---------|-------------|
 | `/research_codebase` | Document codebase understanding without critique |
+| `/create_tickets` | Generate implementation tickets from research, files, or text |
 | `/create_plan` | Create detailed implementation plans interactively |
 | `/implement_plan` | Execute plans with verification gates |
 | `/validate_plan` | Verify implementation matches plan |
@@ -41,16 +42,18 @@ thoughts/
 | Type | Pattern | Example |
 |------|---------|---------|
 | Research | `YYYY-MM-DD-description.md` | `2025-02-04-auth-flow.md` |
+| Tickets | `YYYY-MM-DD-NNNN-description.md` | `2025-02-04-0001-camera-layout.md` |
 | Plans | `YYYY-MM-DD-description.md` | `2025-02-04-new-feature.md` |
 | Handoffs | `YYYY-MM-DD_HH-MM-SS_description.md` | `2025-02-04_14-30-00_feature-work.md` |
 
 ### Workflow Phases
 
 1. **Research** (`/research_codebase`) - Document codebase as-is
-2. **Planning** (`/create_plan`) - Create detailed implementation plans
-3. **Implementation** (`/implement_plan`) - Execute with verification pauses
-4. **Validation** (`/validate_plan`) - Verify correctness
-5. **Handoff** (`/create_handoff`) - Transfer context to new sessions
+2. **Ticketing** (`/create_tickets`) - Break work into implementation tickets
+3. **Planning** (`/create_plan`) - Create detailed implementation plans
+4. **Implementation** (`/implement_plan`) - Execute with verification pauses
+5. **Validation** (`/validate_plan`) - Verify correctness
+6. **Handoff** (`/create_handoff`) - Transfer context to new sessions
 
 ### Specialized Agents
 
