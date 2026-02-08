@@ -208,7 +208,7 @@ Current states need expansion:
     └─────────────────────────────────────────────┘
 ```
 
-**Note on Pause architecture:** Paused MUST be a sub-state of InGame (not a top-level state). The current codebase has Paused as a top-level state, which triggers `OnExit(InGame)` cleanup and destroys all game entities. This must be reworked before gameplay systems are added. Use either a `SubState` or a parallel `IsPaused` state with run conditions to disable game systems while paused.
+**Note on Pause architecture:** Paused MUST be a sub-state of InGame (not a top-level state). ~~The current codebase has Paused as a top-level state, which triggers `OnExit(InGame)` cleanup and destroys all game entities. This must be reworked before gameplay systems are added.~~ **Resolved in Ticket 1:** `Paused` is now an `InGameState` SubState (using Bevy's `#[derive(SubStates)]`). Manual `CleanupXxx` markers replaced with built-in `DespawnOnExit`. Game systems use `run_if(in_state(InGameState::Playing))` to auto-pause.
 
 ### 3.2 ECS Component Overview
 

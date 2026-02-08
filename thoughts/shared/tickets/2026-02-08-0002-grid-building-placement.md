@@ -15,7 +15,7 @@
 | Click to place building (hardcoded to Barracks for now) | Click empty cell → blue square appears |
 | Placement validation (can't place on occupied cell) | Clicking occupied cell does nothing |
 | Building rendering (colored squares per type) | Barracks = dark blue, Farm = green/gold |
-| Fix Paused state architecture | Pausing no longer destroys InGame entities |
+| Z-layer ordering constants (background, zone, grid, building, unit, health bar, etc.) | Sprites render in correct visual order, no z-fighting |
 
 ## Context
 
@@ -23,12 +23,15 @@ This ticket introduces the first player interaction. The grid lives inside the b
 
 For now, buildings are visual only — they don't produce units or cost gold yet (those come in Tickets 3 and 6). The goal is to get the placement loop feeling right.
 
-**Critical fix needed:** The Paused state must be reworked before this ticket, because placing buildings creates InGame entities that would be destroyed when pausing. Either make Paused a sub-state of InGame, or use a parallel `IsPaused` state with run conditions. See research doc Section 3.1.
+**Prerequisites from Ticket 1:**
+- Battlefield constants (`CELL_SIZE`, zone column ranges, `col_to_world_x`/`row_to_world_y` helpers)
+- State architecture with `InGameState` SubState (Paused fix already done in Ticket 1)
+- `DespawnOnExit(GameState::InGame)` pattern for entity cleanup
+- Game systems use `run_if(in_state(InGameState::Playing))` to auto-pause
 
 Relevant files:
-- `src/screens/in_game.rs` — InGame state (will need game entity spawning)
-- `src/screens/paused.rs` — Paused state (needs architectural fix)
-- `src/lib.rs` — GameState enum (may need sub-states)
+- `src/battlefield.rs` — battlefield constants and helpers
+- `src/lib.rs` — `GameState`, `InGameState` enums
 - `src/components/mod.rs` — new Building components go here
 
 ## Done When
@@ -39,6 +42,13 @@ Relevant files:
 - Clicking an occupied cell does nothing (no duplicate placement)
 - Pausing and resuming preserves all placed buildings
 
+## Architecture Notes (from Ticket 1 review)
+
+- **`screens/` directory naming**: `screens/in_game.rs` is becoming an input dispatcher, not a visual screen. If building placement input is added, put it in the building/grid domain plugin — not in `handle_game_input`. Monitor whether the `screens/` name still fits.
+- **`handle_game_input` scope**: Keep it to state-transition keys (ESC/Q) only. Mouse/building input belongs in domain plugins.
+- **Prelude convention**: Use explicit imports from domain modules (e.g., `use crate::battlefield::PlayerFortress`) rather than glob re-exports through the prelude.
+- **Re-create `src/components/mod.rs`** when adding Building components. Ticket 1 deleted the empty module.
+
 ## References
 
-- Source: `thoughts/shared/research/2026-02-04-tano-style-game-research.md` (Section 2.2 Building System, Section 3.1 State Machine note on Pause)
+- Source: `thoughts/shared/research/2026-02-04-tano-style-game-research.md` (Section 2.2 Building System)
