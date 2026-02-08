@@ -81,6 +81,11 @@ The workflow uses specialized sub-agents:
 - Use consistent naming conventions
 - Write clear, self-documenting code
 
+### Testing
+- Target 90% test coverage
+- Every ticket should include tests that maintain or increase coverage toward this goal
+- Use `src/testing.rs` helpers (`create_test_app`, `create_ingame_test_app`) for system-level tests
+
 ### Commits
 - Use `/commit` command for creating commits
 - Write clear, imperative commit messages

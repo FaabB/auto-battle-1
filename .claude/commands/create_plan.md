@@ -45,7 +45,13 @@ Then wait for the user's input.
    - **CRITICAL**: DO NOT spawn sub-tasks before reading these files yourself in the main context
    - **NEVER** read files partially - if a file is mentioned, read it completely
 
-2. **Spawn initial research tasks to gather context**:
+2. **Read dependent and depended-on tickets**:
+   Before spawning research tasks, check the ticket index in MEMORY.md (or the ticket directory). Read ALL tickets that:
+   - **Depend on this ticket** — to understand what this foundation must provide (markers, constants, module structure)
+   - **This ticket depends on** — to understand what's already available
+   This is NOT optional. Missing this leads to architectural rework when later tickets discover the foundation is wrong.
+
+3. **Spawn initial research tasks to gather context**:
    Before asking the user any questions, use specialized agents to research in parallel:
 
    - Use the **codebase-locator** agent to find all files related to the ticket/task
@@ -58,18 +64,18 @@ Then wait for the user's input.
    - Trace data flow and key functions
    - Return detailed explanations with file:line references
 
-3. **Read all files identified by research tasks**:
+4. **Read all files identified by research tasks**:
    - After research tasks complete, read ALL files they identified as relevant
    - Read them FULLY into the main context
    - This ensures you have complete understanding before proceeding
 
-4. **Analyze and verify understanding**:
+5. **Analyze and verify understanding**:
    - Cross-reference the ticket requirements with actual code
    - Identify any discrepancies or misunderstandings
    - Note assumptions that need verification
    - Determine true scope based on codebase reality
 
-5. **Present informed understanding and focused questions**:
+6. **Present informed understanding and focused questions**:
    ```
    Based on the ticket and my research of the codebase, I understand we need to [accurate summary].
 
@@ -289,7 +295,14 @@ After structure approval:
    - Clarify success criteria (both automated and manual)
    - Add/remove scope items
 
-3. **Continue refining** until the user is satisfied
+3. **Document consistency check** — If the plan scope differs from the original ticket:
+   - **Update the base ticket** to reflect the expanded/changed scope
+   - **Update the research doc** if it references patterns or architecture that the plan changes
+   - **Update dependent tickets** that referenced work now done in this ticket (e.g., if a fix was pulled forward from Ticket N+1 into this plan)
+   - **Update MEMORY.md** if project-level facts changed (e.g., architecture decisions, known issues resolved)
+   - This is NOT optional. Stale documents cause confusion in future sessions.
+
+4. **Continue refining** until the user is satisfied
 
 ## Important Guidelines
 
@@ -366,13 +379,33 @@ These were verified against the actual crate source:
 - `ApplyDeferred` is a unit struct (not a function `apply_deferred`)
 ```
 
+## Check for Built-in Alternatives
+
+Before proposing ANY custom infrastructure (cleanup systems, state management, entity lifecycle, etc.), **always search the framework source** for existing solutions. This prevents reinventing the wheel.
+
+### Process
+
+1. **Before writing custom code for common patterns**, ask: "Does the framework already provide this?"
+2. **Search the framework source** (`~/.cargo/registry/src/` for Rust, `node_modules/` for JS/TS):
+   - Look for built-in components, traits, or systems that do the same thing
+   - Check framework examples for recommended patterns
+   - Search for the feature name in the framework's prelude or common imports
+3. **If a built-in exists**, use it and document why in the plan
+4. **If no built-in exists**, document that you checked and why the custom solution is necessary
+
+### Common Traps
+- Writing manual entity cleanup when the framework has state-scoped despawning
+- Writing custom state machines when the framework has sub-states or computed states
+- Writing custom event systems when the framework has built-in messaging
+- Writing custom scheduling when the framework has run conditions or system sets
+
 ## Architecture Considerations
 
 Plans should consider not just the current ticket, but the next 2-3 tickets that build on this work. This prevents architectural rework.
 
 ### During Research Phase
 
-1. **Read dependent tickets** — If the ticket index shows future tickets depend on this one, read them to understand what they'll need from this foundation
+1. **Read dependent tickets** — If the ticket index shows future tickets depend on this one, read them to understand what they'll need from this foundation (this should already be done in Step 1.2 of Context Gathering)
 2. **Identify future components** — What markers, components, or resources will later tickets add to entities created here?
 3. **Separate concerns early**:
    - **World state** (entities, markers, game logic) vs **rendering** (sprites, colors, visual effects)

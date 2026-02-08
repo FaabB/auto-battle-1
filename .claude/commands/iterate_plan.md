@@ -65,7 +65,17 @@ If the user's feedback requires understanding new code patterns or validating as
 
 1. **Create a research todo list** using TodoWrite
 
-2. **Spawn parallel sub-tasks for research**:
+2. **Verify framework APIs** if changes involve framework code:
+   - Spawn a dedicated agent to check actual source in cargo registry / node_modules
+   - Don't trust documentation, memory, or assumptions — verify against real source
+   - Document verified patterns in the plan
+
+3. **Check for built-in alternatives** before proposing custom infrastructure:
+   - Search the framework source for existing solutions (state management, cleanup, events, etc.)
+   - If a built-in exists, use it instead of custom code
+   - If no built-in exists, document that you checked
+
+4. **Spawn parallel sub-tasks for research**:
    Use the right agent for each type of research:
 
    **For code investigation:**
@@ -80,11 +90,15 @@ If the user's feedback requires understanding new code patterns or validating as
    **Be EXTREMELY specific about directories**:
    - Include full path context in prompts
 
-3. **Read any new files identified by research**:
+5. **Read dependent tickets** if changes affect the foundation:
+   - If the plan is for a ticket that other tickets depend on, read those dependent tickets
+   - Ensure the changes don't break assumptions made by downstream tickets
+
+6. **Read any new files identified by research**:
    - Read them FULLY into the main context
    - Cross-reference with the plan requirements
 
-4. **Wait for ALL sub-tasks to complete** before proceeding
+7. **Wait for ALL sub-tasks to complete** before proceeding
 
 ### Step 3: Present Understanding and Approach
 
@@ -144,7 +158,14 @@ Get user confirmation before proceeding.
    Would you like any further adjustments?
    ```
 
-2. **Be ready to iterate further** based on feedback
+2. **Document consistency check** — If the plan scope changed:
+   - **Update the base ticket** to reflect expanded/changed scope
+   - **Update the research doc** if it references patterns or architecture that changed
+   - **Update dependent tickets** that referenced work now moved to a different ticket
+   - **Update MEMORY.md** if project-level facts changed
+   - This is NOT optional. Stale documents cause confusion in future sessions.
+
+3. **Be ready to iterate further** based on feedback
 
 ## Important Guidelines
 
