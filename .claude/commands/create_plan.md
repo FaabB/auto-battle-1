@@ -329,6 +329,70 @@ After structure approval:
    - The implementation plan must be complete and actionable
    - Every decision must be made before finalizing the plan
 
+## API & Framework Verification
+
+Before writing code snippets into the plan, **verify every API you reference** against the actual source code. Plans with wrong APIs waste implementation time and create cascading errors.
+
+### Verification Process
+
+1. **Spawn a dedicated research agent** to verify framework APIs:
+   - Check the actual source in the cargo registry (`~/.cargo/registry/src/`) or `node_modules/`
+   - Don't trust documentation, memory, or assumptions — verify against real source
+   - For each API used in the plan, confirm: correct import path, correct type signatures, whether it's a component/trait/enum, required type parameters
+
+2. **Document verified API patterns** in the plan:
+   - Include a "Key API Patterns" section listing the verified correct usage
+   - Note any gotchas discovered (e.g., "X is NOT a Component — use Y instead")
+   - This section becomes the source of truth for implementation agents
+
+3. **Common things to verify**:
+   - Import paths (modules get reorganized across framework versions)
+   - Whether types are components, resources, enums, or plain structs
+   - Method signatures (return types change, e.g., `Result` vs direct value)
+   - System parameter types (e.g., `ButtonInput<KeyCode>` vs `Input<KeyCode>`)
+   - Struct variant syntax (tuple vs named fields)
+
+### Example: Verified API section in a plan
+
+```markdown
+## Verified API Patterns (Bevy 0.18)
+
+These were verified against the actual crate source:
+
+- `Projection` enum is the Component (not `OrthographicProjection`)
+  - Access via: `if let Projection::Orthographic(ref mut ortho) = *projection { ... }`
+- `ScalingMode` lives at `bevy::camera::ScalingMode` (NOT `bevy::render::camera`)
+- `query.single_mut()` returns `Result` — use `let Ok(..) = .. else { return; }`
+- `ApplyDeferred` is a unit struct (not a function `apply_deferred`)
+```
+
+## Architecture Considerations
+
+Plans should consider not just the current ticket, but the next 2-3 tickets that build on this work. This prevents architectural rework.
+
+### During Research Phase
+
+1. **Read dependent tickets** — If the ticket index shows future tickets depend on this one, read them to understand what they'll need from this foundation
+2. **Identify future components** — What markers, components, or resources will later tickets add to entities created here?
+3. **Separate concerns early**:
+   - **World state** (entities, markers, game logic) vs **rendering** (sprites, colors, visual effects)
+   - **Constants/layout** (pure data) vs **systems** (behavior)
+   - Don't couple spawning with visual representation — use marker components so rendering can be changed independently
+
+### Module Structure Decisions
+
+When planning new modules, consider:
+- Will this file grow beyond ~200 lines as more tickets land? If yes, plan a module directory from the start
+- Propose the split: `mod.rs` (constants/types), domain-specific submodules (e.g., `zones.rs`, `rendering.rs`)
+- Define what's `pub`, `pub(crate)`, and private upfront
+
+### System Ordering
+
+When one system spawns entities and another queries them:
+- Plan for `ApplyDeferred` between spawn and query systems
+- Document the system chain in the plan (e.g., `spawn → ApplyDeferred → add_visuals → setup_camera`)
+- Use `Added<T>` queries for one-shot initialization after spawning
+
 ## Success Criteria Guidelines
 
 **Always separate success criteria into two categories:**
