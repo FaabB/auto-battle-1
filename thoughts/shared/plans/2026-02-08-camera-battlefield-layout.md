@@ -548,21 +548,21 @@ mod tests {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` compiles successfully
-- [ ] `make check` passes (clippy + tests)
-- [ ] No references to `CleanupLoading`, `CleanupMainMenu`, `CleanupInGame`, `CleanupPaused` remain
-- [ ] No references to `GameState::Paused` remain
-- [ ] `cleanup_entities` system no longer exists
-- [ ] `src/components/`, `src/systems/`, `src/resources/`, `src/ui/` directories deleted
-- [ ] `setup_camera` no longer in `main.rs` (moved to `GamePlugin`)
-- [ ] No `pub mod components;`, `pub mod systems;`, `pub mod resources;`, `pub mod ui;` in `lib.rs`
+- [x] `cargo build` compiles successfully
+- [x] `make check` passes (clippy + tests)
+- [x] No references to `CleanupLoading`, `CleanupMainMenu`, `CleanupInGame`, `CleanupPaused` remain
+- [x] No references to `GameState::Paused` remain
+- [x] `cleanup_entities` system no longer exists
+- [x] `src/components/`, `src/systems/`, `src/resources/`, `src/ui/` directories deleted
+- [x] `setup_camera` no longer in `main.rs` (moved to `GamePlugin`)
+- [x] No `pub mod components;`, `pub mod systems;`, `pub mod resources;`, `pub mod ui;` in `lib.rs`
 
 #### Manual Verification:
-- [ ] Press SPACE to start → game enters InGame
-- [ ] Press ESC → pause overlay appears, game still shows behind it
-- [ ] Press ESC again → pause overlay disappears, game continues
-- [ ] Press Q while paused → returns to main menu
-- [ ] Return to main menu → all InGame entities cleaned up
+- [x] Press SPACE to start → game enters InGame
+- [x] Press ESC → pause overlay appears, game still shows behind it
+- [x] Press ESC again → pause overlay disappears, game continues
+- [x] Press Q while paused → returns to main menu
+- [x] Return to main menu → all InGame entities cleaned up
 
 **Implementation Note**: This phase must complete and pass before proceeding. It touches many files but each change is mechanical (replacing markers, updating state references). Build after EACH file change — don't batch.
 
@@ -708,12 +708,12 @@ use auto_battle::battlefield::BattlefieldPlugin;
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` compiles successfully
-- [ ] `make check` passes (clippy + tests)
-- [ ] All constants are defined and consistent (TOTAL_COLS = 82, etc.)
+- [x] `cargo build` compiles successfully
+- [x] `make check` passes (clippy + tests)
+- [x] All constants are defined and consistent (TOTAL_COLS = 82, etc.)
 
 #### Manual Verification:
-- [ ] N/A for this phase (no visual output yet)
+- [x] N/A for this phase (no visual output yet)
 
 ---
 
@@ -810,14 +810,14 @@ fn spawn_battlefield(mut commands: Commands) {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
+- [x] `make check` passes
 
 #### Manual Verification:
-- [ ] Run game, press SPACE → see colored zones on screen
-- [ ] Blue rectangle on far left (player fortress)
-- [ ] Darker area for building zone
-- [ ] Wide combat zone in the middle
-- [ ] Red rectangle on far right (enemy fortress)
+- [x] Run game, press SPACE → see colored zones on screen
+- [x] Blue rectangle on far left (player fortress)
+- [x] Darker area for building zone
+- [x] Wide combat zone in the middle
+- [x] Red rectangle on far right (enemy fortress)
 
 **Implementation Note**: After completing this phase and automated verification passes, pause for manual confirmation before proceeding to Phase 3.
 
@@ -933,20 +933,20 @@ The camera is spawned at `Startup` by `GamePlugin` (moved there in Phase 0). The
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (clippy + tests + fmt)
-- [ ] No warnings
+- [x] `make check` passes (clippy + tests + fmt)
+- [x] No warnings
 
 #### Manual Verification:
-- [ ] Camera starts centered on the building zone (blue fortress visible to the left)
-- [ ] Full battlefield height fits the viewport (no vertical scrolling needed)
-- [ ] Press D or Right Arrow → camera pans right smoothly
-- [ ] Press A or Left Arrow → camera pans left smoothly
-- [ ] Camera stops at left boundary (can't pan past player fortress)
-- [ ] Camera stops at right boundary (can't pan past enemy fortress)
-- [ ] Pan all the way right to see the red enemy fortress
-- [ ] Pan all the way left to see the blue player fortress
-- [ ] **ESC to pause → camera panning stops, battlefield visible behind overlay**
-- [ ] **ESC to resume → camera panning works again**
+- [x] Camera starts centered on the building zone (blue fortress visible to the left)
+- [x] Full battlefield height fits the viewport (no vertical scrolling needed)
+- [x] Press D or Right Arrow → camera pans right smoothly
+- [x] Press A or Left Arrow → camera pans left smoothly
+- [x] Camera stops at left boundary (can't pan past player fortress)
+- [x] Camera stops at right boundary (can't pan past enemy fortress)
+- [x] Pan all the way right to see the red enemy fortress
+- [x] Pan all the way left to see the blue player fortress
+- [x] **ESC to pause → camera panning stops, battlefield visible behind overlay**
+- [x] **ESC to resume → camera panning works again**
 
 **Implementation Note**: After completing this phase, pause for manual confirmation that panning feels good. Speed can be adjusted.
 
@@ -1223,6 +1223,18 @@ These items were identified during architecture review but deferred from Ticket 
 | `handle_game_input` growth | Currently only ESC/Q. As tickets add input (mouse placement in T2, economy UI in T6), keep game-specific inputs in their domain plugins — don't stuff them into `handle_game_input`. | Monitor during T2, T6 | Ticket 2 |
 | `GameState` location | `GameState`/`InGameState` live in `lib.rs` (crate root). If 3+ state enums accumulate, consider moving them to `src/game/states.rs` or `src/states.rs`. | Ticket 3+ (when `Team` enum is added) | Ticket 3 |
 | Prelude glob convention | The prelude now uses explicit imports. As components grow, keep preferring explicit imports from domain modules over glob re-exports. | Ongoing | Ticket 2 |
+
+## Post-Implementation: Bevy Idiom Cleanup (2026-02-09)
+
+After implementation, reviewed all components against Bevy 0.18 conventions. All Bevy-internal components derive `Debug` and `Reflect` with `#[reflect(Component)]` — ours only had `Component`.
+
+**Changes made:**
+- Added `Debug, Clone, Copy, Reflect` + `#[reflect(Component)]` to 5 marker components (`PlayerFortress`, `EnemyFortress`, `BuildZone`, `CombatZone`, `BattlefieldBackground`)
+- Added `Debug, Clone, Reflect` + `#[reflect(Component)]` to `BuildSlot` (has fields, no `Copy`)
+- Added `app.register_type::<T>()` for all 6 components in `BattlefieldPlugin::build()`
+- Added missing blank line between `use` block and doc comment in `camera.rs`
+
+All 23 tests still pass, no clippy warnings.
 
 ## References
 

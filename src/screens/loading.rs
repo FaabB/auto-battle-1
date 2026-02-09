@@ -3,10 +3,8 @@
 use bevy::prelude::*;
 
 use crate::GameState;
-use crate::components::CleanupLoading;
-use crate::systems::cleanup_entities;
 
-/// Plugin for the loading screen.
+#[derive(Debug)]
 pub struct LoadingScreenPlugin;
 
 impl Plugin for LoadingScreenPlugin {
@@ -15,10 +13,6 @@ impl Plugin for LoadingScreenPlugin {
             .add_systems(
                 Update,
                 check_loading_complete.run_if(in_state(GameState::Loading)),
-            )
-            .add_systems(
-                OnExit(GameState::Loading),
-                cleanup_entities::<CleanupLoading>,
             );
     }
 }
@@ -37,12 +31,10 @@ fn setup_loading_screen(mut commands: Commands) {
             top: Val::Percent(50.0),
             ..default()
         },
-        CleanupLoading,
+        DespawnOnExit(GameState::Loading),
     ));
 }
 
 fn check_loading_complete(mut next_state: ResMut<NextState<GameState>>) {
-    // For now, immediately transition to main menu
-    // In the future, this will wait for assets to load
     next_state.set(GameState::MainMenu);
 }

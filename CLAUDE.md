@@ -4,7 +4,17 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## Repository Overview
 
-This is the auto-battle-1 project.
+Auto-battle-1 is a 2D auto-battler game built with **Bevy 0.18** in Rust.
+
+### Architecture
+
+This project uses Bevy's **Entity Component System (ECS)**. All game state lives in components on entities, and all logic lives in systems. Do not use OOP patterns (inheritance hierarchies, manager objects, singletons). Specifically:
+
+- **Components** are plain data structs. They store state, not behavior.
+- **Systems** are functions that query for entities by their components. They contain all logic.
+- **Plugins** group related systems and components into modules. Each plugin owns a specific domain (battlefield, economy, combat, etc.).
+- **Resources** are global singletons for cross-cutting state (economy balance, wave counter). Prefer components on entities over resources when the data belongs to a specific entity.
+- **States** (`GameState`, `InGameState`) control which systems run. Use `run_if(in_state(...))` to gate systems, `DespawnOnExit` for cleanup.
 
 ## Thoughts Workflow
 

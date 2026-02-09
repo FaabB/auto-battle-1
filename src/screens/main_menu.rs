@@ -3,10 +3,8 @@
 use bevy::prelude::*;
 
 use crate::GameState;
-use crate::components::CleanupMainMenu;
-use crate::systems::cleanup_entities;
 
-/// Plugin for the main menu.
+#[derive(Debug)]
 pub struct MainMenuPlugin;
 
 impl Plugin for MainMenuPlugin {
@@ -15,10 +13,6 @@ impl Plugin for MainMenuPlugin {
             .add_systems(
                 Update,
                 handle_main_menu_input.run_if(in_state(GameState::MainMenu)),
-            )
-            .add_systems(
-                OnExit(GameState::MainMenu),
-                cleanup_entities::<CleanupMainMenu>,
             );
     }
 }
@@ -38,7 +32,7 @@ fn setup_main_menu(mut commands: Commands) {
             top: Val::Percent(30.0),
             ..default()
         },
-        CleanupMainMenu,
+        DespawnOnExit(GameState::MainMenu),
     ));
 
     // Start prompt
@@ -55,7 +49,7 @@ fn setup_main_menu(mut commands: Commands) {
             top: Val::Percent(60.0),
             ..default()
         },
-        CleanupMainMenu,
+        DespawnOnExit(GameState::MainMenu),
     ));
 }
 

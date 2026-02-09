@@ -1,14 +1,11 @@
 //! Auto-battle game library.
 
-pub mod components;
+pub mod battlefield;
 pub mod game;
 pub mod prelude;
-pub mod resources;
 pub mod screens;
-pub mod systems;
 #[cfg(test)]
 pub mod testing;
-pub mod ui;
 
 use bevy::prelude::*;
 
@@ -22,7 +19,16 @@ pub enum GameState {
     MainMenu,
     /// Active gameplay state.
     InGame,
-    /// Paused state (overlay on `InGame`).
+}
+
+/// Sub-states within `InGame`. Only exists while `GameState::InGame` is active.
+#[derive(SubStates, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[source(GameState = GameState::InGame)]
+pub enum InGameState {
+    /// Normal gameplay.
+    #[default]
+    Playing,
+    /// Game is paused (overlay on gameplay).
     Paused,
 }
 
@@ -40,6 +46,15 @@ mod tests {
     fn game_states_are_distinct() {
         assert_ne!(GameState::Loading, GameState::MainMenu);
         assert_ne!(GameState::MainMenu, GameState::InGame);
-        assert_ne!(GameState::InGame, GameState::Paused);
+    }
+
+    #[test]
+    fn in_game_state_default_is_playing() {
+        assert_eq!(InGameState::default(), InGameState::Playing);
+    }
+
+    #[test]
+    fn in_game_states_are_distinct() {
+        assert_ne!(InGameState::Playing, InGameState::Paused);
     }
 }

@@ -1,12 +1,12 @@
 //! Auto-battle game entry point.
 
+use auto_battle::battlefield::BattlefieldPlugin;
 use auto_battle::game::GamePlugin;
 use auto_battle::prelude::*;
-use auto_battle::screens::{InGamePlugin, LoadingScreenPlugin, MainMenuPlugin, PausedPlugin};
+use auto_battle::screens::{InGamePlugin, LoadingScreenPlugin, MainMenuPlugin};
 
 fn main() {
     App::new()
-        // Bevy default plugins with pixel-art configuration
         .add_plugins(
             DefaultPlugins
                 .set(WindowPlugin {
@@ -18,22 +18,14 @@ fn main() {
                     }),
                     ..default()
                 })
-                .set(ImagePlugin::default_nearest()), // Pixel-perfect rendering
+                .set(ImagePlugin::default_nearest()),
         )
-        // Game plugins
         .add_plugins((
             GamePlugin,
             LoadingScreenPlugin,
             MainMenuPlugin,
             InGamePlugin,
-            PausedPlugin,
+            BattlefieldPlugin,
         ))
-        // Startup systems
-        .add_systems(Startup, setup_camera)
         .run();
-}
-
-/// Sets up the 2D camera.
-fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2d);
 }

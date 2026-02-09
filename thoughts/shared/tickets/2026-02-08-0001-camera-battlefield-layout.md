@@ -1,48 +1,58 @@
-# Ticket 1: Camera & Battlefield Layout
+# Ticket 1: Camera & Battlefield Layout — DONE
+
+**Status:** Done (2026-02-08, reviewed 2026-02-09)
 
 **Delivers:** Battlefield coordinate system with zones, fortress placeholders, horizontal camera panning, and state architecture refactor
 
 **Depends on:** None
 
-## What to Implement
+## What Was Implemented
 
-| What to implement | How to test |
-|-------------------|-------------|
-| State architecture refactor: SubStates + DespawnOnExit | Pausing no longer destroys InGame entities; no manual cleanup system |
-| Battlefield coordinate constants (zone widths, total dimensions) | Constants defined and used consistently |
-| Player fortress placeholder (far left, behind buildings) with `PlayerFortress` marker | Blue rectangle visible on far left of battlefield |
-| Enemy fortress placeholder (far right) with `EnemyFortress` marker | Red rectangle visible on far right of battlefield |
-| Building zone boundaries (6 columns x 8 rows area) | Building zone area clearly marked with distinct background |
-| Combat zone (72 columns wide between zones) | Wide combat area visible between building zone and enemy fortress |
-| Camera2d positioned for battlefield view | Full vertical view visible, battlefield fills screen height |
-| Horizontal camera panning (keyboard A/D or arrow keys) | Can pan left/right to see full battlefield |
-| Camera bounds clamping | Camera stops at battlefield edges, can't pan into void |
+### Phase 0: State Architecture Refactor
+- Removed `GameState::Paused` — replaced with `InGameState::Paused` SubState
+- Replaced all manual `CleanupXxx` markers with Bevy's built-in `DespawnOnExit`
+- Deleted `src/components/`, `src/systems/`, `src/resources/`, `src/ui/` directories
+- Moved camera setup from `main.rs` to `GamePlugin`
+- Merged `PausedPlugin` into `InGamePlugin` (owns both pause UI and input)
+- Added `#[derive(Debug)]` to all plugins
+- Cleaned prelude (no wildcard component re-export, explicit `InGameState` export)
 
-## Context
+### Phase 1: Battlefield Module
+- Created `src/battlefield/` with `mod.rs`, `renderer.rs`, `camera.rs`
+- All coordinate constants defined (82 cols, 10 rows, 64px cells)
+- Zone column ranges: player fort (0-1), build zone (2-7), combat zone (8-79), enemy fort (80-81)
+- Marker components: `PlayerFortress`, `EnemyFortress`, `BuildZone`, `CombatZone`, `BattlefieldBackground`, `BuildSlot`
+- Helper functions: `col_to_world_x`, `row_to_world_y`, `zone_center_x`, `battlefield_center_y`
 
-This is the foundation ticket. All subsequent tickets build on the coordinate system, zone layout, and state architecture defined here.
+### Phase 2: Spawn Battlefield
+- `spawn_battlefield` creates 5 colored sprites (background + 4 zones)
+- 60 `BuildSlot` data-only entities (10 rows x 6 cols) for Ticket 2
+- All entities use `DespawnOnExit(GameState::InGame)`
+- Fortress entities have marker components for Ticket 8
 
-The battlefield layout is:
-```
-[player fort] [6 cols build zone] [72 cols combat zone] [enemy fort]
-```
-Total width: ~80 columns. The camera must pan horizontally since the full battlefield won't fit on screen at once.
+### Phase 3: Camera Positioning & Panning
+- Camera starts centered on build zone with `FixedVertical` scaling
+- A/D and arrow keys pan horizontally at 500px/s
+- Camera clamps at battlefield boundaries (aspect-ratio-aware)
+- Panning stops during `InGameState::Paused`
 
-**Current codebase state:** Skeleton Bevy 0.18 project with state machine (Loading/MainMenu/InGame/Paused), manual cleanup system (`CleanupXxx` markers), and 2D camera already spawned in `src/main.rs`.
+### Bevy 0.18 Idiom Compliance (post-implementation review)
+- All components derive `Debug, Reflect` with `#[reflect(Component)]`
+- Marker components have `Clone, Copy`; data components have `Clone`
+- All 6 types registered with `app.register_type::<T>()`
+- `Single<D, F>` used everywhere (no `.single_mut()`)
+- `#[must_use]` on all helper functions
 
-**State architecture refactor (included in this ticket):**
-- Remove `GameState::Paused` — becomes `InGameState::Paused` SubState
-- Replace all manual `CleanupXxx` markers with Bevy's built-in `DespawnOnExit`
-- Delete custom `cleanup_entities` system
-- This fixes the known bug where pausing destroys InGame entities, and must be done before battlefield entities exist
+### Tests
+- 23 unit + integration tests (7 unit, 16 integration)
+- 2 additional integration tests in `tests/integration.rs`
+- Test helpers: `create_test_app`, `create_test_app_with_state`, `create_ingame_test_app`
 
-Relevant files:
-- `src/main.rs` — camera spawn, app setup
-- `src/screens/in_game.rs` — InGame state enter/exit
-- `src/screens/paused.rs` — Paused state (becomes SubState)
-- `src/lib.rs` — GameState enum (add InGameState SubState)
-- `src/components/cleanup.rs` — CleanupXxx markers (to be deleted)
-- `src/systems/cleanup.rs` — cleanup_entities system (to be deleted)
+### Divergences from Plan (improvements)
+- Module split into `battlefield/{mod,renderer,camera}.rs` instead of single file
+- Extra marker components (`BuildZone`, `CombatZone`, `BattlefieldBackground`) for better queryability
+- `BuildSlot` grid entities spawned early (data-only, ready for Ticket 2)
+- `PausedPlugin` merged into `InGamePlugin` (cleaner ownership)
 
 ## Done When
 
@@ -58,5 +68,5 @@ You can see the full battlefield layout with:
 
 ## References
 
-- Source: `thoughts/shared/research/2026-02-04-tano-style-game-research.md` (Section 2.1 Battlefield System, Section 7 Design Decisions)
-- Bevy SubStates example: `~/.cargo/registry/src/.../bevy-0.18.0/examples/state/sub_states.rs`
+- Plan: `thoughts/shared/plans/2026-02-08-camera-battlefield-layout.md`
+- Source: `thoughts/shared/research/2026-02-04-tano-style-game-research.md` (Section 2.1, Section 7)
