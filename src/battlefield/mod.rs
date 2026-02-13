@@ -1,9 +1,9 @@
 //! Battlefield layout constants, markers, and systems.
 
-#![allow(clippy::cast_precision_loss)] // Grid values are small; u32->f32 is safe.
-
 mod camera;
 mod renderer;
+
+use std::collections::HashMap;
 
 use bevy::prelude::*;
 
@@ -15,19 +15,19 @@ use crate::{GameState, InGameState};
 pub const CELL_SIZE: f32 = 64.0;
 
 /// Number of rows in the battlefield.
-pub const BATTLEFIELD_ROWS: u32 = 10;
+pub const BATTLEFIELD_ROWS: u16 = 10;
 
 /// Number of columns for each fortress.
-pub const FORTRESS_COLS: u32 = 2;
+pub const FORTRESS_COLS: u16 = 2;
 
 /// Number of columns in the building zone.
-pub const BUILD_ZONE_COLS: u32 = 6;
+pub const BUILD_ZONE_COLS: u16 = 6;
 
 /// Number of columns in the combat zone.
-pub const COMBAT_ZONE_COLS: u32 = 72;
+pub const COMBAT_ZONE_COLS: u16 = 72;
 
 /// Total columns across the entire battlefield.
-pub const TOTAL_COLS: u32 = FORTRESS_COLS + BUILD_ZONE_COLS + COMBAT_ZONE_COLS + FORTRESS_COLS;
+pub const TOTAL_COLS: u16 = FORTRESS_COLS + BUILD_ZONE_COLS + COMBAT_ZONE_COLS + FORTRESS_COLS;
 // = 2 + 6 + 72 + 2 = 82
 
 /// Total battlefield width in pixels.
@@ -41,19 +41,29 @@ pub const BATTLEFIELD_HEIGHT: f32 = BATTLEFIELD_ROWS as f32 * CELL_SIZE;
 // === Zone Column Ranges (start column, inclusive) ===
 
 /// Player fortress starts at column 0.
-pub const PLAYER_FORT_START_COL: u32 = 0;
+pub const PLAYER_FORT_START_COL: u16 = 0;
 
 /// Building zone starts after player fortress.
-pub const BUILD_ZONE_START_COL: u32 = FORTRESS_COLS;
+pub const BUILD_ZONE_START_COL: u16 = FORTRESS_COLS;
 // = 2
 
 /// Combat zone starts after building zone.
-pub const COMBAT_ZONE_START_COL: u32 = FORTRESS_COLS + BUILD_ZONE_COLS;
+pub const COMBAT_ZONE_START_COL: u16 = FORTRESS_COLS + BUILD_ZONE_COLS;
 // = 8
 
 /// Enemy fortress starts after combat zone.
-pub const ENEMY_FORT_START_COL: u32 = FORTRESS_COLS + BUILD_ZONE_COLS + COMBAT_ZONE_COLS;
+pub const ENEMY_FORT_START_COL: u16 = FORTRESS_COLS + BUILD_ZONE_COLS + COMBAT_ZONE_COLS;
 // = 80
+
+// === Zone Pixel Boundaries (pre-computed for readability) ===
+
+/// Build zone left edge in world pixels.
+pub const BUILD_ZONE_START_X: f32 = BUILD_ZONE_START_COL as f32 * CELL_SIZE;
+// = 128.0
+
+/// Build zone right edge in world pixels (exclusive).
+pub const BUILD_ZONE_END_X: f32 = (BUILD_ZONE_START_COL + BUILD_ZONE_COLS) as f32 * CELL_SIZE;
+// = 512.0
 
 // === Marker Components ===
 
@@ -86,29 +96,48 @@ pub struct BattlefieldBackground;
 #[derive(Component, Debug, Clone, Reflect)]
 #[reflect(Component)]
 pub struct BuildSlot {
-    pub row: u32,
+    pub row: u16,
     /// Local column (0–5), not global.
-    pub col: u32,
+    pub col: u16,
+}
+
+/// Maps `(col, row)` to the `BuildSlot` entity for O(1) grid lookups.
+#[derive(Resource, Default, Debug)]
+pub struct GridIndex {
+    slots: HashMap<(u16, u16), Entity>,
+}
+
+impl GridIndex {
+    /// Insert a slot entity at the given grid coordinates.
+    pub fn insert(&mut self, col: u16, row: u16, entity: Entity) {
+        self.slots.insert((col, row), entity);
+    }
+
+    /// Look up the entity at the given grid coordinates.
+    #[must_use]
+    pub fn get(&self, col: u16, row: u16) -> Option<Entity> {
+        self.slots.get(&(col, row)).copied()
+    }
 }
 
 // === Helper Functions ===
 
 /// Convert a grid column to a world X position (center of the column).
 #[must_use]
-pub fn col_to_world_x(col: u32) -> f32 {
-    (col as f32).mul_add(CELL_SIZE, CELL_SIZE / 2.0)
+pub fn col_to_world_x(col: u16) -> f32 {
+    f32::from(col).mul_add(CELL_SIZE, CELL_SIZE / 2.0)
 }
 
 /// Convert a grid row to a world Y position (center of the row).
 #[must_use]
-pub fn row_to_world_y(row: u32) -> f32 {
-    (row as f32).mul_add(CELL_SIZE, CELL_SIZE / 2.0)
+pub fn row_to_world_y(row: u16) -> f32 {
+    f32::from(row).mul_add(CELL_SIZE, CELL_SIZE / 2.0)
 }
 
 /// Get the world-space center X of a zone given its start column and width in columns.
 #[must_use]
-pub(crate) fn zone_center_x(start_col: u32, width_cols: u32) -> f32 {
-    (start_col as f32).mul_add(CELL_SIZE, (width_cols as f32 * CELL_SIZE) / 2.0)
+pub(crate) fn zone_center_x(start_col: u16, width_cols: u16) -> f32 {
+    f32::from(start_col).mul_add(CELL_SIZE, (f32::from(width_cols) * CELL_SIZE) / 2.0)
 }
 
 /// Center Y of the battlefield.
@@ -116,6 +145,13 @@ pub(crate) fn zone_center_x(start_col: u32, width_cols: u32) -> f32 {
 pub(crate) fn battlefield_center_y() -> f32 {
     BATTLEFIELD_HEIGHT / 2.0
 }
+
+// === System Sets ===
+
+/// System set for battlefield setup that runs on `OnEnter(GameState::InGame)`.
+/// Other plugins can order their `OnEnter` systems relative to this set.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BattlefieldSetup;
 
 // === Plugin ===
 
@@ -130,7 +166,8 @@ impl Plugin for BattlefieldPlugin {
             .register_type::<BuildZone>()
             .register_type::<CombatZone>()
             .register_type::<BattlefieldBackground>()
-            .register_type::<BuildSlot>();
+            .register_type::<BuildSlot>()
+            .init_resource::<GridIndex>();
 
         app.add_systems(
             OnEnter(GameState::InGame),
@@ -138,7 +175,8 @@ impl Plugin for BattlefieldPlugin {
                 renderer::spawn_battlefield,
                 camera::setup_camera_for_battlefield,
             )
-                .chain(),
+                .chain()
+                .in_set(BattlefieldSetup),
         )
         .add_systems(
             Update,
@@ -159,8 +197,8 @@ mod tests {
 
     #[test]
     fn battlefield_dimensions_consistent() {
-        assert_eq!(BATTLEFIELD_WIDTH, TOTAL_COLS as f32 * CELL_SIZE);
-        assert_eq!(BATTLEFIELD_HEIGHT, BATTLEFIELD_ROWS as f32 * CELL_SIZE);
+        assert_eq!(BATTLEFIELD_WIDTH, f32::from(TOTAL_COLS) * CELL_SIZE);
+        assert_eq!(BATTLEFIELD_HEIGHT, f32::from(BATTLEFIELD_ROWS) * CELL_SIZE);
     }
 
     #[test]
@@ -195,6 +233,15 @@ mod tests {
     fn battlefield_center_y_is_half_height() {
         assert_eq!(battlefield_center_y(), BATTLEFIELD_HEIGHT / 2.0);
     }
+
+    #[test]
+    fn grid_index_insert_and_get() {
+        let mut index = GridIndex::default();
+        let entity = Entity::from_bits(42);
+        index.insert(3, 5, entity);
+        assert_eq!(index.get(3, 5), Some(entity));
+        assert_eq!(index.get(0, 0), None);
+    }
 }
 
 #[cfg(test)]
@@ -203,35 +250,22 @@ mod integration_tests {
     use pretty_assertions::assert_eq;
 
     /// Helper: set up an app with `BattlefieldPlugin` and transition to `InGame`.
-    /// Plugin must be added before the state transition so `OnEnter` fires.
     fn create_battlefield_test_app() -> App {
-        let mut app = crate::testing::create_test_app();
-        app.add_plugins(bevy::state::app::StatesPlugin);
-        app.add_plugins(bevy::input::InputPlugin);
-        app.add_plugins(bevy::window::WindowPlugin::default());
-        app.init_state::<crate::GameState>();
-        app.add_sub_state::<crate::InGameState>();
+        let mut app = crate::testing::create_base_test_app();
         app.add_plugins(BattlefieldPlugin);
-        // Spawn a camera so systems that query Camera2d work
-        app.world_mut().spawn(Camera2d);
-        // Transition to InGame so SubState + OnEnter systems fire
-        app.world_mut()
-            .resource_mut::<NextState<crate::GameState>>()
-            .set(crate::GameState::InGame);
-        app.update(); // Apply transition + run OnEnter systems
-        app.update(); // Apply deferred commands from OnEnter
+        crate::testing::transition_to_ingame(&mut app);
         app
     }
 
     #[test]
-    fn spawn_battlefield_creates_five_sprites() {
+    fn spawn_battlefield_creates_expected_sprites() {
         let mut app = create_battlefield_test_app();
         let sprite_count = app
             .world_mut()
             .query_filtered::<(), With<Sprite>>()
             .iter(app.world())
             .count();
-        assert_eq!(sprite_count, 5); // background + 4 zones
+        assert_eq!(sprite_count, 65); // 5 zones + 60 grid cells
     }
 
     #[test]
@@ -264,7 +298,7 @@ mod integration_tests {
             .query_filtered::<(), (With<Sprite>, With<DespawnOnExit<GameState>>)>()
             .iter(app.world())
             .count();
-        assert_eq!(with_despawn, 5); // All 5 sprites have DespawnOnExit
+        assert_eq!(with_despawn, 65); // All 5 zones + 60 grid cells have DespawnOnExit
     }
 
     #[test]
@@ -354,5 +388,28 @@ mod integration_tests {
             .iter(app.world())
             .count();
         assert_eq!(with_despawn, 60);
+    }
+
+    #[test]
+    fn grid_index_has_sixty_entries() {
+        let app = create_battlefield_test_app();
+        let grid_index = app.world().resource::<GridIndex>();
+        // Every (col, row) in the 6×10 grid should resolve to an entity
+        let mut count = 0;
+        for row in 0..BATTLEFIELD_ROWS {
+            for col in 0..BUILD_ZONE_COLS {
+                assert!(grid_index.get(col, row).is_some());
+                count += 1;
+            }
+        }
+        assert_eq!(count, 60);
+    }
+
+    #[test]
+    fn grid_index_out_of_bounds_returns_none() {
+        let app = create_battlefield_test_app();
+        let grid_index = app.world().resource::<GridIndex>();
+        assert!(grid_index.get(6, 0).is_none()); // col out of bounds
+        assert!(grid_index.get(0, 10).is_none()); // row out of bounds
     }
 }

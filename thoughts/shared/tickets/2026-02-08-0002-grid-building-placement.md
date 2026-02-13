@@ -1,4 +1,6 @@
-# Ticket 2: Grid & Building Placement
+# Ticket 2: Grid & Building Placement — DONE
+
+**Status:** Completed 2026-02-09
 
 **Delivers:** Visible grid in the building zone, click-to-place buildings (Barracks and Farm)
 
@@ -8,7 +10,7 @@
 
 | What to implement | How to test |
 |-------------------|-------------|
-| Grid data structure (6 columns x 8 rows) | Grid tracks occupied/empty cells |
+| Grid data structure (6 columns x 10 rows) | Grid tracks occupied/empty cells |
 | Grid rendering (outlined squares in building zone) | Grid lines visible, cells clearly defined |
 | Mouse-to-grid coordinate conversion | Hover highlights the correct cell |
 | Building component and BuildingType enum (Barracks, Farm) | Types defined with distinct properties |

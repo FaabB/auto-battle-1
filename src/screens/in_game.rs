@@ -9,11 +9,12 @@ use bevy::prelude::*;
 use crate::{GameState, InGameState};
 
 #[derive(Debug)]
-pub struct InGamePlugin;
+pub struct InGameScreenPlugin;
 
-impl Plugin for InGamePlugin {
+impl Plugin for InGameScreenPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(InGameState::Paused), setup_pause_menu)
+        app.add_sub_state::<InGameState>()
+            .add_systems(OnEnter(InGameState::Paused), setup_pause_menu)
             .add_systems(
                 Update,
                 handle_game_input.run_if(in_state(GameState::InGame)),

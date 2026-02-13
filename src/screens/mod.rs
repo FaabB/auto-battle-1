@@ -4,6 +4,6 @@ mod in_game;
 mod loading;
 mod main_menu;
 
-pub use in_game::InGamePlugin;
+pub use in_game::InGameScreenPlugin;
 pub use loading::LoadingScreenPlugin;
-pub use main_menu::MainMenuPlugin;
+pub use main_menu::MainMenuScreenPlugin;

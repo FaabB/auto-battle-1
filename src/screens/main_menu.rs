@@ -1,13 +1,13 @@
-//! Main menu plugin.
+//! Main menu screen plugin.
 
 use bevy::prelude::*;
 
 use crate::GameState;
 
 #[derive(Debug)]
-pub struct MainMenuPlugin;
+pub struct MainMenuScreenPlugin;
 
-impl Plugin for MainMenuPlugin {
+impl Plugin for MainMenuScreenPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::MainMenu), setup_main_menu)
             .add_systems(

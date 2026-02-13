@@ -1,9 +1,10 @@
 //! Auto-battle game entry point.
 
 use auto_battle::battlefield::BattlefieldPlugin;
-use auto_battle::game::GamePlugin;
+use auto_battle::building::BuildingPlugin;
+use auto_battle::game::CoreGamePlugin;
 use auto_battle::prelude::*;
-use auto_battle::screens::{InGamePlugin, LoadingScreenPlugin, MainMenuPlugin};
+use auto_battle::screens::{InGameScreenPlugin, LoadingScreenPlugin, MainMenuScreenPlugin};
 
 fn main() {
     App::new()
@@ -21,11 +22,12 @@ fn main() {
                 .set(ImagePlugin::default_nearest()),
         )
         .add_plugins((
-            GamePlugin,
+            CoreGamePlugin,
             LoadingScreenPlugin,
-            MainMenuPlugin,
-            InGamePlugin,
+            MainMenuScreenPlugin,
+            InGameScreenPlugin,
             BattlefieldPlugin,
+            BuildingPlugin,
         ))
         .run();
 }

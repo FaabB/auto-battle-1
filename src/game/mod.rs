@@ -2,12 +2,11 @@ use bevy::prelude::*;
 
 /// Core game plugin that sets up states and the global camera.
 #[derive(Debug)]
-pub struct GamePlugin;
+pub struct CoreGamePlugin;
 
-impl Plugin for GamePlugin {
+impl Plugin for CoreGamePlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<crate::GameState>()
-            .add_sub_state::<crate::InGameState>()
             .add_systems(Startup, setup_camera);
     }
 }

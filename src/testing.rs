@@ -21,24 +21,46 @@ pub fn create_test_app_with_state<S: FreelyMutableState + Default>() -> App {
     app
 }
 
-/// Creates a test app with both `GameState` and `InGameState` initialized,
-/// already transitioned to `InGame`/`Playing` for testing gameplay systems.
+/// Creates a base test app with states, input, window, and camera.
+///
+/// Does NOT transition to `InGame` — add your domain plugins first, then
+/// call [`transition_to_ingame`] to trigger `OnEnter` systems.
 #[allow(dead_code)]
-pub fn create_ingame_test_app() -> App {
+pub fn create_base_test_app() -> App {
     let mut app = create_test_app();
     app.add_plugins(StatesPlugin);
     app.add_plugins(InputPlugin);
     app.add_plugins(WindowPlugin::default());
     app.init_state::<crate::GameState>();
     app.add_sub_state::<crate::InGameState>();
-    // Spawn a camera so systems that query Camera2d work
     app.world_mut().spawn(Camera2d);
-    // Transition to InGame so SubState is active
+    app
+}
+
+/// Same as [`create_base_test_app`] but without `InputPlugin`.
+///
+/// Use when testing systems that read `ButtonInput` and you need `press()`
+/// to persist through to `Update` (since `InputPlugin` clears `just_pressed`
+/// in `PreUpdate`). Manually `init_resource::<ButtonInput<MouseButton>>()` etc.
+#[allow(dead_code)]
+pub fn create_base_test_app_no_input() -> App {
+    let mut app = create_test_app();
+    app.add_plugins(StatesPlugin);
+    app.add_plugins(WindowPlugin::default());
+    app.init_state::<crate::GameState>();
+    app.add_sub_state::<crate::InGameState>();
+    app.world_mut().spawn(Camera2d);
+    app
+}
+
+/// Transitions the app to `GameState::InGame` and runs two updates
+/// (first applies the transition + `OnEnter`, second applies deferred commands).
+pub fn transition_to_ingame(app: &mut App) {
     app.world_mut()
         .resource_mut::<NextState<crate::GameState>>()
         .set(crate::GameState::InGame);
-    app.update(); // Apply the transition
-    app
+    app.update();
+    app.update();
 }
 
 /// Helper to advance the app by one frame.
