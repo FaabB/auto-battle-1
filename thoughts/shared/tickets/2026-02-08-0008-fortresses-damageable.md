@@ -27,11 +27,12 @@ Ticket 1 created fortress placeholders (colored rectangles). This ticket upgrade
 **Key distinction:** The player fortress is behind the building zone (far left). Enemies must pass through the combat zone AND the building zone to reach it. The enemy fortress is on the far right — player units must cross the full combat zone.
 
 Relevant files:
-- `src/screens/in_game.rs` — fortress entity spawning (upgrade from Ticket 1 placeholders)
-- `src/components/mod.rs` — Fortress marker component
+- `src/gameplay/battlefield/mod.rs` — fortress marker components already exist here (`PlayerFortress`, `EnemyFortress`); add Health component to fortress entities
+- `src/gameplay/battlefield/renderer.rs` — upgrade fortress spawning to include Health
+- Health component from `src/gameplay/units/mod.rs` (or `src/gameplay/combat/`) — reuse for fortresses
 - Unit targeting system from Ticket 4 — ensure fortresses are valid targets
 - Combat system from Ticket 5 — ensure units can damage fortresses
-- Health bar system from Ticket 5 — render fortress health bars
+- Health bar system from Ticket 5 — reuse for fortress health bars
 
 ## Done When
 

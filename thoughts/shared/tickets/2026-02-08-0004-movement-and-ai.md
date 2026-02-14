@@ -30,9 +30,10 @@ This ticket adds the core unit AI loop: find target → move toward target → s
 Enemy units follow the same AI but mirrored — they target player units first, then the player fortress.
 
 Relevant files:
-- `src/components/mod.rs` — Target component
-- New systems: `unit_find_target`, `unit_movement`
-- `src/screens/in_game.rs` — register movement systems, debug spawner
+- `src/gameplay/units/mod.rs` — Target component (co-located with unit domain)
+- New systems in `src/gameplay/units/ai.rs` or `src/gameplay/units/movement.rs`: `unit_find_target`, `unit_movement`
+- AI systems use `.in_set(GameSet::Ai)`, movement systems use `.in_set(GameSet::Movement)`
+- Debug enemy spawner lives in `src/dev_tools/` (feature-gated on `dev`), not in `screens/in_game.rs`
 
 ## Done When
 

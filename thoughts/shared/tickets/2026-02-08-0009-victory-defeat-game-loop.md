@@ -34,11 +34,10 @@ This is the capstone ticket — after this, the prototype is a complete playable
 **Alternative victory condition:** If all 10 waves are defeated and no more enemies remain, the player wins even if the enemy fortress isn't at 0 HP. (Optional — discuss during implementation if this makes sense for the prototype.)
 
 Relevant files:
-- `src/lib.rs` — Victory/Defeat sub-states
-- `src/screens/in_game.rs` — detection systems, state transitions
-- New: victory/defeat screen UI
-- Cleanup system from `src/systems/cleanup.rs` — ensure full entity cleanup
-- All game systems — need run conditions to freeze during Victory/Defeat
+- `src/screens/in_game.rs` — Victory/Defeat as `InGameState` variants (e.g., `InGameState::Victory`, `InGameState::Defeat`), detection systems, state transitions
+- Victory/defeat screen UI in `src/screens/in_game.rs` (same pattern as pause overlay using `widget::header`, `widget::overlay`)
+- Entity cleanup uses `DespawnOnExit` + `#[states(scoped_entities)]` — no custom cleanup system needed
+- All game systems already use `run_if(in_state(InGameState::Playing))` — they automatically freeze during Victory/Defeat
 
 ## Done When
 
