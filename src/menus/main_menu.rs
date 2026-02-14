@@ -7,10 +7,7 @@ use crate::screens::GameState;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Menu::Main), spawn_main_menu);
-    app.add_systems(
-        Update,
-        handle_main_menu_input.run_if(in_state(Menu::Main)),
-    );
+    app.add_systems(Update, handle_main_menu_input.run_if(in_state(Menu::Main)));
 }
 
 fn spawn_main_menu(mut commands: Commands) {

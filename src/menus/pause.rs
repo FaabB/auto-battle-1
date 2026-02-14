@@ -7,18 +7,12 @@ use crate::screens::GameState;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Menu::Pause), spawn_pause_menu);
-    app.add_systems(
-        Update,
-        handle_pause_input.run_if(in_state(Menu::Pause)),
-    );
+    app.add_systems(Update, handle_pause_input.run_if(in_state(Menu::Pause)));
 }
 
 fn spawn_pause_menu(mut commands: Commands) {
     // Semi-transparent overlay
-    commands.spawn((
-        crate::theme::widget::overlay(),
-        DespawnOnExit(Menu::Pause),
-    ));
+    commands.spawn((crate::theme::widget::overlay(), DespawnOnExit(Menu::Pause)));
 
     // Pause text
     commands.spawn((
