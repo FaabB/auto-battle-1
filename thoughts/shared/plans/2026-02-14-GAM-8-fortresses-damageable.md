@@ -251,9 +251,9 @@ Note: `check_death` only queries `(Entity, &Health)` — no `HealthBarConfig` ne
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` — clippy + format pass
-- [ ] `make test` — all tests pass
-- [ ] New tests pass (see Testing Strategy below)
+- [x] `make check` — clippy + format pass
+- [x] `make test` — all tests pass (144 tests)
+- [x] New tests pass (see Testing Strategy below)
 
 #### Manual Verification:
 - [ ] Both fortresses show large health bars (~100px wide) positioned above the fortress sprites

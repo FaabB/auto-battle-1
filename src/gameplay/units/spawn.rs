@@ -5,9 +5,12 @@ use rand::Rng;
 
 use crate::Z_UNIT;
 use crate::gameplay::battlefield::{
-    BATTLEFIELD_ROWS, COMBAT_ZONE_COLS, COMBAT_ZONE_START_COL, col_to_world_x, row_to_world_y,
+    BATTLEFIELD_ROWS, ENEMY_FORT_START_COL, col_to_world_x, row_to_world_y,
 };
-use crate::gameplay::combat::AttackTimer;
+use crate::gameplay::combat::{
+    AttackTimer, HealthBarConfig, UNIT_HEALTH_BAR_HEIGHT, UNIT_HEALTH_BAR_WIDTH,
+    UNIT_HEALTH_BAR_Y_OFFSET,
+};
 use crate::screens::GameState;
 
 use super::{
@@ -29,8 +32,8 @@ pub const MIN_INTERVAL: f32 = 0.5;
 /// Duration (seconds) over which the interval ramps from START to MIN.
 pub const RAMP_DURATION: f32 = 600.0; // 10 minutes
 
-/// Column where enemies spawn (near enemy fortress side of combat zone).
-const ENEMY_SPAWN_COL: u16 = COMBAT_ZONE_START_COL + COMBAT_ZONE_COLS - 5; // col 75
+/// Column where enemies spawn (at the enemy fortress).
+const ENEMY_SPAWN_COL: u16 = ENEMY_FORT_START_COL; // col 80
 
 // === Resource ===
 
@@ -101,6 +104,11 @@ fn tick_enemy_spawner(
         Target,
         CurrentTarget(None),
         Health::new(SOLDIER_HEALTH),
+        HealthBarConfig {
+            width: UNIT_HEALTH_BAR_WIDTH,
+            height: UNIT_HEALTH_BAR_HEIGHT,
+            y_offset: UNIT_HEALTH_BAR_Y_OFFSET,
+        },
         CombatStats {
             damage: SOLDIER_DAMAGE,
             attack_speed: SOLDIER_ATTACK_SPEED,
@@ -268,6 +276,9 @@ mod integration_tests {
         assert_entity_count::<(With<Unit>, With<Target>)>(&mut app, 1);
         assert_entity_count::<(With<Unit>, With<CurrentTarget>)>(&mut app, 1);
         assert_entity_count::<(With<Unit>, With<Health>)>(&mut app, 1);
+        assert_entity_count::<(With<Unit>, With<crate::gameplay::combat::HealthBarConfig>)>(
+            &mut app, 1,
+        );
         assert_entity_count::<(With<Unit>, With<CombatStats>)>(&mut app, 1);
         assert_entity_count::<(With<Unit>, With<Movement>)>(&mut app, 1);
         assert_entity_count::<(With<Unit>, With<DespawnOnExit<GameState>>)>(&mut app, 1);

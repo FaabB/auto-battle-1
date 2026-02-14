@@ -9,9 +9,15 @@ use super::{
     GridIndex, PLAYER_FORT_START_COL, PlayerFortress, battlefield_center_y, col_to_world_x,
     row_to_world_y, zone_center_x,
 };
-use crate::gameplay::units::{Target, Team};
+use crate::gameplay::combat::HealthBarConfig;
+use crate::gameplay::units::{Health, Target, Team};
 use crate::screens::GameState;
 use crate::{Z_BACKGROUND, Z_GRID, Z_ZONE};
+
+use super::{
+    FORTRESS_HEALTH_BAR_HEIGHT, FORTRESS_HEALTH_BAR_WIDTH, FORTRESS_HEALTH_BAR_Y_OFFSET,
+    FORTRESS_HP,
+};
 
 /// Color for individual grid cells in the build zone.
 const GRID_CELL_COLOR: Color = Color::srgb(0.3, 0.3, 0.4);
@@ -48,6 +54,12 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
         PlayerFortress,
         Team::Player,
         Target,
+        Health::new(FORTRESS_HP),
+        HealthBarConfig {
+            width: FORTRESS_HEALTH_BAR_WIDTH,
+            height: FORTRESS_HEALTH_BAR_HEIGHT,
+            y_offset: FORTRESS_HEALTH_BAR_Y_OFFSET,
+        },
         Sprite::from_color(PLAYER_FORT_COLOR, fortress_size),
         Transform::from_xyz(
             zone_center_x(PLAYER_FORT_START_COL, FORTRESS_COLS),
@@ -92,6 +104,12 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
         EnemyFortress,
         Team::Enemy,
         Target,
+        Health::new(FORTRESS_HP),
+        HealthBarConfig {
+            width: FORTRESS_HEALTH_BAR_WIDTH,
+            height: FORTRESS_HEALTH_BAR_HEIGHT,
+            y_offset: FORTRESS_HEALTH_BAR_Y_OFFSET,
+        },
         Sprite::from_color(ENEMY_FORT_COLOR, fortress_size),
         Transform::from_xyz(
             zone_center_x(ENEMY_FORT_START_COL, FORTRESS_COLS),

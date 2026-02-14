@@ -39,6 +39,16 @@ pub const BATTLEFIELD_WIDTH: f32 = TOTAL_COLS as f32 * CELL_SIZE;
 pub const BATTLEFIELD_HEIGHT: f32 = BATTLEFIELD_ROWS as f32 * CELL_SIZE;
 // = 10 * 64 = 640.0
 
+/// Fortress hit points. ~2000 HP — moderate buffer. A few leaked enemies are
+/// survivable, but 20+ breaking through will destroy the fortress.
+pub const FORTRESS_HP: f32 = 2000.0;
+
+/// Fortress health bar dimensions — larger than unit bars for visibility.
+const FORTRESS_HEALTH_BAR_WIDTH: f32 = 100.0;
+const FORTRESS_HEALTH_BAR_HEIGHT: f32 = 6.0;
+/// Y offset from fortress center (centered on the fortress sprite).
+const FORTRESS_HEALTH_BAR_Y_OFFSET: f32 = 0.0;
+
 // === Zone Column Ranges (start column, inclusive) ===
 
 /// Player fortress starts at column 0.
@@ -241,11 +251,26 @@ mod tests {
         assert_eq!(index.get(3, 5), Some(entity));
         assert_eq!(index.get(0, 0), None);
     }
+
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn fortress_hp_constant_is_positive() {
+        assert!(FORTRESS_HP > 0.0);
+    }
+
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn fortress_health_bar_constants_valid() {
+        assert!(FORTRESS_HEALTH_BAR_WIDTH > 0.0);
+        assert!(FORTRESS_HEALTH_BAR_HEIGHT > 0.0);
+        assert!(FORTRESS_HEALTH_BAR_Y_OFFSET >= 0.0);
+    }
 }
 
 #[cfg(test)]
 mod integration_tests {
     use super::*;
+    use crate::gameplay::units::Health;
     use crate::testing::assert_entity_count;
     use pretty_assertions::assert_eq;
 
@@ -364,5 +389,35 @@ mod integration_tests {
         let grid_index = app.world().resource::<GridIndex>();
         assert!(grid_index.get(6, 0).is_none());
         assert!(grid_index.get(0, 10).is_none());
+    }
+
+    #[test]
+    fn player_fortress_has_health() {
+        let mut app = create_battlefield_test_app();
+        let mut query = app
+            .world_mut()
+            .query_filtered::<&Health, With<PlayerFortress>>();
+        let health = query.single(app.world()).unwrap();
+        assert_eq!(health.current, FORTRESS_HP);
+        assert_eq!(health.max, FORTRESS_HP);
+    }
+
+    #[test]
+    fn enemy_fortress_has_health() {
+        let mut app = create_battlefield_test_app();
+        let mut query = app
+            .world_mut()
+            .query_filtered::<&Health, With<EnemyFortress>>();
+        let health = query.single(app.world()).unwrap();
+        assert_eq!(health.current, FORTRESS_HP);
+        assert_eq!(health.max, FORTRESS_HP);
+    }
+
+    #[test]
+    fn fortress_has_health_bar_config() {
+        use crate::gameplay::combat::HealthBarConfig;
+        let mut app = create_battlefield_test_app();
+        assert_entity_count::<(With<PlayerFortress>, With<HealthBarConfig>)>(&mut app, 1);
+        assert_entity_count::<(With<EnemyFortress>, With<HealthBarConfig>)>(&mut app, 1);
     }
 }

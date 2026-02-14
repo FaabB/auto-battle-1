@@ -5,7 +5,10 @@ use bevy::prelude::*;
 use super::ProductionTimer;
 use crate::Z_UNIT;
 use crate::gameplay::battlefield::CELL_SIZE;
-use crate::gameplay::combat::AttackTimer;
+use crate::gameplay::combat::{
+    AttackTimer, HealthBarConfig, UNIT_HEALTH_BAR_HEIGHT, UNIT_HEALTH_BAR_WIDTH,
+    UNIT_HEALTH_BAR_Y_OFFSET,
+};
 use crate::gameplay::units::{
     CombatStats, CurrentTarget, Health, Movement, SOLDIER_ATTACK_RANGE, SOLDIER_ATTACK_SPEED,
     SOLDIER_DAMAGE, SOLDIER_HEALTH, SOLDIER_MOVE_SPEED, Target, Team, Unit, UnitAssets,
@@ -33,6 +36,11 @@ pub(super) fn tick_production_and_spawn_units(
                 Target,
                 CurrentTarget(None),
                 Health::new(SOLDIER_HEALTH),
+                HealthBarConfig {
+                    width: UNIT_HEALTH_BAR_WIDTH,
+                    height: UNIT_HEALTH_BAR_HEIGHT,
+                    y_offset: UNIT_HEALTH_BAR_Y_OFFSET,
+                },
                 CombatStats {
                     damage: SOLDIER_DAMAGE,
                     attack_speed: SOLDIER_ATTACK_SPEED,
@@ -171,6 +179,9 @@ mod integration_tests {
 
         assert_entity_count::<(With<Unit>, With<Team>)>(&mut app, 1);
         assert_entity_count::<(With<Unit>, With<Health>)>(&mut app, 1);
+        assert_entity_count::<(With<Unit>, With<crate::gameplay::combat::HealthBarConfig>)>(
+            &mut app, 1,
+        );
         assert_entity_count::<(With<Unit>, With<CombatStats>)>(&mut app, 1);
         assert_entity_count::<(With<Unit>, With<Movement>)>(&mut app, 1);
         assert_entity_count::<(With<Unit>, With<DespawnOnExit<GameState>>)>(&mut app, 1);
