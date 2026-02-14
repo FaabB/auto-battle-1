@@ -225,8 +225,8 @@ fn handle_endgame_input(
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (new files compile, clippy clean)
-- [ ] `make test` passes (existing tests unaffected)
+- [x] `make check` passes (new files compile, clippy clean)
+- [x] `make test` passes (existing tests unaffected)
 
 #### Manual Verification:
 - [ ] Game still loads and plays normally (new states don't interfere)
@@ -301,9 +301,9 @@ assert_ne!(Menu::Victory, Menu::Defeat);
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes with all new tests green
-- [ ] No decrease in overall test coverage
+- [x] `make check` passes
+- [x] `make test` passes with all new tests green (151 total, +7 new)
+- [x] No decrease in overall test coverage
 
 #### Manual Verification:
 - [ ] Play a full game loop: Main Menu → InGame → destroy enemy fortress → Victory → Q → Main Menu → Space → fresh game

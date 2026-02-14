@@ -112,6 +112,8 @@ mod tests {
     fn menu_states_are_distinct() {
         assert_ne!(Menu::None, Menu::Main);
         assert_ne!(Menu::Main, Menu::Pause);
+        assert_ne!(Menu::Pause, Menu::Victory);
+        assert_ne!(Menu::Victory, Menu::Defeat);
     }
 
     #[allow(clippy::assertions_on_constants)]

@@ -4,6 +4,7 @@
 //! not screens. For example, `Menu::Pause` appears while `GameState::InGame`
 //! is active, and `Menu::Main` appears while `GameState::MainMenu` is active.
 
+mod endgame;
 mod main_menu;
 mod pause;
 
@@ -20,9 +21,13 @@ pub enum Menu {
     Main,
     /// Pause menu (shown in-game).
     Pause,
+    /// Victory overlay (enemy fortress destroyed).
+    Victory,
+    /// Defeat overlay (player fortress destroyed).
+    Defeat,
 }
 
 pub(super) fn plugin(app: &mut App) {
     app.init_state::<Menu>();
-    app.add_plugins((main_menu::plugin, pause::plugin));
+    app.add_plugins((main_menu::plugin, pause::plugin, endgame::plugin));
 }
