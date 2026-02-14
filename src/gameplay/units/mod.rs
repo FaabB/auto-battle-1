@@ -1,5 +1,8 @@
 //! Unit components, constants, and shared rendering assets.
 
+mod ai;
+mod movement;
+
 use bevy::prelude::*;
 
 use crate::screens::GameState;
@@ -18,6 +21,13 @@ pub const UNIT_RADIUS: f32 = 12.0;
 
 /// Player unit color (green).
 const PLAYER_UNIT_COLOR: Color = Color::srgb(0.2, 0.8, 0.2);
+
+/// Enemy unit color (red).
+const ENEMY_UNIT_COLOR: Color = Color::srgb(0.8, 0.2, 0.2);
+
+/// Maximum distance (pixels) a unit will backtrack to chase a target behind it.
+/// 2 cells = 128 pixels.
+pub const BACKTRACK_DISTANCE: f32 = 2.0 * crate::gameplay::battlefield::CELL_SIZE;
 
 /// Barracks production interval in seconds.
 pub const BARRACKS_PRODUCTION_INTERVAL: f32 = 3.0;
@@ -68,13 +78,26 @@ pub struct Movement {
     pub speed: f32,
 }
 
+/// Marker: this entity can be targeted by units.
+/// Placed on units, buildings, and fortresses.
+#[derive(Component, Debug, Clone, Copy, Reflect)]
+#[reflect(Component)]
+pub struct Target;
+
+/// Tracks the entity this unit is currently moving toward / attacking.
+/// Updated by the AI system; read by movement and (future) combat systems.
+#[derive(Component, Debug, Clone, Copy, Reflect)]
+#[reflect(Component)]
+pub struct CurrentTarget(pub Option<Entity>);
+
 // === Resources ===
 
 /// Shared mesh and material handles for unit circle rendering.
 #[derive(Resource, Debug)]
 pub struct UnitAssets {
-    pub player_mesh: Handle<Mesh>,
+    pub mesh: Handle<Mesh>,
     pub player_material: Handle<ColorMaterial>,
+    pub enemy_material: Handle<ColorMaterial>,
 }
 
 // === Systems ===
@@ -85,8 +108,9 @@ fn setup_unit_assets(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     commands.insert_resource(UnitAssets {
-        player_mesh: meshes.add(Circle::new(UNIT_RADIUS)),
+        mesh: meshes.add(Circle::new(UNIT_RADIUS)),
         player_material: materials.add(PLAYER_UNIT_COLOR),
+        enemy_material: materials.add(ENEMY_UNIT_COLOR),
     });
 }
 
@@ -97,9 +121,25 @@ pub(super) fn plugin(app: &mut App) {
         .register_type::<Unit>()
         .register_type::<Health>()
         .register_type::<CombatStats>()
-        .register_type::<Movement>();
+        .register_type::<Movement>()
+        .register_type::<Target>()
+        .register_type::<CurrentTarget>();
 
     app.add_systems(OnEnter(GameState::InGame), setup_unit_assets);
+
+    app.add_systems(
+        Update,
+        ai::unit_find_target
+            .in_set(crate::GameSet::Ai)
+            .run_if(in_state(GameState::InGame).and(in_state(crate::menus::Menu::None))),
+    );
+
+    app.add_systems(
+        Update,
+        movement::unit_movement
+            .in_set(crate::GameSet::Movement)
+            .run_if(in_state(GameState::InGame).and(in_state(crate::menus::Menu::None))),
+    );
 }
 
 #[cfg(test)]

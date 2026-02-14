@@ -9,6 +9,7 @@ use super::{
     GridIndex, PLAYER_FORT_START_COL, PlayerFortress, battlefield_center_y, col_to_world_x,
     row_to_world_y, zone_center_x,
 };
+use crate::gameplay::units::{Target, Team};
 use crate::screens::GameState;
 use crate::{Z_BACKGROUND, Z_GRID, Z_ZONE};
 
@@ -45,6 +46,8 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
     // Player fortress (blue)
     commands.spawn((
         PlayerFortress,
+        Team::Player,
+        Target,
         Sprite::from_color(PLAYER_FORT_COLOR, fortress_size),
         Transform::from_xyz(
             zone_center_x(PLAYER_FORT_START_COL, FORTRESS_COLS),
@@ -87,6 +90,8 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
     // Enemy fortress (red)
     commands.spawn((
         EnemyFortress,
+        Team::Enemy,
+        Target,
         Sprite::from_color(ENEMY_FORT_COLOR, fortress_size),
         Transform::from_xyz(
             zone_center_x(ENEMY_FORT_START_COL, FORTRESS_COLS),

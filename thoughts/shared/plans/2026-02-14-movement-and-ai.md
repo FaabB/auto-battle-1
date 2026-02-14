@@ -38,7 +38,7 @@ Add the core unit AI loop: find target → move toward target → stop at attack
 
 ## Implementation Approach
 
-Two new components (`Target` marker, `CurrentTarget` tracker), two new systems (`unit_find_target`, `unit_movement`), one debug spawner. The `Target` marker goes on all targetable entities (units, buildings, fortresses). `CurrentTarget` goes on units and persists across frames — only recalculated when the target entity is dead/invalid.
+Two new components (`Target` marker, `CurrentTarget` tracker), two new systems (`unit_find_target`, `unit_movement`), one debug spawner. The `Target` marker goes on all targetable entities (units, buildings, fortresses). `CurrentTarget` goes on units and is re-evaluated periodically: units without a target evaluate every frame (instant reaction for new spawns), while units with a valid target re-evaluate every 10 frames via a `Local<u32>` frame counter. This balances responsiveness with performance.
 
 ---
 
@@ -171,9 +171,9 @@ Import `Team` and `Target` from `crate::gameplay::units`.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (clippy + type checking)
-- [ ] `make test` passes (existing tests still work with renamed field)
-- [ ] `make build` succeeds
+- [x] `make check` passes (clippy + type checking)
+- [x] `make test` passes (existing tests still work with renamed field)
+- [x] `make build` succeeds
 
 #### Manual Verification:
 - [ ] Game runs normally, no visual changes yet
@@ -279,9 +279,9 @@ app.add_systems(
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
-- [ ] `make build` succeeds
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] `make build` succeeds
 
 #### Manual Verification:
 - [ ] No visible change yet (movement not implemented), but no panics or errors
@@ -377,9 +377,9 @@ app.add_systems(
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
-- [ ] `make build` succeeds
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] `make build` succeeds
 
 #### Manual Verification:
 - [ ] Place a barracks → units spawn and walk rightward toward enemy fortress
@@ -478,9 +478,9 @@ pub(super) fn plugin(app: &mut App) {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
-- [ ] `make build` succeeds
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] `make build` succeeds
 
 #### Manual Verification:
 - [ ] Press E → 3 red circles appear on the right side of the combat zone
@@ -538,9 +538,9 @@ Movement tests need a helper app with:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes — all new tests green
-- [ ] No decrease in existing test coverage
+- [x] `make check` passes
+- [x] `make test` passes — all new tests green (71 total, 12 new)
+- [x] No decrease in existing test coverage
 
 ---
 

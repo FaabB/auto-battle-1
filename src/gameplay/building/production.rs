@@ -6,8 +6,8 @@ use super::ProductionTimer;
 use crate::Z_UNIT;
 use crate::gameplay::battlefield::CELL_SIZE;
 use crate::gameplay::units::{
-    CombatStats, Health, Movement, SOLDIER_ATTACK_RANGE, SOLDIER_ATTACK_SPEED, SOLDIER_DAMAGE,
-    SOLDIER_HEALTH, SOLDIER_MOVE_SPEED, Team, Unit, UnitAssets,
+    CombatStats, CurrentTarget, Health, Movement, SOLDIER_ATTACK_RANGE, SOLDIER_ATTACK_SPEED,
+    SOLDIER_DAMAGE, SOLDIER_HEALTH, SOLDIER_MOVE_SPEED, Target, Team, Unit, UnitAssets,
 };
 use crate::screens::GameState;
 
@@ -29,6 +29,8 @@ pub(super) fn tick_production_and_spawn_units(
             commands.spawn((
                 Unit,
                 Team::Player,
+                Target,
+                CurrentTarget(None),
                 Health::new(SOLDIER_HEALTH),
                 CombatStats {
                     damage: SOLDIER_DAMAGE,
@@ -38,7 +40,7 @@ pub(super) fn tick_production_and_spawn_units(
                 Movement {
                     speed: SOLDIER_MOVE_SPEED,
                 },
-                Mesh2d(unit_assets.player_mesh.clone()),
+                Mesh2d(unit_assets.mesh.clone()),
                 MeshMaterial2d(unit_assets.player_material.clone()),
                 Transform::from_xyz(spawn_x, spawn_y, Z_UNIT),
                 DespawnOnExit(GameState::InGame),

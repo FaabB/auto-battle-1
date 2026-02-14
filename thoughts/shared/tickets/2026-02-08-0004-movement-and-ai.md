@@ -1,4 +1,4 @@
-# Ticket 4: Movement & AI
+# Ticket 4: Movement & AI — DONE
 
 **Delivers:** Units move toward enemies, temporary enemy spawner for testing
 
@@ -25,6 +25,8 @@ This ticket adds the core unit AI loop: find target → move toward target → s
 2. If no enemy units exist → move toward enemy fortress
 3. Stop when within attack range
 
+**Targeting throttle:** Units without a target evaluate every frame for instant reaction. Units with a valid target re-evaluate every 10 frames (`RETARGET_INTERVAL_FRAMES`) to balance responsiveness with performance. Targets that are despawned trigger immediate re-evaluation.
+
 **Temporary enemy spawner:** Since the wave system comes in Ticket 7, we need a debug mechanism to spawn test enemies. A simple keypress (e.g., E key) that spawns a few red enemy circles on the right side of the combat zone is sufficient. This will be replaced by the wave system later.
 
 Enemy units follow the same AI but mirrored — they target player units first, then the player fortress.
@@ -43,6 +45,10 @@ Relevant files:
 - When units from opposing teams get close, they stop (within attack range)
 - If all enemies die, player units resume walking toward enemy fortress position
 - Units smoothly update targets when their current target is destroyed
+
+## Status
+
+**DONE** — 2026-02-14. All automated checks pass (71 tests), manual verification confirmed.
 
 ## References
 

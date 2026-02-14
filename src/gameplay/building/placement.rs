@@ -9,7 +9,7 @@ use super::{
 use crate::gameplay::battlefield::{
     BUILD_ZONE_START_COL, GridIndex, col_to_world_x, row_to_world_y,
 };
-use crate::gameplay::units::BARRACKS_PRODUCTION_INTERVAL;
+use crate::gameplay::units::{BARRACKS_PRODUCTION_INTERVAL, Target, Team};
 use crate::screens::GameState;
 use crate::{Z_BUILDING, Z_GRID_CURSOR};
 
@@ -94,6 +94,8 @@ pub(super) fn handle_building_placement(
             grid_col: col,
             grid_row: row,
         },
+        Team::Player,
+        Target,
         Sprite::from_color(
             building_color(building_type),
             Vec2::splat(BUILDING_SPRITE_SIZE),
