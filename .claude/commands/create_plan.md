@@ -15,10 +15,12 @@ When this command is invoked:
 
 1. **Check if parameters were provided**:
    - If a file path or ticket reference was provided as a parameter, skip the default message
+   - If a **Linear ticket identifier** was provided (e.g., `GAM-8`, `LIN-123`), use the `mcp__plugin_linear_linear__get_issue` tool to fetch the ticket details. Store the identifier and URL for use in the plan's References section.
    - Immediately read any provided files FULLY
    - Begin the research process
 
 2. **If no parameters provided**, use the **AskUserQuestion** tool to ask the user what they want to plan. Example question: "What would you like to create an implementation plan for?" with options like:
+   - "A Linear ticket" (description: "I'll provide a Linear issue identifier like GAM-8")
    - "A ticket file" (description: "I'll provide a path to a ticket in thoughts/shared/tickets/")
    - "A new feature" (description: "I'll describe what I want to build")
    - "A bug fix" (description: "I'll describe the issue to fix")
@@ -34,6 +36,7 @@ When this command is invoked:
    - Research documents
    - Related implementation plans
    - Any JSON/data files mentioned
+   - **Linear tickets**: If a Linear issue identifier was provided, fetch it with `mcp__plugin_linear_linear__get_issue` (with `includeRelations: true`) and read any linked local ticket files. Also fetch comments with `mcp__plugin_linear_linear__list_comments` for additional context.
    - **IMPORTANT**: Use the Read tool WITHOUT limit/offset parameters to read entire files
    - **CRITICAL**: DO NOT spawn sub-tasks before reading these files yourself in the main context
    - **NEVER** read files partially - if a file is mentioned, read it completely
@@ -180,7 +183,10 @@ After structure approval:
    - Format: `YYYY-MM-DD-description.md` where:
      - YYYY-MM-DD is today's date
      - description is a brief kebab-case description
-   - Example: `2025-01-08-improve-error-handling.md`
+   - **If based on a Linear ticket**, include the ticket identifier in the filename:
+     - Format: `YYYY-MM-DD-{identifier}-description.md`
+     - Example: `2025-01-08-GAM-8-fortresses-damageable.md`
+   - Example (no Linear ticket): `2025-01-08-improve-error-handling.md`
 
 2. **Use this template structure**:
 
@@ -276,6 +282,7 @@ After structure approval:
 
 ## References
 
+- Linear ticket: [GAM-XX](https://linear.app/team/issue/GAM-XX) *(include if plan is based on a Linear ticket)*
 - Original ticket: `thoughts/shared/tickets/ticket_XXXX.md`
 - Related research: `thoughts/shared/research/[relevant].md`
 - Similar implementation: `[file:line]`
