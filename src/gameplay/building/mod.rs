@@ -1,6 +1,7 @@
 //! Building placement: grid cursor, hover highlight, and click-to-place buildings.
 
 mod placement;
+mod production;
 
 use bevy::prelude::*;
 
@@ -57,6 +58,11 @@ pub struct GridCursor;
 #[reflect(Resource)]
 pub struct HoveredCell(pub Option<(u16, u16)>);
 
+/// Production timer for buildings that spawn units (e.g., Barracks).
+#[derive(Component, Debug, Clone, Reflect)]
+#[reflect(Component)]
+pub struct ProductionTimer(pub Timer);
+
 // === Helper Functions ===
 
 /// Convert a world position to build-zone grid coordinates.
@@ -100,6 +106,7 @@ pub(super) fn plugin(app: &mut App) {
         .register_type::<Occupied>()
         .register_type::<GridCursor>()
         .register_type::<HoveredCell>()
+        .register_type::<ProductionTimer>()
         .init_resource::<HoveredCell>();
 
     app.add_systems(
@@ -114,6 +121,12 @@ pub(super) fn plugin(app: &mut App) {
         )
             .chain_ignore_deferred()
             .in_set(crate::GameSet::Input)
+            .run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
+    )
+    .add_systems(
+        Update,
+        production::tick_production_and_spawn_units
+            .in_set(crate::GameSet::Production)
             .run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
     );
 }

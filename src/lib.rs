@@ -5,10 +5,10 @@ pub mod dev_tools;
 pub mod gameplay;
 pub mod menus;
 pub mod screens;
-pub mod ui_camera;
 #[cfg(test)]
 pub mod testing;
 pub mod theme;
+pub mod ui_camera;
 
 use bevy::prelude::*;
 
@@ -25,8 +25,7 @@ pub(crate) const Z_GRID: f32 = 1.0;
 pub(crate) const Z_GRID_CURSOR: f32 = 2.0;
 /// Placed buildings.
 pub(crate) const Z_BUILDING: f32 = 3.0;
-/// Units (future: Ticket 3).
-#[allow(dead_code)]
+/// Units (Ticket 3).
 pub(crate) const Z_UNIT: f32 = 4.0;
 /// Health bars (future: Ticket 5).
 #[allow(dead_code)]

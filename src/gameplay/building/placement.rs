@@ -4,11 +4,12 @@ use bevy::prelude::*;
 
 use super::{
     BUILDING_SPRITE_SIZE, Building, BuildingType, CELL_SIZE, GRID_CURSOR_COLOR, GridCursor,
-    HoveredCell, Occupied, building_color, world_to_build_grid,
+    HoveredCell, Occupied, ProductionTimer, building_color, world_to_build_grid,
 };
 use crate::gameplay::battlefield::{
     BUILD_ZONE_START_COL, GridIndex, col_to_world_x, row_to_world_y,
 };
+use crate::gameplay::units::BARRACKS_PRODUCTION_INTERVAL;
 use crate::screens::GameState;
 use crate::{Z_BUILDING, Z_GRID_CURSOR};
 
@@ -87,7 +88,7 @@ pub(super) fn handle_building_placement(
     let world_x = col_to_world_x(BUILD_ZONE_START_COL + col);
     let world_y = row_to_world_y(row);
 
-    commands.spawn((
+    let mut entity_commands = commands.spawn((
         Building {
             building_type,
             grid_col: col,
@@ -100,6 +101,14 @@ pub(super) fn handle_building_placement(
         Transform::from_xyz(world_x, world_y, Z_BUILDING),
         DespawnOnExit(GameState::InGame),
     ));
+
+    // Only Barracks get a production timer
+    if building_type == BuildingType::Barracks {
+        entity_commands.insert(ProductionTimer(Timer::from_seconds(
+            BARRACKS_PRODUCTION_INTERVAL,
+            TimerMode::Repeating,
+        )));
+    }
 }
 
 #[cfg(test)]
@@ -110,10 +119,14 @@ mod integration_tests {
     use crate::testing::assert_entity_count;
     use pretty_assertions::assert_eq;
 
-    /// Helper: app with battlefield + building plugins, transitioned to `InGame`.
+    /// Helper: app with battlefield + building + units plugins, transitioned to `InGame`.
     fn create_building_test_app() -> App {
         let mut app = crate::testing::create_base_test_app();
+        // Units plugin needs asset infrastructure for UnitAssets (mesh + material).
+        app.init_resource::<Assets<Mesh>>();
+        app.init_resource::<Assets<ColorMaterial>>();
         app.add_plugins(crate::gameplay::battlefield::plugin);
+        app.add_plugins(crate::gameplay::units::plugin);
         app.add_plugins(super::super::plugin);
         crate::testing::transition_to_ingame(&mut app);
         app
@@ -173,8 +186,7 @@ mod integration_tests {
             .init_resource::<HoveredCell>();
         app.add_systems(
             Update,
-            handle_building_placement
-                .run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
+            handle_building_placement.run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
         );
         crate::testing::transition_to_ingame(&mut app);
         app
