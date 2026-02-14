@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use super::ProductionTimer;
 use crate::Z_UNIT;
 use crate::gameplay::battlefield::CELL_SIZE;
+use crate::gameplay::combat::AttackTimer;
 use crate::gameplay::units::{
     CombatStats, CurrentTarget, Health, Movement, SOLDIER_ATTACK_RANGE, SOLDIER_ATTACK_SPEED,
     SOLDIER_DAMAGE, SOLDIER_HEALTH, SOLDIER_MOVE_SPEED, Target, Team, Unit, UnitAssets,
@@ -40,6 +41,10 @@ pub(super) fn tick_production_and_spawn_units(
                 Movement {
                     speed: SOLDIER_MOVE_SPEED,
                 },
+                AttackTimer(Timer::from_seconds(
+                    1.0 / SOLDIER_ATTACK_SPEED,
+                    TimerMode::Repeating,
+                )),
                 Mesh2d(unit_assets.mesh.clone()),
                 MeshMaterial2d(unit_assets.player_material.clone()),
                 Transform::from_xyz(spawn_x, spawn_y, Z_UNIT),

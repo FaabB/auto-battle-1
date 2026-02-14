@@ -9,6 +9,7 @@ use crate::Z_UNIT;
 use crate::gameplay::battlefield::{
     COMBAT_ZONE_COLS, COMBAT_ZONE_START_COL, col_to_world_x, row_to_world_y,
 };
+use crate::gameplay::combat::AttackTimer;
 use crate::gameplay::units::{
     CombatStats, CurrentTarget, Health, Movement, SOLDIER_ATTACK_RANGE, SOLDIER_ATTACK_SPEED,
     SOLDIER_DAMAGE, SOLDIER_HEALTH, SOLDIER_MOVE_SPEED, Target, Team, Unit, UnitAssets,
@@ -52,6 +53,10 @@ fn debug_spawn_enemies(
             Movement {
                 speed: SOLDIER_MOVE_SPEED,
             },
+            AttackTimer(Timer::from_seconds(
+                1.0 / SOLDIER_ATTACK_SPEED,
+                TimerMode::Repeating,
+            )),
             Mesh2d(unit_assets.mesh.clone()),
             MeshMaterial2d(unit_assets.enemy_material.clone()),
             Transform::from_xyz(spawn_x, spawn_y, Z_UNIT),

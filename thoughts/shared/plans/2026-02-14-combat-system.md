@@ -372,9 +372,9 @@ Actually, `Z_HEALTH_BAR` won't be used yet since health bars are children with l
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (clippy, format)
-- [ ] `make test` passes (all existing + new tests)
-- [ ] New tests cover: projectile spawning on attack, projectile dealing damage on arrival, projectile despawn on missing target, attack out-of-range (no projectile), attack cooldown timing, death at 0 HP, death at negative HP, no death above 0 HP, health bar spawned on entities with Health, health bar fill scales correctly, health bar cleanup on entity death
+- [x] `make check` passes (clippy, format)
+- [x] `make test` passes (all existing + new tests)
+- [x] New tests cover: projectile spawning on attack, projectile dealing damage on arrival, projectile despawn on missing target, attack out-of-range (no projectile), attack cooldown timing, death at 0 HP, death at negative HP, no death above 0 HP, health bar spawned on entities with Health, health bar fill scales correctly, health bar cleanup on entity death
 
 #### Manual Verification:
 - [ ] Spawn barracks (place building) → units spawn and walk right
