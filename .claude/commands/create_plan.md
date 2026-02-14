@@ -92,15 +92,31 @@ Then wait for the user's input.
 
    Only ask questions that you genuinely cannot answer through code investigation.
 
+7. **GATE: Get approach approval before proceeding**:
+   After presenting your understanding and getting answers to questions, present a **concise high-level approach** (components, systems, key design decisions) and **explicitly wait for the user to approve** before reading more files or writing the plan.
+
+   ```
+   Proposed approach:
+   - [New component X] — [purpose]
+   - [New system Y] in [GameSet::Z] — [what it does]
+   - [Key design decision] — [rationale]
+
+   Does this approach look right? Any adjustments before I write the detailed plan?
+   ```
+
+   **CRITICAL**: Do NOT start reading additional files, writing plan documents, or diving into implementation details until the user says the approach is acceptable. This prevents wasted work on a wrong direction.
+
 ### Step 2: Research & Discovery
 
-After getting initial clarifications:
+After getting approach approval:
 
-1. **If the user corrects any misunderstanding**:
-   - DO NOT just accept the correction
-   - Spawn new research tasks to verify the correct information
+1. **If the user corrects or questions a design element**:
+   - DO NOT just accept the correction at face value — and DO NOT immediately abandon your approach
+   - First, **clarify intent**: "Are you saying X should be removed, or renamed, or justified differently?" A question like "Is X really needed?" might mean "rename it", "justify it", or "simplify it" — not necessarily "remove it"
+   - Spawn new research tasks to verify the correct information if needed
    - Read the specific files/directories they mention
-   - Only proceed once you've verified the facts yourself
+   - Present the tradeoffs of changing vs keeping the design element, then let the user decide
+   - **Don't flip-flop**: if your analysis shows separate systems + persistent state is the right design, don't abandon it at the first pushback. Present why you chose it and what the alternatives cost
 
 2. **Create a research todo list** using TodoWrite to track exploration tasks
 
