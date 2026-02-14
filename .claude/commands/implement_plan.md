@@ -8,6 +8,18 @@ You are tasked with implementing an approved technical plan from `thoughts/share
 
 **CRITICAL RULE**: Whenever you need to ask the user a question, present options, or request guidance, you MUST use the **AskUserQuestion** tool. Do NOT just write questions as plain text output — the user expects structured, interactive prompts they can respond to via the tool's UI.
 
+## Linear Ticket Integration
+
+Plans may reference a Linear ticket (e.g., `GAM-5`, `GAM-9`). Look for a ticket identifier in:
+- The plan's metadata or title
+- The original ticket file referenced by the plan
+
+When a Linear ticket is found:
+- **On start**: Move the ticket to **In Progress** using the `update_issue` Linear tool (set `state` to `"In Progress"`)
+- **On completion** (all phases done and verified): Move the ticket to **Done** (set `state` to `"Done"`)
+
+If no Linear ticket is associated with the plan, skip this step silently.
+
 ## Getting Started
 
 When given a plan path:
@@ -15,6 +27,7 @@ When given a plan path:
 - Read the original ticket and all files mentioned in the plan
 - **Read files fully** - never use limit/offset parameters, you need complete context
 - Think deeply about how the pieces fit together
+- Check if the plan references a Linear ticket — if so, move it to **In Progress**
 - Create a todo list to track your progress
 - Start implementing if you understand what needs to be done
 
@@ -65,6 +78,7 @@ If instructed to execute multiple phases consecutively, skip the pause until the
 
 Do not check off items in the manual testing steps until confirmed by the user.
 
+When all phases are complete and the user confirms manual verification has passed, move the associated Linear ticket (if any) to **Done**.
 
 ## If You Get Stuck
 
