@@ -247,14 +247,14 @@ The `pub(crate)` visibility allows GAM-9 to reference `EnemySpawnTimer` for rese
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
-- [ ] `cargo build` succeeds
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] `cargo build` succeeds
 
 #### Manual Verification:
-- [ ] `cargo run` — enemies appear automatically ~5s after entering InGame
-- [ ] Spawn rate visibly increases over time (watch for ~30 seconds)
-- [ ] Enemies spawn at varying rows (not always the same position)
+- [x] `cargo run` — enemies appear automatically ~5s after entering InGame
+- [x] Spawn rate visibly increases over time (watch for ~30 seconds)
+- [x] Enemies spawn at varying rows (not always the same position)
 
 ---
 
@@ -292,13 +292,13 @@ This removes:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
-- [ ] `cargo build --features dev` succeeds
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] `cargo build --features dev` succeeds
 
 #### Manual Verification:
-- [ ] `cargo run --features dev` — pressing E no longer spawns enemies
-- [ ] Enemies still auto-spawn from Phase 1
+- [x] `cargo run --features dev` — pressing E no longer spawns enemies
+- [x] Enemies still auto-spawn from Phase 1
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause here for manual confirmation.
 
@@ -506,12 +506,12 @@ mod integration_tests {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
-- [ ] All new tests pass individually
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] All new tests pass individually
 
 #### Manual Verification:
-- [ ] Full game loop works: enemies auto-spawn, player can build, combat works, economy works
+- [x] Full game loop works: enemies auto-spawn, player can build, combat works, economy works
 
 ---
 

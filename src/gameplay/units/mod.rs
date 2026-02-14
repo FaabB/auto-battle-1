@@ -2,6 +2,7 @@
 
 mod ai;
 mod movement;
+pub mod spawn;
 
 use bevy::prelude::*;
 
@@ -126,6 +127,8 @@ pub(super) fn plugin(app: &mut App) {
         .register_type::<CurrentTarget>();
 
     app.add_systems(OnEnter(GameState::InGame), setup_unit_assets);
+
+    spawn::plugin(app);
 
     app.add_systems(
         Update,
