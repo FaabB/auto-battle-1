@@ -283,7 +283,7 @@ After structure approval:
 
 ### Step 5: Sync and Review
 
-1. **Present the draft plan location** as text, then use **AskUserQuestion** to get review feedback:
+1. **Present the draft plan location** as text, then use **AskUserQuestion** to get initial review feedback:
 
    Present as text:
    ```
@@ -296,7 +296,14 @@ After structure approval:
    - "Needs minor tweaks" (description: "Small adjustments needed — I'll describe them")
    - "Needs significant rework" (description: "Major changes to approach or phasing needed")
 
-2. **Iterate based on feedback** - be ready to:
+2. **Iterate based on feedback conversationally**:
+   After the initial review question, do NOT keep using AskUserQuestion for vague follow-ups like "Any other concerns?" or "Is it approved now?". Instead:
+   - If the user provides feedback or asks a question, respond to it directly as plain text
+   - Only use AskUserQuestion when you have a **concrete question with distinct options** (e.g., "Should we use approach A or B for X?")
+   - If you need clarification on ambiguous feedback, ask a **specific** question — not a generic "what would you like to change?"
+   - When the user says it's approved or stops giving feedback, proceed — don't ask for re-confirmation
+
+   Be ready to:
    - Add missing phases
    - Adjust technical approach
    - Clarify success criteria (both automated and manual)
