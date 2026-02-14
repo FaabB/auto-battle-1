@@ -7,6 +7,8 @@ model: opus
 
 You are tasked with creating detailed implementation plans through an interactive, iterative process. You should be skeptical, thorough, and work collaboratively with the user to produce high-quality technical specifications.
 
+**CRITICAL RULE**: Whenever you need to ask the user a question, get their input, present options, or request approval, you MUST use the **AskUserQuestion** tool. Do NOT just write questions as plain text output — the user expects structured, interactive prompts they can respond to via the tool's UI. This applies to ALL questions throughout this workflow: initial input requests, clarification questions, design option choices, approach approval gates, and review feedback requests.
+
 ## Initial Response
 
 When this command is invoked:
@@ -16,21 +18,12 @@ When this command is invoked:
    - Immediately read any provided files FULLY
    - Begin the research process
 
-2. **If no parameters provided**, respond with:
-```
-I'll help you create a detailed implementation plan. Let me start by understanding what we're building.
+2. **If no parameters provided**, use the **AskUserQuestion** tool to ask the user what they want to plan. Example question: "What would you like to create an implementation plan for?" with options like:
+   - "A ticket file" (description: "I'll provide a path to a ticket in thoughts/shared/tickets/")
+   - "A new feature" (description: "I'll describe what I want to build")
+   - "A bug fix" (description: "I'll describe the issue to fix")
 
-Please provide:
-1. The task/ticket description (or reference to a ticket file)
-2. Any relevant context, constraints, or specific requirements
-3. Links to related research or previous implementations
-
-I'll analyze this information and work with you to create a comprehensive plan.
-
-Tip: You can also invoke this command with a ticket file directly: `/create_plan thoughts/shared/tickets/ticket_1234.md`
-```
-
-Then wait for the user's input.
+   Then wait for the user's input.
 
 ## Process Steps
 
@@ -76,6 +69,7 @@ Then wait for the user's input.
    - Determine true scope based on codebase reality
 
 6. **Present informed understanding and focused questions**:
+   First, present your findings as text output:
    ```
    Based on the ticket and my research of the codebase, I understand we need to [accurate summary].
 
@@ -83,26 +77,24 @@ Then wait for the user's input.
    - [Current implementation detail with file:line reference]
    - [Relevant pattern or constraint discovered]
    - [Potential complexity or edge case identified]
-
-   Questions that my research couldn't answer:
-   - [Specific technical question that requires human judgment]
-   - [Business logic clarification]
-   - [Design preference that affects implementation]
    ```
 
-   Only ask questions that you genuinely cannot answer through code investigation.
+   Then use the **AskUserQuestion** tool for any questions that your research couldn't answer. Each question should be a separate item in the tool call with clear options. Only ask questions that you genuinely cannot answer through code investigation.
 
 7. **GATE: Get approach approval before proceeding**:
-   After presenting your understanding and getting answers to questions, present a **concise high-level approach** (components, systems, key design decisions) and **explicitly wait for the user to approve** before reading more files or writing the plan.
+   After presenting your understanding and getting answers to questions, present a **concise high-level approach** as text output (components, systems, key design decisions), then use the **AskUserQuestion** tool to get explicit approval.
 
+   Present the approach as text:
    ```
    Proposed approach:
    - [New component X] — [purpose]
    - [New system Y] in [GameSet::Z] — [what it does]
    - [Key design decision] — [rationale]
-
-   Does this approach look right? Any adjustments before I write the detailed plan?
    ```
+
+   Then use AskUserQuestion with a question like "Does this approach look right?" with options:
+   - "Looks good, proceed" (description: "Write the detailed plan based on this approach")
+   - "Needs adjustments" (description: "I have changes to suggest before you proceed")
 
    **CRITICAL**: Do NOT start reading additional files, writing plan documents, or diving into implementation details until the user says the approach is acceptable. This prevents wasted work on a wrong direction.
 
@@ -112,10 +104,10 @@ After getting approach approval:
 
 1. **If the user corrects or questions a design element**:
    - DO NOT just accept the correction at face value — and DO NOT immediately abandon your approach
-   - First, **clarify intent**: "Are you saying X should be removed, or renamed, or justified differently?" A question like "Is X really needed?" might mean "rename it", "justify it", or "simplify it" — not necessarily "remove it"
+   - First, **clarify intent** using the **AskUserQuestion** tool: e.g., "What would you like to change about X?" with options like "Remove it", "Rename it", "Justify why it's needed", "Simplify it". A question like "Is X really needed?" might mean "rename it", "justify it", or "simplify it" — not necessarily "remove it"
    - Spawn new research tasks to verify the correct information if needed
    - Read the specific files/directories they mention
-   - Present the tradeoffs of changing vs keeping the design element, then let the user decide
+   - Present the tradeoffs of changing vs keeping the design element, then use **AskUserQuestion** to let the user decide
    - **Don't flip-flop**: if your analysis shows separate systems + persistent state is the right design, don't abandon it at the first pushback. Present why you chose it and what the alternatives cost
 
 2. **Create a research todo list** using TodoWrite to track exploration tasks
@@ -143,29 +135,25 @@ After getting approach approval:
 3. **Wait for ALL sub-tasks to complete** before proceeding
 
 4. **Present findings and design options**:
+   Present your research findings as text:
    ```
    Based on my research, here's what I found:
 
    **Current State:**
    - [Key discovery about existing code]
    - [Pattern or convention to follow]
-
-   **Design Options:**
-   1. [Option A] - [pros/cons]
-   2. [Option B] - [pros/cons]
-
-   **Open Questions:**
-   - [Technical uncertainty]
-   - [Design decision needed]
-
-   Which approach aligns best with your vision?
    ```
+
+   Then use the **AskUserQuestion** tool for design decisions. For each decision point, provide the options with descriptions of their pros/cons. For example: "Which approach should we use for [feature]?" with options like "Option A" (description: pros/cons) and "Option B" (description: pros/cons).
+
+   If there are also open questions (technical uncertainties, clarifications), include those as additional questions in the same AskUserQuestion call (up to 4 questions per call).
 
 ### Step 3: Plan Structure Development
 
 Once aligned on approach:
 
 1. **Create initial plan outline**:
+   Present the structure as text:
    ```
    Here's my proposed plan structure:
 
@@ -176,9 +164,11 @@ Once aligned on approach:
    1. [Phase name] - [what it accomplishes]
    2. [Phase name] - [what it accomplishes]
    3. [Phase name] - [what it accomplishes]
-
-   Does this phasing make sense? Should I adjust the order or granularity?
    ```
+
+   Then use the **AskUserQuestion** tool to get approval: "Does this plan structure look right?" with options like:
+   - "Looks good, write the details" (description: "Proceed to write the full plan with this phasing")
+   - "Needs changes" (description: "I want to adjust the phases or ordering")
 
 2. **Get feedback on structure** before writing details
 
@@ -293,17 +283,18 @@ After structure approval:
 
 ### Step 5: Sync and Review
 
-1. **Present the draft plan location**:
+1. **Present the draft plan location** as text, then use **AskUserQuestion** to get review feedback:
+
+   Present as text:
    ```
    I've created the initial implementation plan at:
    `thoughts/shared/plans/YYYY-MM-DD-description.md`
-
-   Please review it and let me know:
-   - Are the phases properly scoped?
-   - Are the success criteria specific enough?
-   - Any technical details that need adjustment?
-   - Missing edge cases or considerations?
    ```
+
+   Then use AskUserQuestion: "How does the plan look?" with options like:
+   - "Approved, ready to implement" (description: "The plan is good as-is")
+   - "Needs minor tweaks" (description: "Small adjustments needed — I'll describe them")
+   - "Needs significant rework" (description: "Major changes to approach or phasing needed")
 
 2. **Iterate based on feedback** - be ready to:
    - Add missing phases

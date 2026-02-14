@@ -6,6 +6,8 @@ description: Implement technical plans from thoughts/shared/plans with verificat
 
 You are tasked with implementing an approved technical plan from `thoughts/shared/plans/`. These plans contain phases with specific changes and success criteria.
 
+**CRITICAL RULE**: Whenever you need to ask the user a question, present options, or request guidance, you MUST use the **AskUserQuestion** tool. Do NOT just write questions as plain text output — the user expects structured, interactive prompts they can respond to via the tool's UI.
+
 ## Getting Started
 
 When given a plan path:
@@ -16,7 +18,7 @@ When given a plan path:
 - Create a todo list to track your progress
 - Start implementing if you understand what needs to be done
 
-If no plan path provided, ask for one.
+If no plan path provided, use the **AskUserQuestion** tool to ask: "Which plan should I implement?" with options listing recent plan files from `thoughts/shared/plans/`, or an option to provide a custom path.
 
 ## Implementation Philosophy
 
@@ -30,15 +32,14 @@ When things don't match the plan exactly, think about why and communicate clearl
 
 If you encounter a mismatch:
 - STOP and think deeply about why the plan can't be followed
-- Present the issue clearly:
+- Present the issue context as text:
   ```
   Issue in Phase [N]:
   Expected: [what the plan says]
   Found: [actual situation]
   Why this matters: [explanation]
-
-  How should I proceed?
   ```
+- Then use the **AskUserQuestion** tool to ask how to proceed, with options describing the viable paths forward (e.g., "Adapt the plan to match reality", "Skip this step", "Investigate further before deciding").
 
 ## Verification Approach
 
@@ -70,7 +71,7 @@ Do not check off items in the manual testing steps until confirmed by the user.
 When something isn't working as expected:
 - First, make sure you've read and understood all the relevant code
 - Consider if the codebase has evolved since the plan was written
-- Present the mismatch clearly and ask for guidance
+- Present the mismatch clearly as text, then use the **AskUserQuestion** tool to ask for guidance with concrete options
 
 Use sub-tasks sparingly - mainly for targeted debugging or exploring unfamiliar territory.
 
