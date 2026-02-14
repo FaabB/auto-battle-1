@@ -283,21 +283,23 @@ After structure approval:
 
 ### Step 5: Sync and Review
 
-1. **Present the draft plan location** as text, then use **AskUserQuestion** to get initial review feedback:
+1. **Present the draft plan location and a brief summary** as plain text. Do NOT use AskUserQuestion here — the user will provide feedback if they want changes.
 
-   Present as text:
    ```
-   I've created the initial implementation plan at:
-   `thoughts/shared/plans/YYYY-MM-DD-description.md`
+   I've created the plan at `thoughts/shared/plans/YYYY-MM-DD-description.md`.
+
+   Summary of the N phases:
+   1. [Phase name] — [one-line description]
+   2. [Phase name] — [one-line description]
+
+   Key design choices:
+   - [Choice 1]
+   - [Choice 2]
    ```
 
-   Then use AskUserQuestion: "How does the plan look?" with options like:
-   - "Approved, ready to implement" (description: "The plan is good as-is")
-   - "Needs minor tweaks" (description: "Small adjustments needed — I'll describe them")
-   - "Needs significant rework" (description: "Major changes to approach or phasing needed")
+   Then stop and wait for the user to respond. They will either approve, request changes, or move on.
 
 2. **Iterate based on feedback conversationally**:
-   After the initial review question, do NOT keep using AskUserQuestion for vague follow-ups like "Any other concerns?" or "Is it approved now?". Instead:
    - If the user provides feedback or asks a question, respond to it directly as plain text
    - Only use AskUserQuestion when you have a **concrete question with distinct options** (e.g., "Should we use approach A or B for X?")
    - If you need clarification on ambiguous feedback, ask a **specific** question — not a generic "what would you like to change?"
