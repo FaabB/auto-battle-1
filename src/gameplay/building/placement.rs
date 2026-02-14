@@ -61,6 +61,8 @@ pub(super) fn handle_building_placement(
     hovered: Res<HoveredCell>,
     grid_index: Res<GridIndex>,
     occupied: Query<(), With<Occupied>>,
+    mut gold: ResMut<crate::gameplay::economy::Gold>,
+    mut shop: ResMut<crate::gameplay::economy::shop::Shop>,
 ) {
     if !mouse.just_pressed(MouseButton::Left) {
         return;
@@ -80,11 +82,25 @@ pub(super) fn handle_building_placement(
         return;
     }
 
+    // Get selected building from shop
+    let Some(building_type) = shop.selected_building() else {
+        return; // No card selected
+    };
+
+    // Check gold
+    let cost = crate::gameplay::economy::building_cost(building_type);
+    if gold.0 < cost {
+        return;
+    }
+
+    // Deduct gold and remove card from shop
+    gold.0 -= cost;
+    shop.remove_selected();
+
     // Mark slot as occupied
     commands.entity(slot_entity).insert(Occupied);
 
     // Spawn the building entity
-    let building_type = BuildingType::Barracks; // Hardcoded for now (Ticket 6 adds selector)
     let world_x = col_to_world_x(BUILD_ZONE_START_COL + col);
     let world_y = row_to_world_y(row);
 
@@ -104,12 +120,22 @@ pub(super) fn handle_building_placement(
         DespawnOnExit(GameState::InGame),
     ));
 
-    // Only Barracks get a production timer
-    if building_type == BuildingType::Barracks {
-        entity_commands.insert(ProductionTimer(Timer::from_seconds(
-            BARRACKS_PRODUCTION_INTERVAL,
-            TimerMode::Repeating,
-        )));
+    // Each building type gets its own timer component (idiomatic ECS composition)
+    match building_type {
+        BuildingType::Barracks => {
+            entity_commands.insert(ProductionTimer(Timer::from_seconds(
+                BARRACKS_PRODUCTION_INTERVAL,
+                TimerMode::Repeating,
+            )));
+        }
+        BuildingType::Farm => {
+            entity_commands.insert(crate::gameplay::economy::income::IncomeTimer(
+                Timer::from_seconds(
+                    crate::gameplay::economy::FARM_INCOME_INTERVAL,
+                    TimerMode::Repeating,
+                ),
+            ));
+        }
     }
 }
 
@@ -127,6 +153,9 @@ mod integration_tests {
         // Units plugin needs asset infrastructure for UnitAssets (mesh + material).
         app.init_resource::<Assets<Mesh>>();
         app.init_resource::<Assets<ColorMaterial>>();
+        // Building placement requires Gold and Shop resources.
+        app.init_resource::<crate::gameplay::economy::Gold>();
+        app.init_resource::<crate::gameplay::economy::shop::Shop>();
         app.add_plugins(crate::gameplay::battlefield::plugin);
         app.add_plugins(crate::gameplay::units::plugin);
         app.add_plugins(super::super::plugin);
@@ -178,19 +207,30 @@ mod integration_tests {
     /// Helper: app with only `handle_building_placement` (no `update_grid_cursor`).
     /// Skips `InputPlugin` so `just_pressed` isn't cleared in `PreUpdate`,
     /// allowing tests to call `press()` and have it visible in `Update`.
+    /// Pre-selects a Barracks card in the shop so placement tests work by default.
     fn create_placement_test_app() -> App {
+        use crate::gameplay::economy::shop::Shop;
+
         let mut app = crate::testing::create_base_test_app_no_input();
         app.init_resource::<ButtonInput<KeyCode>>()
             .init_resource::<ButtonInput<MouseButton>>();
         app.add_plugins(crate::gameplay::battlefield::plugin);
         app.register_type::<Building>()
             .register_type::<Occupied>()
-            .init_resource::<HoveredCell>();
+            .init_resource::<HoveredCell>()
+            .init_resource::<crate::gameplay::economy::Gold>()
+            .init_resource::<Shop>();
         app.add_systems(
             Update,
             handle_building_placement.run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
         );
         crate::testing::transition_to_ingame(&mut app);
+
+        // Pre-select a Barracks card so existing placement tests work.
+        let mut shop = app.world_mut().resource_mut::<Shop>();
+        shop.cards[0] = Some(BuildingType::Barracks);
+        shop.selected = Some(0);
+
         app
     }
 
@@ -227,6 +267,8 @@ mod integration_tests {
 
     #[test]
     fn clicking_occupied_cell_does_not_place_duplicate() {
+        use crate::gameplay::economy::shop::Shop;
+
         let mut app = create_placement_test_app();
 
         // Place first building at (3, 5)
@@ -235,6 +277,11 @@ mod integration_tests {
             .resource_mut::<ButtonInput<MouseButton>>()
             .press(MouseButton::Left);
         app.update();
+
+        // Re-select a card (first placement consumed the selection)
+        let mut shop = app.world_mut().resource_mut::<Shop>();
+        shop.cards[1] = Some(BuildingType::Barracks);
+        shop.selected = Some(1);
 
         // Try to place again at the same cell
         app.world_mut().resource_mut::<HoveredCell>().0 = Some((3, 5));
@@ -269,5 +316,65 @@ mod integration_tests {
         app.update();
 
         assert_entity_count::<(With<Building>, With<DespawnOnExit<GameState>>)>(&mut app, 1);
+    }
+
+    // === Gold Cost Tests ===
+
+    #[test]
+    fn placement_deducts_gold() {
+        let mut app = create_placement_test_app();
+
+        app.world_mut().resource_mut::<HoveredCell>().0 = Some((2, 3));
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+        app.update();
+
+        let gold = app.world().resource::<crate::gameplay::economy::Gold>();
+        assert_eq!(
+            gold.0,
+            crate::gameplay::economy::STARTING_GOLD - crate::gameplay::economy::BARRACKS_COST
+        );
+        assert_entity_count::<With<Building>>(&mut app, 1);
+    }
+
+    #[test]
+    fn placement_blocked_when_insufficient_gold() {
+        let mut app = create_placement_test_app();
+
+        // Set gold to 0
+        app.world_mut()
+            .resource_mut::<crate::gameplay::economy::Gold>()
+            .0 = 0;
+
+        app.world_mut().resource_mut::<HoveredCell>().0 = Some((2, 3));
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+        app.update();
+
+        let gold = app.world().resource::<crate::gameplay::economy::Gold>();
+        assert_eq!(gold.0, 0);
+        assert_entity_count::<With<Building>>(&mut app, 0);
+    }
+
+    #[test]
+    fn placement_blocked_when_gold_below_cost() {
+        let mut app = create_placement_test_app();
+
+        // Set gold to just below Barracks cost
+        app.world_mut()
+            .resource_mut::<crate::gameplay::economy::Gold>()
+            .0 = crate::gameplay::economy::BARRACKS_COST - 1;
+
+        app.world_mut().resource_mut::<HoveredCell>().0 = Some((2, 3));
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+        app.update();
+
+        let gold = app.world().resource::<crate::gameplay::economy::Gold>();
+        assert_eq!(gold.0, crate::gameplay::economy::BARRACKS_COST - 1);
+        assert_entity_count::<With<Building>>(&mut app, 0);
     }
 }

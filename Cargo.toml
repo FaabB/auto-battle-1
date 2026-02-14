@@ -10,6 +10,7 @@ dev = ["bevy/dynamic_linking"]
 
 [dependencies]
 bevy = { version = "0.18", default-features = false, features = ["2d"] }
+rand = "0.9"
 
 [dev-dependencies]
 pretty_assertions = "1.4"

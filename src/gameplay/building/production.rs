@@ -71,6 +71,9 @@ mod integration_tests {
             .init_resource::<ButtonInput<MouseButton>>();
         app.init_resource::<Assets<Mesh>>();
         app.init_resource::<Assets<ColorMaterial>>();
+        // Building placement requires Gold and Shop resources.
+        app.init_resource::<crate::gameplay::economy::Gold>();
+        app.init_resource::<crate::gameplay::economy::shop::Shop>();
 
         app.configure_sets(
             Update,
@@ -94,6 +97,9 @@ mod integration_tests {
 
     #[test]
     fn barracks_gets_production_timer() {
+        use crate::gameplay::building::BuildingType;
+        use crate::gameplay::economy::shop::Shop;
+
         // Use isolated placement setup (without update_grid_cursor which clears HoveredCell).
         let mut app = crate::testing::create_base_test_app_no_input();
         app.init_resource::<ButtonInput<KeyCode>>()
@@ -102,13 +108,20 @@ mod integration_tests {
         app.register_type::<Building>()
             .register_type::<super::super::Occupied>()
             .register_type::<ProductionTimer>()
-            .init_resource::<HoveredCell>();
+            .init_resource::<HoveredCell>()
+            .init_resource::<crate::gameplay::economy::Gold>()
+            .init_resource::<Shop>();
         app.add_systems(
             Update,
             super::super::placement::handle_building_placement
                 .run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
         );
         transition_to_ingame(&mut app);
+
+        // Pre-select a Barracks card in the shop.
+        let mut shop = app.world_mut().resource_mut::<Shop>();
+        shop.cards[0] = Some(BuildingType::Barracks);
+        shop.selected = Some(0);
 
         // Place a barracks via HoveredCell + mouse click.
         app.world_mut().resource_mut::<HoveredCell>().0 = Some((2, 3));

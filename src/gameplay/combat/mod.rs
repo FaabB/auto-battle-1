@@ -151,7 +151,7 @@ fn move_projectiles(
 
 /// Despawns any entity whose health drops to 0 or below.
 /// Runs in `GameSet::Death`. Generic — works for units, fortresses, etc.
-fn check_death(mut commands: Commands, query: Query<(Entity, &Health)>) {
+pub fn check_death(mut commands: Commands, query: Query<(Entity, &Health)>) {
     for (entity, health) in &query {
         if health.current <= 0.0 {
             commands.entity(entity).despawn();

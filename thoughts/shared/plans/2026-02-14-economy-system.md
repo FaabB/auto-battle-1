@@ -408,9 +408,9 @@ pub const GOLD_TEXT: Color = Color::srgb(1.0, 0.85, 0.0);
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (clippy + compile)
-- [ ] `make test` passes — all existing tests pass (no changes to `ProductionTimer`)
-- [ ] New tests pass:
+- [x] `make check` passes (clippy + compile)
+- [x] `make test` passes — all existing tests pass (no changes to `ProductionTimer`)
+- [x] New tests pass:
   - Gold resource initialized to 200 on enter InGame
   - Gold reset to 200 on re-enter InGame
   - `building_cost()` returns correct values
@@ -423,11 +423,11 @@ pub const GOLD_TEXT: Color = Color::srgb(1.0, 0.85, 0.0);
   - `award_kill_gold` runs before `check_death` (entity still exists when queried)
 
 #### Manual Verification:
-- [ ] Gold HUD shows "Gold: 200" at game start
-- [ ] Placing a building (still hardcoded Barracks) deducts 100 gold from display
-- [ ] Cannot place when gold < 100
-- [ ] Killing enemies visibly increases gold
-- [ ] Gold resets to 200 when re-entering InGame after quitting
+- [x] Gold HUD shows "Gold: 200" at game start
+- [x] Placing a building (still hardcoded Barracks) deducts 100 gold from display
+- [x] Cannot place when gold < 100
+- [x] Killing enemies visibly increases gold
+- [x] Gold resets to 200 when re-entering InGame after quitting
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause here for manual confirmation before proceeding to Phase 2.
 
@@ -964,8 +964,8 @@ pub(super) fn handle_building_placement(
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes — all tests including:
+- [x] `make check` passes
+- [x] `make test` passes — all tests including:
   - `Shop::generate_cards()` fills all 4 slots
   - `Shop::selected_building()` returns correct type
   - `Shop::remove_selected()` clears slot and resets state
@@ -980,16 +980,16 @@ pub(super) fn handle_building_placement(
   - Reroll cost resets after placing a building
 
 #### Manual Verification:
-- [ ] Bottom panel shows 4 cards with building names and costs
-- [ ] Clicking a card highlights it (selected state)
-- [ ] Clicking the grid places the selected building (correct type and color)
-- [ ] Placed card disappears from shop (slot becomes empty/dark)
-- [ ] Reroll button refreshes all 4 cards
-- [ ] Reroll shows "FREE" after placing a building, then escalating cost
-- [ ] Can't place when no card selected
-- [ ] Can't place when insufficient gold
-- [ ] Can't reroll when insufficient gold
-- [ ] Farms placed from shop generate income
+- [x] Bottom panel shows 4 cards with building names and costs
+- [x] Clicking a card highlights it (selected state)
+- [x] Clicking the grid places the selected building (correct type and color)
+- [x] Placed card disappears from shop (slot becomes empty/dark)
+- [x] Reroll button refreshes all 4 cards
+- [x] Reroll shows "FREE" after placing a building, then escalating cost
+- [x] Can't place when no card selected
+- [x] Can't place when insufficient gold
+- [x] Can't reroll when insufficient gold
+- [x] Farms placed from shop generate income
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause here for manual confirmation.
 
