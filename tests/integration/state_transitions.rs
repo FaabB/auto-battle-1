@@ -1,7 +1,6 @@
 //! Tests for game state transitions.
 
-use auto_battle::GameState;
-use auto_battle::game::CoreGamePlugin;
+use auto_battle::screens::GameState;
 use bevy::input::InputPlugin;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
@@ -12,7 +11,7 @@ fn create_game_app() -> App {
     app.add_plugins(MinimalPlugins);
     app.add_plugins(StatesPlugin);
     app.add_plugins(InputPlugin);
-    app.add_plugins(CoreGamePlugin);
+    app.add_plugins(auto_battle::plugin);
     app
 }
 

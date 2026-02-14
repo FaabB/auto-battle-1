@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 
+[features]
+default = ["dev"]
+dev = ["bevy/dynamic_linking"]
+
 [dependencies]
 bevy = { version = "0.18", default-features = false, features = ["2d"] }
 

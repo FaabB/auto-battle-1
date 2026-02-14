@@ -31,8 +31,8 @@ pub fn create_base_test_app() -> App {
     app.add_plugins(StatesPlugin);
     app.add_plugins(InputPlugin);
     app.add_plugins(WindowPlugin::default());
-    app.init_state::<crate::GameState>();
-    app.add_sub_state::<crate::InGameState>();
+    app.init_state::<crate::screens::GameState>();
+    app.init_state::<crate::menus::Menu>();
     app.world_mut().spawn(Camera2d);
     app
 }
@@ -47,8 +47,8 @@ pub fn create_base_test_app_no_input() -> App {
     let mut app = create_test_app();
     app.add_plugins(StatesPlugin);
     app.add_plugins(WindowPlugin::default());
-    app.init_state::<crate::GameState>();
-    app.add_sub_state::<crate::InGameState>();
+    app.init_state::<crate::screens::GameState>();
+    app.init_state::<crate::menus::Menu>();
     app.world_mut().spawn(Camera2d);
     app
 }
@@ -57,10 +57,33 @@ pub fn create_base_test_app_no_input() -> App {
 /// (first applies the transition + `OnEnter`, second applies deferred commands).
 pub fn transition_to_ingame(app: &mut App) {
     app.world_mut()
-        .resource_mut::<NextState<crate::GameState>>()
-        .set(crate::GameState::InGame);
+        .resource_mut::<NextState<crate::screens::GameState>>()
+        .set(crate::screens::GameState::InGame);
     app.update();
     app.update();
+}
+
+/// Count entities that match a query filter.
+///
+/// Usage: `assert_eq!(count_entities::<With<PlayerFortress>>(&mut app), 1);`
+#[allow(dead_code)]
+pub fn count_entities<F: bevy::ecs::query::QueryFilter>(app: &mut App) -> usize {
+    app.world_mut()
+        .query_filtered::<(), F>()
+        .iter(app.world())
+        .count()
+}
+
+/// Assert exactly N entities match a query filter.
+///
+/// Panics with a descriptive message including the count.
+#[allow(dead_code)]
+pub fn assert_entity_count<F: bevy::ecs::query::QueryFilter>(app: &mut App, expected: usize) {
+    let actual = count_entities::<F>(app);
+    assert_eq!(
+        actual, expected,
+        "Expected {expected} entities matching filter, found {actual}"
+    );
 }
 
 /// Helper to advance the app by one frame.

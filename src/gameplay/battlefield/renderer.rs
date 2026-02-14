@@ -9,7 +9,8 @@ use super::{
     GridIndex, PLAYER_FORT_START_COL, PlayerFortress, battlefield_center_y, col_to_world_x,
     row_to_world_y, zone_center_x,
 };
-use crate::{GameState, Z_BACKGROUND, Z_GRID, Z_ZONE};
+use crate::screens::GameState;
+use crate::{Z_BACKGROUND, Z_GRID, Z_ZONE};
 
 /// Color for individual grid cells in the build zone.
 const GRID_CELL_COLOR: Color = Color::srgb(0.3, 0.3, 0.4);

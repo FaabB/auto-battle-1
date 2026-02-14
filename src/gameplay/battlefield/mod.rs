@@ -7,7 +7,8 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-use crate::{GameState, InGameState};
+use crate::menus::Menu;
+use crate::screens::GameState;
 
 // === Grid Constants ===
 
@@ -102,7 +103,8 @@ pub struct BuildSlot {
 }
 
 /// Maps `(col, row)` to the `BuildSlot` entity for O(1) grid lookups.
-#[derive(Resource, Default, Debug)]
+#[derive(Resource, Default, Debug, Reflect)]
+#[reflect(Resource)]
 pub struct GridIndex {
     slots: HashMap<(u16, u16), Entity>,
 }
@@ -136,13 +138,13 @@ pub fn row_to_world_y(row: u16) -> f32 {
 
 /// Get the world-space center X of a zone given its start column and width in columns.
 #[must_use]
-pub(crate) fn zone_center_x(start_col: u16, width_cols: u16) -> f32 {
+pub fn zone_center_x(start_col: u16, width_cols: u16) -> f32 {
     f32::from(start_col).mul_add(CELL_SIZE, (f32::from(width_cols) * CELL_SIZE) / 2.0)
 }
 
 /// Center Y of the battlefield.
 #[must_use]
-pub(crate) fn battlefield_center_y() -> f32 {
+pub fn battlefield_center_y() -> f32 {
     BATTLEFIELD_HEIGHT / 2.0
 }
 
@@ -155,34 +157,31 @@ pub struct BattlefieldSetup;
 
 // === Plugin ===
 
-/// Battlefield plugin that spawns zone sprites and handles camera panning.
-#[derive(Debug)]
-pub struct BattlefieldPlugin;
+pub(super) fn plugin(app: &mut App) {
+    app.register_type::<PlayerFortress>()
+        .register_type::<EnemyFortress>()
+        .register_type::<BuildZone>()
+        .register_type::<CombatZone>()
+        .register_type::<BattlefieldBackground>()
+        .register_type::<BuildSlot>()
+        .register_type::<GridIndex>()
+        .init_resource::<GridIndex>();
 
-impl Plugin for BattlefieldPlugin {
-    fn build(&self, app: &mut App) {
-        app.register_type::<PlayerFortress>()
-            .register_type::<EnemyFortress>()
-            .register_type::<BuildZone>()
-            .register_type::<CombatZone>()
-            .register_type::<BattlefieldBackground>()
-            .register_type::<BuildSlot>()
-            .init_resource::<GridIndex>();
-
-        app.add_systems(
-            OnEnter(GameState::InGame),
-            (
-                renderer::spawn_battlefield,
-                camera::setup_camera_for_battlefield,
-            )
-                .chain()
-                .in_set(BattlefieldSetup),
+    app.add_systems(
+        OnEnter(GameState::InGame),
+        (
+            renderer::spawn_battlefield,
+            camera::setup_camera_for_battlefield,
         )
-        .add_systems(
-            Update,
-            camera::camera_pan.run_if(in_state(InGameState::Playing)),
-        );
-    }
+            .chain()
+            .in_set(BattlefieldSetup),
+    )
+    .add_systems(
+        Update,
+        camera::camera_pan
+            .in_set(crate::GameSet::Input)
+            .run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
+    );
 }
 
 #[cfg(test)]
@@ -247,12 +246,13 @@ mod tests {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
+    use crate::testing::assert_entity_count;
     use pretty_assertions::assert_eq;
 
-    /// Helper: set up an app with `BattlefieldPlugin` and transition to `InGame`.
+    /// Helper: set up an app with battlefield plugin and transition to `InGame`.
     fn create_battlefield_test_app() -> App {
         let mut app = crate::testing::create_base_test_app();
-        app.add_plugins(BattlefieldPlugin);
+        app.add_plugins(plugin);
         crate::testing::transition_to_ingame(&mut app);
         app
     }
@@ -260,45 +260,26 @@ mod integration_tests {
     #[test]
     fn spawn_battlefield_creates_expected_sprites() {
         let mut app = create_battlefield_test_app();
-        let sprite_count = app
-            .world_mut()
-            .query_filtered::<(), With<Sprite>>()
-            .iter(app.world())
-            .count();
-        assert_eq!(sprite_count, 65); // 5 zones + 60 grid cells
+        assert_entity_count::<With<Sprite>>(&mut app, 65); // 5 zones + 60 grid cells
     }
 
     #[test]
     fn spawn_battlefield_creates_player_fortress() {
         let mut app = create_battlefield_test_app();
-        let count = app
-            .world_mut()
-            .query_filtered::<(), With<PlayerFortress>>()
-            .iter(app.world())
-            .count();
-        assert_eq!(count, 1);
+        assert_entity_count::<With<PlayerFortress>>(&mut app, 1);
     }
 
     #[test]
     fn spawn_battlefield_creates_enemy_fortress() {
         let mut app = create_battlefield_test_app();
-        let count = app
-            .world_mut()
-            .query_filtered::<(), With<EnemyFortress>>()
-            .iter(app.world())
-            .count();
-        assert_eq!(count, 1);
+        assert_entity_count::<With<EnemyFortress>>(&mut app, 1);
     }
 
     #[test]
     fn all_battlefield_entities_have_despawn_on_exit() {
         let mut app = create_battlefield_test_app();
-        let with_despawn = app
-            .world_mut()
-            .query_filtered::<(), (With<Sprite>, With<DespawnOnExit<GameState>>)>()
-            .iter(app.world())
-            .count();
-        assert_eq!(with_despawn, 65); // All 5 zones + 60 grid cells have DespawnOnExit
+        // All 5 zones + 60 grid cells have DespawnOnExit
+        assert_entity_count::<(With<Sprite>, With<DespawnOnExit<GameState>>)>(&mut app, 65);
     }
 
     #[test]
@@ -308,7 +289,6 @@ mod integration_tests {
             .world_mut()
             .query_filtered::<&Transform, With<PlayerFortress>>();
         let transform = query.single(app.world()).unwrap();
-        // Player fortress center should be near the left edge
         assert!(transform.translation.x < BATTLEFIELD_WIDTH / 4.0);
     }
 
@@ -319,52 +299,31 @@ mod integration_tests {
             .world_mut()
             .query_filtered::<&Transform, With<EnemyFortress>>();
         let transform = query.single(app.world()).unwrap();
-        // Enemy fortress center should be near the right edge
         assert!(transform.translation.x > BATTLEFIELD_WIDTH * 3.0 / 4.0);
     }
 
     #[test]
     fn build_zone_marker_exists() {
         let mut app = create_battlefield_test_app();
-        let count = app
-            .world_mut()
-            .query_filtered::<(), With<BuildZone>>()
-            .iter(app.world())
-            .count();
-        assert_eq!(count, 1);
+        assert_entity_count::<With<BuildZone>>(&mut app, 1);
     }
 
     #[test]
     fn combat_zone_marker_exists() {
         let mut app = create_battlefield_test_app();
-        let count = app
-            .world_mut()
-            .query_filtered::<(), With<CombatZone>>()
-            .iter(app.world())
-            .count();
-        assert_eq!(count, 1);
+        assert_entity_count::<With<CombatZone>>(&mut app, 1);
     }
 
     #[test]
     fn background_marker_exists() {
         let mut app = create_battlefield_test_app();
-        let count = app
-            .world_mut()
-            .query_filtered::<(), With<BattlefieldBackground>>()
-            .iter(app.world())
-            .count();
-        assert_eq!(count, 1);
+        assert_entity_count::<With<BattlefieldBackground>>(&mut app, 1);
     }
 
     #[test]
     fn sixty_build_slots_spawned() {
         let mut app = create_battlefield_test_app();
-        let count = app
-            .world_mut()
-            .query_filtered::<(), With<BuildSlot>>()
-            .iter(app.world())
-            .count();
-        assert_eq!(count, 60); // 10 rows × 6 cols
+        assert_entity_count::<With<BuildSlot>>(&mut app, 60); // 10 rows × 6 cols
     }
 
     #[test]
@@ -382,19 +341,13 @@ mod integration_tests {
     #[test]
     fn build_slots_have_despawn_on_exit() {
         let mut app = create_battlefield_test_app();
-        let with_despawn = app
-            .world_mut()
-            .query_filtered::<(), (With<BuildSlot>, With<DespawnOnExit<GameState>>)>()
-            .iter(app.world())
-            .count();
-        assert_eq!(with_despawn, 60);
+        assert_entity_count::<(With<BuildSlot>, With<DespawnOnExit<GameState>>)>(&mut app, 60);
     }
 
     #[test]
     fn grid_index_has_sixty_entries() {
         let app = create_battlefield_test_app();
         let grid_index = app.world().resource::<GridIndex>();
-        // Every (col, row) in the 6×10 grid should resolve to an entity
         let mut count = 0;
         for row in 0..BATTLEFIELD_ROWS {
             for col in 0..BUILD_ZONE_COLS {
@@ -409,7 +362,7 @@ mod integration_tests {
     fn grid_index_out_of_bounds_returns_none() {
         let app = create_battlefield_test_app();
         let grid_index = app.world().resource::<GridIndex>();
-        assert!(grid_index.get(6, 0).is_none()); // col out of bounds
-        assert!(grid_index.get(0, 10).is_none()); // row out of bounds
+        assert!(grid_index.get(6, 0).is_none());
+        assert!(grid_index.get(0, 10).is_none());
     }
 }

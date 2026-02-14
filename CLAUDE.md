@@ -8,13 +8,18 @@ Auto-battle-1 is a 2D auto-battler game built with **Bevy 0.18** in Rust.
 
 ### Architecture
 
-This project uses Bevy's **Entity Component System (ECS)**. All game state lives in components on entities, and all logic lives in systems. Do not use OOP patterns (inheritance hierarchies, manager objects, singletons). Specifically:
+See `ARCHITECTURE.md` for the full conventions reference.
 
-- **Components** are plain data structs. They store state, not behavior.
-- **Systems** are functions that query for entities by their components. They contain all logic.
-- **Plugins** group related systems and components into modules. Each plugin owns a specific domain (battlefield, economy, combat, etc.).
+This project uses Bevy's **Entity Component System (ECS)**. All game state lives in components on entities, and all logic lives in systems. Do not use OOP patterns (inheritance hierarchies, manager objects, singletons). Key conventions:
+
+- **Function plugins** — all plugins use `pub(super) fn plugin(app: &mut App)`, not struct-based `impl Plugin`.
+- **Visibility** — `pub(crate)` for cross-module types, `pub(super)` for plugin functions, private for systems.
+- **States** live in `screens/` — `GameState` in `screens/mod.rs`, `InGameState` in `screens/in_game.rs`. Both use `#[states(scoped_entities)]`.
+- **Components** are co-located with their systems in domain plugins, not in a shared `components/` module.
+- **Theme** — shared colors in `theme/palette.rs`, widget constructors in `theme/widget.rs`.
+- **GameSet** — global `Update` schedule ordering (Input → Production → Ai → Movement → Combat → Death → Ui). Domain plugins use `.in_set(GameSet::Xxx)`.
+- **Dev tools** — `src/dev_tools/` is feature-gated on `dev`. Debug-only tools go here.
 - **Resources** are global singletons for cross-cutting state (economy balance, wave counter). Prefer components on entities over resources when the data belongs to a specific entity.
-- **States** (`GameState`, `InGameState`) control which systems run. Use `run_if(in_state(...))` to gate systems, `DespawnOnExit` for cleanup.
 
 ## Thoughts Workflow
 
@@ -94,7 +99,7 @@ The workflow uses specialized sub-agents:
 ### Testing
 - Target 90% test coverage
 - Every ticket should include tests that maintain or increase coverage toward this goal
-- Use `src/testing.rs` helpers (`create_test_app`, `create_ingame_test_app`) for system-level tests
+- Use `src/testing.rs` helpers (`create_base_test_app`, `create_base_test_app_no_input`, `transition_to_ingame`, `assert_entity_count`) for system-level tests
 
 ### Commits
 - Use `/commit` command for creating commits

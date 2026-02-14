@@ -2,29 +2,19 @@
 
 use bevy::prelude::*;
 
-use crate::GameState;
+use super::GameState;
 
-#[derive(Debug)]
-pub struct LoadingScreenPlugin;
-
-impl Plugin for LoadingScreenPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(GameState::Loading), setup_loading_screen)
-            .add_systems(
-                Update,
-                check_loading_complete.run_if(in_state(GameState::Loading)),
-            );
-    }
+pub(super) fn plugin(app: &mut App) {
+    app.add_systems(OnEnter(GameState::Loading), setup_loading_screen)
+        .add_systems(
+            Update,
+            check_loading_complete.run_if(in_state(GameState::Loading)),
+        );
 }
 
 fn setup_loading_screen(mut commands: Commands) {
     commands.spawn((
-        Text::new("Loading..."),
-        TextFont {
-            font_size: 48.0,
-            ..default()
-        },
-        TextColor(Color::WHITE),
+        crate::theme::widget::header("Loading..."),
         Node {
             position_type: PositionType::Absolute,
             left: Val::Percent(50.0),
