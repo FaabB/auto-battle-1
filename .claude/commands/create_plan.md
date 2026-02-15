@@ -328,7 +328,7 @@ After structure approval:
 4. **Continue refining** until the user is satisfied
 
 5. **Update Linear ticket status** — If the plan is based on a Linear ticket:
-   - Use `mcp__plugin_linear_linear__update_issue` to move the ticket to the **Planned** state
+   - Use `mcp__plugin_linear_linear__update_issue` to move the ticket to the **Plan created** state
    - This signals that the ticket has a finalized implementation plan and is ready for `/implement_plan`
 
 ## Important Guidelines
