@@ -165,8 +165,7 @@ mod tests {
 mod integration_tests {
     use super::*;
     use crate::gameplay::units::{
-        CombatStats, CurrentTarget, Movement, SOLDIER_ATTACK_RANGE, SOLDIER_ATTACK_SPEED,
-        SOLDIER_DAMAGE, SOLDIER_MOVE_SPEED, Unit,
+        CombatStats, CurrentTarget, Movement, Unit, UnitType, unit_stats,
     };
     use crate::testing::assert_entity_count;
     use pretty_assertions::assert_eq;
@@ -202,6 +201,7 @@ mod integration_tests {
     /// Uses a very short timer (0.001s) with elapsed set to 0.999ms so any positive
     /// wall-clock delta triggers it (MinimalPlugins uses real wall-clock delta, not advance_by).
     fn spawn_attacker(world: &mut World, x: f32, target: Option<Entity>) -> Entity {
+        let stats = unit_stats(UnitType::Soldier);
         let mut timer = Timer::from_seconds(0.001, TimerMode::Repeating);
         timer.set_elapsed(Duration::from_nanos(999_000));
         world
@@ -209,13 +209,13 @@ mod integration_tests {
                 Unit,
                 CurrentTarget(target),
                 CombatStats {
-                    damage: SOLDIER_DAMAGE,
-                    attack_speed: SOLDIER_ATTACK_SPEED,
-                    range: SOLDIER_ATTACK_RANGE,
+                    damage: stats.damage,
+                    attack_speed: stats.attack_speed,
+                    range: stats.attack_range,
                 },
                 AttackTimer(timer),
                 Movement {
-                    speed: SOLDIER_MOVE_SPEED,
+                    speed: stats.move_speed,
                 },
                 Transform::from_xyz(x, 100.0, 0.0),
                 GlobalTransform::from(Transform::from_xyz(x, 100.0, 0.0)),
@@ -343,22 +343,23 @@ mod integration_tests {
         let mut app = create_attack_test_app();
 
         let target = spawn_target(app.world_mut(), 120.0, 100.0);
+        let stats = unit_stats(UnitType::Soldier);
 
         // Spawn attacker with fresh timer (NOT nearly elapsed)
         app.world_mut().spawn((
             Unit,
             CurrentTarget(Some(target)),
             CombatStats {
-                damage: SOLDIER_DAMAGE,
-                attack_speed: SOLDIER_ATTACK_SPEED,
-                range: SOLDIER_ATTACK_RANGE,
+                damage: stats.damage,
+                attack_speed: stats.attack_speed,
+                range: stats.attack_range,
             },
             AttackTimer(Timer::from_seconds(
-                1.0 / SOLDIER_ATTACK_SPEED,
+                1.0 / stats.attack_speed,
                 TimerMode::Repeating,
             )),
             Movement {
-                speed: SOLDIER_MOVE_SPEED,
+                speed: stats.move_speed,
             },
             Transform::from_xyz(100.0, 100.0, 0.0),
             GlobalTransform::from(Transform::from_xyz(100.0, 100.0, 0.0)),

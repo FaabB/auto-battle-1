@@ -49,7 +49,7 @@ mod tests {
     use std::time::Duration;
 
     use super::*;
-    use crate::gameplay::units::{SOLDIER_ATTACK_RANGE, SOLDIER_MOVE_SPEED};
+    use crate::gameplay::units::{UnitType, unit_stats};
 
     fn create_movement_test_app() -> App {
         let mut app = App::new();
@@ -69,15 +69,16 @@ mod tests {
     }
 
     fn spawn_unit_at(world: &mut World, x: f32, speed: f32, target: Option<Entity>) -> Entity {
+        let stats = unit_stats(UnitType::Soldier);
         world
             .spawn((
                 Unit,
                 CurrentTarget(target),
                 Movement { speed },
                 CombatStats {
-                    damage: 10.0,
-                    attack_speed: 1.0,
-                    range: SOLDIER_ATTACK_RANGE,
+                    damage: stats.damage,
+                    attack_speed: stats.attack_speed,
+                    range: stats.attack_range,
                 },
                 Transform::from_xyz(x, 100.0, 0.0),
             ))
@@ -96,9 +97,10 @@ mod tests {
     #[test]
     fn unit_moves_toward_target() {
         let mut app = create_movement_test_app();
+        let stats = unit_stats(UnitType::Soldier);
 
         let target = spawn_target_at(app.world_mut(), 500.0);
-        let unit = spawn_unit_at(app.world_mut(), 100.0, SOLDIER_MOVE_SPEED, Some(target));
+        let unit = spawn_unit_at(app.world_mut(), 100.0, stats.move_speed, Some(target));
 
         advance_and_update(&mut app, Duration::from_millis(100));
 
@@ -113,13 +115,14 @@ mod tests {
     #[test]
     fn unit_stops_at_attack_range() {
         let mut app = create_movement_test_app();
+        let stats = unit_stats(UnitType::Soldier);
 
         // Place unit within attack range of target
         let target = spawn_target_at(app.world_mut(), 500.0);
         let unit = spawn_unit_at(
             app.world_mut(),
-            500.0 - SOLDIER_ATTACK_RANGE + 1.0,
-            SOLDIER_MOVE_SPEED,
+            500.0 - stats.attack_range + 1.0,
+            stats.move_speed,
             Some(target),
         );
 
@@ -128,7 +131,7 @@ mod tests {
         let transform = app.world().get::<Transform>(unit).unwrap();
         // Should not have moved — already within range
         assert!(
-            (transform.translation.x - (500.0 - SOLDIER_ATTACK_RANGE + 1.0)).abs() < f32::EPSILON,
+            (transform.translation.x - (500.0 - stats.attack_range + 1.0)).abs() < f32::EPSILON,
             "Unit should not move when within attack range, x={}",
             transform.translation.x
         );
@@ -137,8 +140,9 @@ mod tests {
     #[test]
     fn unit_no_movement_without_target() {
         let mut app = create_movement_test_app();
+        let stats = unit_stats(UnitType::Soldier);
 
-        let unit = spawn_unit_at(app.world_mut(), 100.0, SOLDIER_MOVE_SPEED, None);
+        let unit = spawn_unit_at(app.world_mut(), 100.0, stats.move_speed, None);
 
         advance_and_update(&mut app, Duration::from_millis(100));
 
@@ -153,6 +157,7 @@ mod tests {
     #[test]
     fn unit_snaps_to_range_on_overshoot() {
         let mut app = create_movement_test_app();
+        let stats = unit_stats(UnitType::Soldier);
 
         // Place unit very close to target (just outside range)
         // Distance = 31.0 - 30.0 range = 1.0px to travel
@@ -160,7 +165,7 @@ mod tests {
         let target = spawn_target_at(app.world_mut(), 500.0);
         let unit = spawn_unit_at(
             app.world_mut(),
-            500.0 - SOLDIER_ATTACK_RANGE - 1.0,
+            500.0 - stats.attack_range - 1.0,
             100_000.0,
             Some(target),
         );
@@ -171,7 +176,7 @@ mod tests {
         // Should snap to exactly attack range from target
         let distance_to_target = (500.0 - transform.translation.x).abs();
         assert!(
-            (distance_to_target - SOLDIER_ATTACK_RANGE).abs() < 0.01,
+            (distance_to_target - stats.attack_range).abs() < 0.01,
             "Unit should snap to attack range distance, actual distance={}",
             distance_to_target
         );

@@ -16,8 +16,6 @@ const REROLL_BASE_COST: u32 = 5;
 /// Maximum reroll cost (cap).
 const MAX_REROLL_COST: u32 = 40;
 
-/// Available building types in the card pool.
-const BUILDING_POOL: [BuildingType; 2] = [BuildingType::Barracks, BuildingType::Farm];
 
 // === Resources ===
 
@@ -51,9 +49,10 @@ impl Shop {
     pub fn generate_cards(&mut self) {
         use rand::Rng;
         let mut rng = rand::rng();
+        let pool = BuildingType::ALL;
         for card in &mut self.cards {
-            let idx = rng.random_range(0..BUILDING_POOL.len());
-            *card = Some(BUILDING_POOL[idx]);
+            let idx = rng.random_range(0..pool.len());
+            *card = Some(pool[idx]);
         }
         self.selected = None;
     }
@@ -134,8 +133,8 @@ mod tests {
         for card in &shop.cards {
             let bt = card.unwrap();
             assert!(
-                bt == BuildingType::Barracks || bt == BuildingType::Farm,
-                "Card should be Barracks or Farm, got {bt:?}"
+                BuildingType::ALL.contains(&bt),
+                "Card should be in BuildingType::ALL, got {bt:?}"
             );
         }
     }

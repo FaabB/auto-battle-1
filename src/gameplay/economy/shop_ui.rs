@@ -4,7 +4,6 @@ use bevy::prelude::*;
 
 use super::Gold;
 use super::shop::{HAND_SIZE, Shop};
-use crate::gameplay::building::BuildingType;
 use crate::screens::GameState;
 use crate::{GameSet, gameplay_running};
 
@@ -216,11 +215,9 @@ fn update_card_text(
 
     for (name_text, mut text) in &mut name_query {
         let slot = name_text.0;
-        *text = Text::new(match shop.cards[slot] {
-            Some(BuildingType::Barracks) => "Barracks",
-            Some(BuildingType::Farm) => "Farm",
-            None => "—",
-        });
+        *text = Text::new(
+            shop.cards[slot].map_or("—", |bt| bt.display_name()),
+        );
     }
 
     for (cost_text, mut text) in &mut cost_query {
@@ -278,6 +275,7 @@ pub(super) fn plugin(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gameplay::building::BuildingType;
     use crate::gameplay::economy::shop::Shop;
     use pretty_assertions::assert_eq;
 

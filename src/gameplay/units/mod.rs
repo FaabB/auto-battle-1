@@ -6,17 +6,15 @@ pub mod spawn;
 
 use bevy::prelude::*;
 
+use crate::gameplay::combat::{
+    AttackTimer, HealthBarConfig, UNIT_HEALTH_BAR_HEIGHT, UNIT_HEALTH_BAR_WIDTH,
+    UNIT_HEALTH_BAR_Y_OFFSET,
+};
+use crate::gameplay::{Health, Target, Team};
 use crate::screens::GameState;
-use crate::{GameSet, gameplay_running};
+use crate::{GameSet, Z_UNIT, gameplay_running};
 
 // === Constants ===
-
-/// Prototype soldier stats.
-pub const SOLDIER_HEALTH: f32 = 100.0;
-pub const SOLDIER_DAMAGE: f32 = 10.0;
-pub const SOLDIER_ATTACK_SPEED: f32 = 1.0;
-pub const SOLDIER_MOVE_SPEED: f32 = 50.0;
-pub const SOLDIER_ATTACK_RANGE: f32 = 30.0;
 
 /// Visual radius of a unit circle.
 pub const UNIT_RADIUS: f32 = 12.0;
@@ -60,6 +58,102 @@ pub struct Movement {
 #[reflect(Component)]
 pub struct CurrentTarget(pub Option<Entity>);
 
+// === Unit Type System ===
+
+/// Types of units in the game.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Component)]
+pub enum UnitType {
+    Soldier,
+}
+
+impl UnitType {
+    /// All unit types, for iteration.
+    #[allow(dead_code)] // Used in tests; will be used by future unit type additions
+    pub const ALL: &[Self] = &[Self::Soldier];
+
+    /// Human-readable display name.
+    #[must_use]
+    pub const fn display_name(self) -> &'static str {
+        match self {
+            Self::Soldier => "Soldier",
+        }
+    }
+}
+
+/// Stats for a unit type. All values are compile-time constants.
+#[derive(Debug, Clone, Copy)]
+pub struct UnitStats {
+    pub hp: f32,
+    pub damage: f32,
+    pub attack_speed: f32,
+    pub move_speed: f32,
+    pub attack_range: f32,
+}
+
+/// Look up stats for a unit type.
+#[must_use]
+pub const fn unit_stats(unit_type: UnitType) -> UnitStats {
+    match unit_type {
+        UnitType::Soldier => UnitStats {
+            hp: 100.0,
+            damage: 10.0,
+            attack_speed: 1.0,
+            move_speed: 50.0,
+            attack_range: 30.0,
+        },
+    }
+}
+
+/// Spawn a unit entity with all required components.
+/// Single source of truth for the unit archetype.
+pub fn spawn_unit(
+    commands: &mut Commands,
+    unit_type: UnitType,
+    team: Team,
+    position: Vec3,
+    assets: &UnitAssets,
+) -> Entity {
+    let stats = unit_stats(unit_type);
+    let material = match team {
+        Team::Player => assets.player_material.clone(),
+        Team::Enemy => assets.enemy_material.clone(),
+    };
+
+    commands
+        .spawn((
+            Name::new(format!("{team:?} {}", unit_type.display_name())),
+            Unit,
+            unit_type,
+            team,
+            Target,
+            CurrentTarget(None),
+            Health::new(stats.hp),
+            HealthBarConfig {
+                width: UNIT_HEALTH_BAR_WIDTH,
+                height: UNIT_HEALTH_BAR_HEIGHT,
+                y_offset: UNIT_HEALTH_BAR_Y_OFFSET,
+            },
+            CombatStats {
+                damage: stats.damage,
+                attack_speed: stats.attack_speed,
+                range: stats.attack_range,
+            },
+            Movement {
+                speed: stats.move_speed,
+            },
+            AttackTimer(Timer::from_seconds(
+                1.0 / stats.attack_speed,
+                TimerMode::Repeating,
+            )),
+            Mesh2d(assets.mesh.clone()),
+            MeshMaterial2d(material),
+            Transform::from_xyz(position.x, position.y, Z_UNIT),
+            DespawnOnExit(GameState::InGame),
+        ))
+        .id()
+}
+
 // === Resources ===
 
 /// Shared mesh and material handles for unit circle rendering.
@@ -88,6 +182,7 @@ fn setup_unit_assets(
 
 pub(super) fn plugin(app: &mut App) {
     app.register_type::<Unit>()
+        .register_type::<UnitType>()
         .register_type::<CombatStats>()
         .register_type::<Movement>()
         .register_type::<CurrentTarget>();
@@ -131,11 +226,22 @@ mod tests {
 
     #[test]
     fn soldier_stats_are_positive() {
-        assert!(SOLDIER_HEALTH > 0.0);
-        assert!(SOLDIER_DAMAGE > 0.0);
-        assert!(SOLDIER_ATTACK_SPEED > 0.0);
-        assert!(SOLDIER_MOVE_SPEED > 0.0);
-        assert!(SOLDIER_ATTACK_RANGE > 0.0);
+        let stats = unit_stats(UnitType::Soldier);
+        assert!(stats.hp > 0.0);
+        assert!(stats.damage > 0.0);
+        assert!(stats.attack_speed > 0.0);
+        assert!(stats.move_speed > 0.0);
+        assert!(stats.attack_range > 0.0);
+    }
+
+    #[test]
+    fn unit_type_display_name() {
+        assert_eq!(UnitType::Soldier.display_name(), "Soldier");
+    }
+
+    #[test]
+    fn unit_type_all_contains_soldier() {
+        assert!(UnitType::ALL.contains(&UnitType::Soldier));
     }
 }
 

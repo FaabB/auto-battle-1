@@ -6,32 +6,17 @@ mod production;
 use bevy::prelude::*;
 
 use crate::gameplay::battlefield::{BATTLEFIELD_HEIGHT, BattlefieldSetup, CELL_SIZE};
+use crate::gameplay::units::UnitType;
 use crate::screens::GameState;
 use crate::{GameSet, gameplay_running};
 
 // === Constants ===
 
-/// Barracks production interval in seconds.
-pub const BARRACKS_PRODUCTION_INTERVAL: f32 = 3.0;
-
 /// Color for the grid cursor hover highlight.
 const GRID_CURSOR_COLOR: Color = Color::srgba(1.0, 1.0, 1.0, 0.2);
 
-/// Barracks building color (dark blue).
-const BARRACKS_COLOR: Color = Color::srgb(0.15, 0.2, 0.6);
-/// Farm building color (green).
-const FARM_COLOR: Color = Color::srgb(0.2, 0.6, 0.1);
-
 /// Building sprite size (slightly smaller than cell to show grid outline).
 const BUILDING_SPRITE_SIZE: f32 = CELL_SIZE - 4.0;
-
-// === Building HP Constants ===
-
-/// Barracks HP — tankier than farms, takes several hits to destroy.
-pub const BARRACKS_HP: f32 = 300.0;
-
-/// Farm HP — fragile, prioritize protecting them.
-pub const FARM_HP: f32 = 150.0;
 
 /// Building health bar width (wider than units since buildings are larger).
 const BUILDING_HEALTH_BAR_WIDTH: f32 = 40.0;
@@ -61,6 +46,60 @@ pub struct Building {
 pub enum BuildingType {
     Barracks,
     Farm,
+}
+
+impl BuildingType {
+    /// All building types, used by shop card pool.
+    pub const ALL: &[Self] = &[Self::Barracks, Self::Farm];
+
+    /// Human-readable display name.
+    #[must_use]
+    pub const fn display_name(self) -> &'static str {
+        match self {
+            Self::Barracks => "Barracks",
+            Self::Farm => "Farm",
+        }
+    }
+}
+
+/// Stats for a building type. All values are compile-time constants.
+#[derive(Debug, Clone, Copy)]
+pub struct BuildingStats {
+    /// Maximum hit points.
+    pub hp: f32,
+    /// Gold cost to place.
+    pub cost: u32,
+    /// Sprite color.
+    pub color: Color,
+    /// Unit type this building produces, if any.
+    pub produced_unit: Option<UnitType>,
+    /// Production timer interval (seconds), if this building produces units.
+    pub production_interval: Option<f32>,
+    /// Income timer interval (seconds), if this building generates income.
+    pub income_interval: Option<f32>,
+}
+
+/// Look up stats for a building type.
+#[must_use]
+pub const fn building_stats(building_type: BuildingType) -> BuildingStats {
+    match building_type {
+        BuildingType::Barracks => BuildingStats {
+            hp: 300.0,
+            cost: 100,
+            color: Color::srgb(0.15, 0.2, 0.6),
+            produced_unit: Some(UnitType::Soldier),
+            production_interval: Some(3.0),
+            income_interval: None,
+        },
+        BuildingType::Farm => BuildingStats {
+            hp: 150.0,
+            cost: 50,
+            color: Color::srgb(0.2, 0.6, 0.1),
+            produced_unit: None,
+            production_interval: None,
+            income_interval: Some(1.0),
+        },
+    }
 }
 
 /// Marker: this `BuildSlot` has a building on it.
@@ -112,19 +151,13 @@ pub fn world_to_build_grid(world_pos: Vec2) -> Option<(u16, u16)> {
 /// Get the color for a building type.
 #[must_use]
 pub const fn building_color(building_type: BuildingType) -> Color {
-    match building_type {
-        BuildingType::Barracks => BARRACKS_COLOR,
-        BuildingType::Farm => FARM_COLOR,
-    }
+    building_stats(building_type).color
 }
 
 /// Get the max HP for a building type.
 #[must_use]
 pub const fn building_hp(building_type: BuildingType) -> f32 {
-    match building_type {
-        BuildingType::Barracks => BARRACKS_HP,
-        BuildingType::Farm => FARM_HP,
-    }
+    building_stats(building_type).hp
 }
 
 // === Observers ===
@@ -248,30 +281,64 @@ mod tests {
         assert_eq!(world_to_build_grid(Vec2::new(512.0, 32.0)), None);
     }
 
-    // --- building_color tests ---
+    // --- building_stats tests ---
 
     #[test]
-    fn barracks_color_is_blue() {
-        let color = building_color(BuildingType::Barracks);
-        assert_eq!(color, BARRACKS_COLOR);
+    fn barracks_stats() {
+        let stats = building_stats(BuildingType::Barracks);
+        assert!(stats.hp > 0.0);
+        assert!(stats.cost > 0);
+        assert!(stats.produced_unit.is_some());
+        assert!(stats.production_interval.is_some());
+        assert!(stats.income_interval.is_none());
     }
 
     #[test]
-    fn farm_color_is_green() {
-        let color = building_color(BuildingType::Farm);
-        assert_eq!(color, FARM_COLOR);
-    }
-
-    // --- building_hp tests ---
-
-    #[test]
-    fn barracks_hp_constant() {
-        assert_eq!(building_hp(BuildingType::Barracks), BARRACKS_HP);
+    fn farm_stats() {
+        let stats = building_stats(BuildingType::Farm);
+        assert!(stats.hp > 0.0);
+        assert!(stats.cost > 0);
+        assert!(stats.produced_unit.is_none());
+        assert!(stats.production_interval.is_none());
+        assert!(stats.income_interval.is_some());
     }
 
     #[test]
-    fn farm_hp_constant() {
-        assert_eq!(building_hp(BuildingType::Farm), FARM_HP);
+    fn building_type_display_name() {
+        assert_eq!(BuildingType::Barracks.display_name(), "Barracks");
+        assert_eq!(BuildingType::Farm.display_name(), "Farm");
+    }
+
+    #[test]
+    fn building_type_all_contains_all_variants() {
+        assert!(BuildingType::ALL.contains(&BuildingType::Barracks));
+        assert!(BuildingType::ALL.contains(&BuildingType::Farm));
+    }
+
+    // --- building_color / building_hp delegate to building_stats ---
+
+    #[test]
+    fn building_color_matches_stats() {
+        assert_eq!(
+            building_color(BuildingType::Barracks),
+            building_stats(BuildingType::Barracks).color
+        );
+        assert_eq!(
+            building_color(BuildingType::Farm),
+            building_stats(BuildingType::Farm).color
+        );
+    }
+
+    #[test]
+    fn building_hp_matches_stats() {
+        assert_eq!(
+            building_hp(BuildingType::Barracks),
+            building_stats(BuildingType::Barracks).hp
+        );
+        assert_eq!(
+            building_hp(BuildingType::Farm),
+            building_stats(BuildingType::Farm).hp
+        );
     }
 }
 
@@ -312,7 +379,7 @@ mod observer_tests {
                     grid_col: 2,
                     grid_row: 3,
                 },
-                Health::new(BARRACKS_HP),
+                Health::new(building_stats(BuildingType::Barracks).hp),
             ))
             .id();
 
@@ -341,7 +408,7 @@ mod observer_tests {
                     grid_col: 0,
                     grid_row: 0,
                 },
-                Health::new(FARM_HP),
+                Health::new(building_stats(BuildingType::Farm).hp),
             ))
             .id();
 

@@ -15,20 +15,11 @@ use crate::screens::GameState;
 /// Starting gold when entering `InGame`.
 pub const STARTING_GOLD: u32 = 200;
 
-/// Cost to place a Barracks.
-pub const BARRACKS_COST: u32 = 100;
-
-/// Cost to place a Farm.
-pub const FARM_COST: u32 = 50;
-
 /// Gold awarded per enemy kill.
 pub const KILL_REWARD: u32 = 5;
 
 /// Gold generated per Farm per tick.
 pub const FARM_INCOME_PER_TICK: u32 = 3;
-
-/// Farm income tick interval in seconds.
-pub const FARM_INCOME_INTERVAL: f32 = 1.0;
 
 // === Resources ===
 
@@ -48,10 +39,7 @@ impl Default for Gold {
 /// Get the gold cost for a building type.
 #[must_use]
 pub const fn building_cost(building_type: BuildingType) -> u32 {
-    match building_type {
-        BuildingType::Barracks => BARRACKS_COST,
-        BuildingType::Farm => FARM_COST,
-    }
+    crate::gameplay::building::building_stats(building_type).cost
 }
 
 // === Systems ===
@@ -86,24 +74,23 @@ mod tests {
     }
 
     #[test]
-    fn building_cost_barracks() {
-        assert_eq!(building_cost(BuildingType::Barracks), BARRACKS_COST);
-    }
-
-    #[test]
-    fn building_cost_farm() {
-        assert_eq!(building_cost(BuildingType::Farm), FARM_COST);
+    fn building_cost_matches_stats() {
+        assert_eq!(
+            building_cost(BuildingType::Barracks),
+            crate::gameplay::building::building_stats(BuildingType::Barracks).cost
+        );
+        assert_eq!(
+            building_cost(BuildingType::Farm),
+            crate::gameplay::building::building_stats(BuildingType::Farm).cost
+        );
     }
 
     #[allow(clippy::assertions_on_constants)]
     #[test]
     fn constants_are_valid() {
         assert!(STARTING_GOLD > 0);
-        assert!(BARRACKS_COST > 0);
-        assert!(FARM_COST > 0);
         assert!(KILL_REWARD > 0);
         assert!(FARM_INCOME_PER_TICK > 0);
-        assert!(FARM_INCOME_INTERVAL > 0.0);
     }
 }
 

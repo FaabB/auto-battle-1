@@ -4,8 +4,8 @@ use bevy::prelude::*;
 
 use super::{
     BUILDING_HEALTH_BAR_HEIGHT, BUILDING_HEALTH_BAR_WIDTH, BUILDING_HEALTH_BAR_Y_OFFSET,
-    BUILDING_SPRITE_SIZE, Building, BuildingType, CELL_SIZE, GRID_CURSOR_COLOR, GridCursor,
-    HoveredCell, Occupied, ProductionTimer, building_color, building_hp, world_to_build_grid,
+    BUILDING_SPRITE_SIZE, Building, CELL_SIZE, GRID_CURSOR_COLOR, GridCursor, HoveredCell,
+    Occupied, ProductionTimer, building_color, building_hp, building_stats, world_to_build_grid,
 };
 use crate::gameplay::battlefield::{
     BUILD_ZONE_START_COL, GridIndex, col_to_world_x, row_to_world_y,
@@ -13,7 +13,6 @@ use crate::gameplay::battlefield::{
 use crate::gameplay::combat::HealthBarConfig;
 use crate::gameplay::{Health, Target, Team};
 
-use super::BARRACKS_PRODUCTION_INTERVAL;
 use crate::screens::GameState;
 use crate::{Z_BUILDING, Z_GRID_CURSOR};
 
@@ -99,13 +98,13 @@ pub(super) fn handle_building_placement(
     };
 
     // Check gold
-    let cost = crate::gameplay::economy::building_cost(building_type);
-    if gold.0 < cost {
+    let stats = building_stats(building_type);
+    if gold.0 < stats.cost {
         return;
     }
 
     // Deduct gold and remove card from shop
-    gold.0 -= cost;
+    gold.0 -= stats.cost;
     shop.remove_selected();
 
     // Mark slot as occupied
@@ -138,22 +137,17 @@ pub(super) fn handle_building_placement(
         DespawnOnExit(GameState::InGame),
     ));
 
-    // Each building type gets its own timer component (idiomatic ECS composition)
-    match building_type {
-        BuildingType::Barracks => {
-            entity_commands.insert(ProductionTimer(Timer::from_seconds(
-                BARRACKS_PRODUCTION_INTERVAL,
-                TimerMode::Repeating,
-            )));
-        }
-        BuildingType::Farm => {
-            entity_commands.insert(crate::gameplay::economy::income::IncomeTimer(
-                Timer::from_seconds(
-                    crate::gameplay::economy::FARM_INCOME_INTERVAL,
-                    TimerMode::Repeating,
-                ),
-            ));
-        }
+    // Data-driven timer insertion — no per-type match needed
+    if let Some(interval) = stats.production_interval {
+        entity_commands.insert(ProductionTimer(Timer::from_seconds(
+            interval,
+            TimerMode::Repeating,
+        )));
+    }
+    if let Some(interval) = stats.income_interval {
+        entity_commands.insert(crate::gameplay::economy::income::IncomeTimer(
+            Timer::from_seconds(interval, TimerMode::Repeating),
+        ));
     }
 }
 
@@ -161,6 +155,7 @@ pub(super) fn handle_building_placement(
 mod integration_tests {
     use super::*;
     use crate::gameplay::battlefield::BuildSlot;
+    use crate::gameplay::building::BuildingType;
     use crate::menus::Menu;
     use crate::testing::assert_entity_count;
     use pretty_assertions::assert_eq;
@@ -367,7 +362,8 @@ mod integration_tests {
         let gold = app.world().resource::<crate::gameplay::economy::Gold>();
         assert_eq!(
             gold.0,
-            crate::gameplay::economy::STARTING_GOLD - crate::gameplay::economy::BARRACKS_COST
+            crate::gameplay::economy::STARTING_GOLD
+                - crate::gameplay::building::building_stats(BuildingType::Barracks).cost
         );
         assert_entity_count::<With<Building>>(&mut app, 1);
     }
@@ -399,7 +395,7 @@ mod integration_tests {
         // Set gold to just below Barracks cost
         app.world_mut()
             .resource_mut::<crate::gameplay::economy::Gold>()
-            .0 = crate::gameplay::economy::BARRACKS_COST - 1;
+            .0 = crate::gameplay::building::building_stats(BuildingType::Barracks).cost - 1;
 
         app.world_mut().resource_mut::<HoveredCell>().0 = Some((2, 3));
         app.world_mut()
@@ -408,7 +404,10 @@ mod integration_tests {
         app.update();
 
         let gold = app.world().resource::<crate::gameplay::economy::Gold>();
-        assert_eq!(gold.0, crate::gameplay::economy::BARRACKS_COST - 1);
+        assert_eq!(
+            gold.0,
+            crate::gameplay::building::building_stats(BuildingType::Barracks).cost - 1
+        );
         assert_entity_count::<With<Building>>(&mut app, 0);
     }
 
@@ -417,9 +416,10 @@ mod integration_tests {
     #[test]
     fn placed_building_has_health() {
         use crate::gameplay::Health;
-        use crate::gameplay::building::BARRACKS_HP;
 
         let mut app = create_placement_test_app();
+        let expected_hp =
+            crate::gameplay::building::building_stats(BuildingType::Barracks).hp;
 
         app.world_mut().resource_mut::<HoveredCell>().0 = Some((2, 3));
         app.world_mut()
@@ -429,8 +429,8 @@ mod integration_tests {
 
         let mut query = app.world_mut().query_filtered::<&Health, With<Building>>();
         let health = query.single(app.world()).unwrap();
-        assert_eq!(health.current, BARRACKS_HP);
-        assert_eq!(health.max, BARRACKS_HP);
+        assert_eq!(health.current, expected_hp);
+        assert_eq!(health.max, expected_hp);
     }
 
     #[test]

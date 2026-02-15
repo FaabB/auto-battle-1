@@ -6,19 +6,12 @@ use rand::Rng;
 use crate::gameplay::battlefield::{
     BATTLEFIELD_ROWS, ENEMY_FORT_START_COL, col_to_world_x, row_to_world_y,
 };
-use crate::gameplay::combat::{
-    AttackTimer, HealthBarConfig, UNIT_HEALTH_BAR_HEIGHT, UNIT_HEALTH_BAR_WIDTH,
-    UNIT_HEALTH_BAR_Y_OFFSET,
-};
 use crate::screens::GameState;
 use crate::{GameSet, Z_UNIT, gameplay_running};
 
-use crate::gameplay::{Health, Target, Team};
+use crate::gameplay::Team;
 
-use super::{
-    CombatStats, CurrentTarget, Movement, SOLDIER_ATTACK_RANGE, SOLDIER_ATTACK_SPEED,
-    SOLDIER_DAMAGE, SOLDIER_HEALTH, SOLDIER_MOVE_SPEED, Unit, UnitAssets,
-};
+use super::UnitAssets;
 
 // === Constants ===
 
@@ -100,35 +93,13 @@ fn tick_enemy_spawner(
     let spawn_x = col_to_world_x(ENEMY_SPAWN_COL);
     let spawn_y = row_to_world_y(row);
 
-    commands.spawn((
-        Name::new("Enemy Soldier"),
-        Unit,
+    super::spawn_unit(
+        &mut commands,
+        super::UnitType::Soldier,
         Team::Enemy,
-        Target,
-        CurrentTarget(None),
-        Health::new(SOLDIER_HEALTH),
-        HealthBarConfig {
-            width: UNIT_HEALTH_BAR_WIDTH,
-            height: UNIT_HEALTH_BAR_HEIGHT,
-            y_offset: UNIT_HEALTH_BAR_Y_OFFSET,
-        },
-        CombatStats {
-            damage: SOLDIER_DAMAGE,
-            attack_speed: SOLDIER_ATTACK_SPEED,
-            range: SOLDIER_ATTACK_RANGE,
-        },
-        Movement {
-            speed: SOLDIER_MOVE_SPEED,
-        },
-        AttackTimer(Timer::from_seconds(
-            1.0 / SOLDIER_ATTACK_SPEED,
-            TimerMode::Repeating,
-        )),
-        Mesh2d(unit_assets.mesh.clone()),
-        MeshMaterial2d(unit_assets.enemy_material.clone()),
-        Transform::from_xyz(spawn_x, spawn_y, Z_UNIT),
-        DespawnOnExit(GameState::InGame),
-    ));
+        Vec3::new(spawn_x, spawn_y, Z_UNIT),
+        &unit_assets,
+    );
 
     // Set next spawn interval based on elapsed time
     let next_interval = current_interval(spawn_timer.elapsed_secs);
@@ -207,6 +178,8 @@ mod tests {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
+    use super::super::{CombatStats, CurrentTarget, Movement, Unit, UnitType};
+    use crate::gameplay::{Health, Target, Team};
     use crate::testing::{assert_entity_count, transition_to_ingame};
     use std::time::Duration;
 
@@ -276,6 +249,7 @@ mod integration_tests {
         nearly_expire_timer(&mut app);
         app.update();
 
+        assert_entity_count::<(With<Unit>, With<UnitType>)>(&mut app, 1);
         assert_entity_count::<(With<Unit>, With<Target>)>(&mut app, 1);
         assert_entity_count::<(With<Unit>, With<CurrentTarget>)>(&mut app, 1);
         assert_entity_count::<(With<Unit>, With<Health>)>(&mut app, 1);

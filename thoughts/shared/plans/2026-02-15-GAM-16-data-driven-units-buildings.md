@@ -316,10 +316,10 @@ Also update `attack_respects_cooldown` test (line 342) which also uses `SOLDIER_
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo clippy -- -D warnings` passes with no new warnings
-- [ ] `cargo test` — all existing tests pass (updated to use new API)
-- [ ] New unit tests for `UnitType`, `UnitStats`, `unit_stats()` pass
-- [ ] No `SOLDIER_*` constants remain as top-level `pub const` in `units/mod.rs`
+- [x] `cargo clippy -- -D warnings` passes with no new warnings
+- [x] `cargo test` — all existing tests pass (updated to use new API)
+- [x] New unit tests for `UnitType`, `UnitStats`, `unit_stats()` pass
+- [x] No `SOLDIER_*` constants remain as top-level `pub const` in `units/mod.rs`
 
 #### Manual Verification:
 - [ ] Run the game — units spawn from barracks and enemy fortress with identical behavior
@@ -654,12 +654,12 @@ fn generate_cards_only_uses_pool() {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo clippy -- -D warnings` passes
-- [ ] `cargo test` — all tests pass
-- [ ] No per-type constants remain (`BARRACKS_HP`, `FARM_HP`, `BARRACKS_COST`, `FARM_COST`, `BARRACKS_PRODUCTION_INTERVAL`, `FARM_INCOME_INTERVAL`, `BARRACKS_COLOR`, `FARM_COLOR`)
-- [ ] No `BUILDING_POOL` constant in `shop.rs`
-- [ ] No per-type match arms in `handle_building_placement` for timer insertion
-- [ ] `building_stats()` is the single source of truth for building properties
+- [x] `cargo clippy -- -D warnings` passes
+- [x] `cargo test` — all tests pass (162 passing)
+- [x] No per-type constants remain (`BARRACKS_HP`, `FARM_HP`, `BARRACKS_COST`, `FARM_COST`, `BARRACKS_PRODUCTION_INTERVAL`, `FARM_INCOME_INTERVAL`, `BARRACKS_COLOR`, `FARM_COLOR`)
+- [x] No `BUILDING_POOL` constant in `shop.rs`
+- [x] No per-type match arms in `handle_building_placement` for timer insertion
+- [x] `building_stats()` is the single source of truth for building properties
 
 #### Manual Verification:
 - [ ] Run the game — buildings place correctly with correct colors

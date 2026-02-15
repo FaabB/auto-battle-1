@@ -3,18 +3,10 @@
 use bevy::prelude::*;
 
 use super::ProductionTimer;
-use crate::Z_UNIT;
 use crate::gameplay::battlefield::CELL_SIZE;
-use crate::gameplay::combat::{
-    AttackTimer, HealthBarConfig, UNIT_HEALTH_BAR_HEIGHT, UNIT_HEALTH_BAR_WIDTH,
-    UNIT_HEALTH_BAR_Y_OFFSET,
-};
-use crate::gameplay::units::{
-    CombatStats, CurrentTarget, Movement, SOLDIER_ATTACK_RANGE, SOLDIER_ATTACK_SPEED,
-    SOLDIER_DAMAGE, SOLDIER_HEALTH, SOLDIER_MOVE_SPEED, Unit, UnitAssets,
-};
-use crate::gameplay::{Health, Target, Team};
-use crate::screens::GameState;
+use crate::gameplay::building::building_stats;
+use crate::gameplay::units::{UnitAssets, spawn_unit};
+use crate::Z_UNIT;
 
 /// Ticks production timers on all buildings and spawns units when timers fire.
 pub(super) fn tick_production_and_spawn_units(
@@ -23,43 +15,23 @@ pub(super) fn tick_production_and_spawn_units(
     unit_assets: Res<UnitAssets>,
     mut commands: Commands,
 ) {
-    for (_building, mut timer, transform) in &mut buildings {
+    for (building, mut timer, transform) in &mut buildings {
         timer.0.tick(time.delta());
 
         if timer.0.just_finished() {
-            // Spawn unit one cell to the right of the building (toward combat zone)
-            let spawn_x = transform.translation.x + CELL_SIZE;
-            let spawn_y = transform.translation.y;
+            let stats = building_stats(building.building_type);
+            if let Some(unit_type) = stats.produced_unit {
+                let spawn_x = transform.translation.x + CELL_SIZE;
+                let spawn_y = transform.translation.y;
 
-            commands.spawn((
-                Name::new("Player Soldier"),
-                Unit,
-                Team::Player,
-                Target,
-                CurrentTarget(None),
-                Health::new(SOLDIER_HEALTH),
-                HealthBarConfig {
-                    width: UNIT_HEALTH_BAR_WIDTH,
-                    height: UNIT_HEALTH_BAR_HEIGHT,
-                    y_offset: UNIT_HEALTH_BAR_Y_OFFSET,
-                },
-                CombatStats {
-                    damage: SOLDIER_DAMAGE,
-                    attack_speed: SOLDIER_ATTACK_SPEED,
-                    range: SOLDIER_ATTACK_RANGE,
-                },
-                Movement {
-                    speed: SOLDIER_MOVE_SPEED,
-                },
-                AttackTimer(Timer::from_seconds(
-                    1.0 / SOLDIER_ATTACK_SPEED,
-                    TimerMode::Repeating,
-                )),
-                Mesh2d(unit_assets.mesh.clone()),
-                MeshMaterial2d(unit_assets.player_material.clone()),
-                Transform::from_xyz(spawn_x, spawn_y, Z_UNIT),
-                DespawnOnExit(GameState::InGame),
-            ));
+                spawn_unit(
+                    &mut commands,
+                    unit_type,
+                    crate::gameplay::Team::Player,
+                    Vec3::new(spawn_x, spawn_y, Z_UNIT),
+                    &unit_assets,
+                );
+            }
         }
     }
 }
@@ -68,7 +40,10 @@ pub(super) fn tick_production_and_spawn_units(
 mod integration_tests {
     use super::*;
     use crate::gameplay::building::{Building, BuildingType, HoveredCell, ProductionTimer};
+    use crate::gameplay::units::{CombatStats, Movement, Unit};
+    use crate::gameplay::{Health, Team};
     use crate::menus::Menu;
+    use crate::screens::GameState;
     use crate::testing::{assert_entity_count, transition_to_ingame};
     use pretty_assertions::assert_eq;
     use std::time::Duration;
