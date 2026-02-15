@@ -7,6 +7,7 @@ pub mod spawn;
 use bevy::prelude::*;
 
 use crate::screens::GameState;
+use crate::{GameSet, gameplay_running};
 
 // === Constants ===
 
@@ -30,38 +31,12 @@ const ENEMY_UNIT_COLOR: Color = Color::srgb(0.8, 0.2, 0.2);
 /// 2 cells = 128 pixels.
 pub const BACKTRACK_DISTANCE: f32 = 2.0 * crate::gameplay::battlefield::CELL_SIZE;
 
-/// Barracks production interval in seconds.
-pub const BARRACKS_PRODUCTION_INTERVAL: f32 = 3.0;
-
 // === Components ===
-
-/// Which side an entity belongs to. Standalone component used on units and fortresses.
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
-#[reflect(Component)]
-pub enum Team {
-    Player,
-    Enemy,
-}
 
 /// Marker for unit entities.
 #[derive(Component, Debug, Clone, Copy, Reflect)]
 #[reflect(Component)]
 pub struct Unit;
-
-/// Hit points for any damageable entity (units, fortresses).
-#[derive(Component, Debug, Clone, Reflect)]
-#[reflect(Component)]
-pub struct Health {
-    pub current: f32,
-    pub max: f32,
-}
-
-impl Health {
-    #[must_use]
-    pub const fn new(max: f32) -> Self {
-        Self { current: max, max }
-    }
-}
 
 /// Combat parameters.
 #[derive(Component, Debug, Clone, Reflect)]
@@ -78,12 +53,6 @@ pub struct CombatStats {
 pub struct Movement {
     pub speed: f32,
 }
-
-/// Marker: this entity can be targeted by units.
-/// Placed on units, buildings, and fortresses.
-#[derive(Component, Debug, Clone, Copy, Reflect)]
-#[reflect(Component)]
-pub struct Target;
 
 /// Tracks the entity this unit is currently moving toward / attacking.
 /// Updated by the AI system; read by movement and (future) combat systems.
@@ -118,12 +87,9 @@ fn setup_unit_assets(
 // === Plugin ===
 
 pub(super) fn plugin(app: &mut App) {
-    app.register_type::<Team>()
-        .register_type::<Unit>()
-        .register_type::<Health>()
+    app.register_type::<Unit>()
         .register_type::<CombatStats>()
         .register_type::<Movement>()
-        .register_type::<Target>()
         .register_type::<CurrentTarget>();
 
     app.add_systems(OnEnter(GameState::InGame), setup_unit_assets);
@@ -133,15 +99,15 @@ pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
         ai::unit_find_target
-            .in_set(crate::GameSet::Ai)
-            .run_if(in_state(GameState::InGame).and(in_state(crate::menus::Menu::None))),
+            .in_set(GameSet::Ai)
+            .run_if(gameplay_running),
     );
 
     app.add_systems(
         Update,
         movement::unit_movement
-            .in_set(crate::GameSet::Movement)
-            .run_if(in_state(GameState::InGame).and(in_state(crate::menus::Menu::None))),
+            .in_set(GameSet::Movement)
+            .run_if(gameplay_running),
     );
 }
 
@@ -152,13 +118,14 @@ mod tests {
 
     #[test]
     fn health_new_sets_current_to_max() {
-        let health = Health::new(100.0);
+        let health = crate::gameplay::Health::new(100.0);
         assert_eq!(health.current, 100.0);
         assert_eq!(health.max, 100.0);
     }
 
     #[test]
     fn team_variants_are_distinct() {
+        use crate::gameplay::Team;
         assert_ne!(Team::Player, Team::Enemy);
     }
 

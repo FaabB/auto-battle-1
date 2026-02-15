@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use rand::Rng;
 
-use crate::Z_UNIT;
+use crate::{GameSet, Z_UNIT, gameplay_running};
 use crate::gameplay::battlefield::{
     BATTLEFIELD_ROWS, ENEMY_FORT_START_COL, col_to_world_x, row_to_world_y,
 };
@@ -13,9 +13,11 @@ use crate::gameplay::combat::{
 };
 use crate::screens::GameState;
 
+use crate::gameplay::{Health, Target, Team};
+
 use super::{
-    CombatStats, CurrentTarget, Health, Movement, SOLDIER_ATTACK_RANGE, SOLDIER_ATTACK_SPEED,
-    SOLDIER_DAMAGE, SOLDIER_HEALTH, SOLDIER_MOVE_SPEED, Target, Team, Unit, UnitAssets,
+    CombatStats, CurrentTarget, Movement, SOLDIER_ATTACK_RANGE, SOLDIER_ATTACK_SPEED,
+    SOLDIER_DAMAGE, SOLDIER_HEALTH, SOLDIER_MOVE_SPEED, Unit, UnitAssets,
 };
 
 // === Constants ===
@@ -99,6 +101,7 @@ fn tick_enemy_spawner(
     let spawn_y = row_to_world_y(row);
 
     commands.spawn((
+        Name::new("Enemy Soldier"),
         Unit,
         Team::Enemy,
         Target,
@@ -142,8 +145,8 @@ pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
         tick_enemy_spawner
-            .in_set(crate::GameSet::Production)
-            .run_if(in_state(GameState::InGame).and(in_state(crate::menus::Menu::None))),
+            .in_set(GameSet::Production)
+            .run_if(gameplay_running),
     );
 }
 

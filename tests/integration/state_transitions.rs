@@ -1,6 +1,6 @@
 //! Tests for game state transitions.
 
-use auto_battle::screens::GameState;
+use auto_battle::GameState;
 use bevy::input::InputPlugin;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;

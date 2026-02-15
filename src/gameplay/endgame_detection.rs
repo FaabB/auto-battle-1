@@ -2,18 +2,19 @@
 
 use bevy::prelude::*;
 
+use crate::gameplay::Health;
 use crate::gameplay::battlefield::{EnemyFortress, PlayerFortress};
-use crate::gameplay::units::Health;
+use crate::gameplay::combat::DeathCheck;
 use crate::menus::Menu;
-use crate::screens::GameState;
+use crate::{GameSet, gameplay_running};
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
         detect_endgame
-            .in_set(crate::GameSet::Death)
-            .before(crate::gameplay::combat::check_death)
-            .run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
+            .in_set(GameSet::Death)
+            .before(DeathCheck)
+            .run_if(gameplay_running),
     );
 }
 
@@ -43,6 +44,7 @@ fn detect_endgame(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::screens::GameState;
     use bevy::state::app::StatesPlugin;
 
     fn create_detection_test_app() -> App {

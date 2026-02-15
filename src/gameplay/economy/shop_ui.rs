@@ -6,6 +6,7 @@ use super::Gold;
 use super::shop::{HAND_SIZE, Shop};
 use crate::gameplay::building::BuildingType;
 use crate::screens::GameState;
+use crate::{GameSet, gameplay_running};
 
 // === Constants ===
 
@@ -54,6 +55,7 @@ fn spawn_shop_panel(mut commands: Commands) {
     // Root panel — fixed at bottom center
     commands
         .spawn((
+            Name::new("Shop Panel"),
             ShopPanel,
             Node {
                 position_type: PositionType::Absolute,
@@ -73,6 +75,7 @@ fn spawn_shop_panel(mut commands: Commands) {
             for i in 0..HAND_SIZE {
                 parent
                     .spawn((
+                        Name::new(format!("Card Slot {i}")),
                         CardSlot(i),
                         Button,
                         Node {
@@ -89,6 +92,7 @@ fn spawn_shop_panel(mut commands: Commands) {
                     .with_children(|card| {
                         // Building name
                         card.spawn((
+                            Name::new(format!("Card {i} Name")),
                             CardNameText(i),
                             Text::new("—"),
                             TextFont {
@@ -99,6 +103,7 @@ fn spawn_shop_panel(mut commands: Commands) {
                         ));
                         // Cost
                         card.spawn((
+                            Name::new(format!("Card {i} Cost")),
                             CardCostText(i),
                             Text::new(""),
                             TextFont {
@@ -113,6 +118,7 @@ fn spawn_shop_panel(mut commands: Commands) {
             // Reroll button
             parent
                 .spawn((
+                    Name::new("Reroll Button"),
                     RerollButton,
                     Button,
                     Node {
@@ -126,6 +132,7 @@ fn spawn_shop_panel(mut commands: Commands) {
                 ))
                 .with_children(|btn| {
                     btn.spawn((
+                        Name::new("Reroll Text"),
                         RerollCostText,
                         Text::new("Reroll\nFREE"),
                         TextFont {
@@ -256,15 +263,15 @@ pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
         (handle_card_click, handle_reroll_click)
-            .in_set(crate::GameSet::Input)
-            .run_if(in_state(GameState::InGame).and(in_state(crate::menus::Menu::None))),
+            .in_set(GameSet::Input)
+            .run_if(gameplay_running),
     );
 
     app.add_systems(
         Update,
         (update_card_visuals, update_card_text, update_reroll_text)
-            .in_set(crate::GameSet::Ui)
-            .run_if(in_state(GameState::InGame).and(in_state(crate::menus::Menu::None))),
+            .in_set(GameSet::Ui)
+            .run_if(gameplay_running),
     );
 }
 

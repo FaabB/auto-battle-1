@@ -10,7 +10,7 @@ use super::{
     row_to_world_y, zone_center_x,
 };
 use crate::gameplay::combat::HealthBarConfig;
-use crate::gameplay::units::{Health, Target, Team};
+use crate::gameplay::{Health, Target, Team};
 use crate::screens::GameState;
 use crate::{Z_BACKGROUND, Z_GRID, Z_ZONE};
 
@@ -36,6 +36,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
 
     // Background (slightly larger than battlefield for visual framing)
     commands.spawn((
+        Name::new("Battlefield Background"),
         BattlefieldBackground,
         Sprite::from_color(
             BACKGROUND_COLOR,
@@ -51,6 +52,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
 
     // Player fortress (blue)
     commands.spawn((
+        Name::new("Player Fortress"),
         PlayerFortress,
         Team::Player,
         Target,
@@ -71,6 +73,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
 
     // Building zone (dark blue-gray)
     commands.spawn((
+        Name::new("Build Zone"),
         BuildZone,
         Sprite::from_color(
             BUILD_ZONE_COLOR,
@@ -86,6 +89,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
 
     // Combat zone (dark gray)
     commands.spawn((
+        Name::new("Combat Zone"),
         CombatZone,
         Sprite::from_color(
             COMBAT_ZONE_COLOR,
@@ -101,6 +105,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
 
     // Enemy fortress (red)
     commands.spawn((
+        Name::new("Enemy Fortress"),
         EnemyFortress,
         Team::Enemy,
         Target,
@@ -124,6 +129,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
         for col in 0..BUILD_ZONE_COLS {
             let entity = commands
                 .spawn((
+                    Name::new(format!("Build Slot ({col}, {row})")),
                     BuildSlot { row, col },
                     Sprite::from_color(GRID_CELL_COLOR, Vec2::splat(CELL_SIZE - 2.0)),
                     Transform::from_xyz(

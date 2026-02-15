@@ -6,6 +6,6 @@
 use bevy::prelude::*;
 
 #[allow(clippy::missing_const_for_fn)]
-pub(super) fn plugin(_app: &mut App) {
+pub fn plugin(_app: &mut App) {
     // Future dev tools go here.
 }

@@ -5,13 +5,15 @@
 
 use bevy::prelude::*;
 
-use super::GameState;
 use crate::menus::Menu;
+use crate::{GameSet, gameplay_running};
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
-        open_pause_menu.run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
+        open_pause_menu
+            .in_set(GameSet::Input)
+            .run_if(gameplay_running),
     );
 }
 

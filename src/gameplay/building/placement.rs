@@ -9,13 +9,16 @@ use super::{
 use crate::gameplay::battlefield::{
     BUILD_ZONE_START_COL, GridIndex, col_to_world_x, row_to_world_y,
 };
-use crate::gameplay::units::{BARRACKS_PRODUCTION_INTERVAL, Target, Team};
+use crate::gameplay::{Target, Team};
+
+use super::BARRACKS_PRODUCTION_INTERVAL;
 use crate::screens::GameState;
 use crate::{Z_BUILDING, Z_GRID_CURSOR};
 
 /// Spawns the semi-transparent grid cursor entity. Hidden by default.
 pub(super) fn spawn_grid_cursor(mut commands: Commands) {
     commands.spawn((
+        Name::new("Grid Cursor"),
         GridCursor,
         Sprite::from_color(GRID_CURSOR_COLOR, Vec2::splat(CELL_SIZE - 2.0)),
         Transform::from_xyz(0.0, 0.0, Z_GRID_CURSOR),
@@ -63,8 +66,14 @@ pub(super) fn handle_building_placement(
     occupied: Query<(), With<Occupied>>,
     mut gold: ResMut<crate::gameplay::economy::Gold>,
     mut shop: ResMut<crate::gameplay::economy::shop::Shop>,
+    ui_buttons: Query<&Interaction, With<Button>>,
 ) {
     if !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+
+    // Skip if mouse is over any UI button (prevents click-through from shop panel)
+    if ui_buttons.iter().any(|i| *i != Interaction::None) {
         return;
     }
 
@@ -105,6 +114,7 @@ pub(super) fn handle_building_placement(
     let world_y = row_to_world_y(row);
 
     let mut entity_commands = commands.spawn((
+        Name::new(format!("{building_type:?}")),
         Building {
             building_type,
             grid_col: col,
@@ -297,6 +307,22 @@ mod integration_tests {
     fn clicking_with_no_hovered_cell_does_nothing() {
         let mut app = create_placement_test_app();
 
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+        app.update();
+
+        assert_entity_count::<With<Building>>(&mut app, 0);
+    }
+
+    #[test]
+    fn clicking_ui_button_does_not_place_building() {
+        let mut app = create_placement_test_app();
+
+        // Simulate a UI button being pressed (prevents click-through)
+        app.world_mut().spawn((Button, Interaction::Pressed));
+
+        app.world_mut().resource_mut::<HoveredCell>().0 = Some((2, 3));
         app.world_mut()
             .resource_mut::<ButtonInput<MouseButton>>()
             .press(MouseButton::Left);

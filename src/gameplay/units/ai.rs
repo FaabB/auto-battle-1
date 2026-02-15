@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 
-use super::{BACKTRACK_DISTANCE, CurrentTarget, Target, Team, Unit};
+use crate::gameplay::{Target, Team};
+
+use super::{BACKTRACK_DISTANCE, CurrentTarget, Unit};
 
 /// How many frames between full re-evaluations for units that already have a valid target.
 /// Units with no target (or a despawned target) always evaluate immediately.
@@ -18,16 +20,14 @@ pub(super) fn unit_find_target(
     mut units: Query<(Entity, &Team, &GlobalTransform, &mut CurrentTarget), With<Unit>>,
     all_targets: Query<(Entity, &Team, &GlobalTransform), With<Target>>,
 ) {
-    *counter += 1;
-    let should_retarget = *counter >= RETARGET_INTERVAL_FRAMES;
-    if should_retarget {
-        *counter = 0;
-    }
+    *counter = counter.wrapping_add(1);
 
     for (entity, team, transform, mut current_target) in &mut units {
         let has_valid_target = current_target.0.is_some_and(|e| all_targets.get(e).is_ok());
 
-        // Throttle: skip units with valid targets on non-retarget frames
+        // Stagger: each unit retargets on a different frame based on its entity index
+        let should_retarget =
+            (entity.index().index().wrapping_add(*counter)) % RETARGET_INTERVAL_FRAMES == 0;
         if has_valid_target && !should_retarget {
             continue;
         }

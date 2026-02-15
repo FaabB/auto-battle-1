@@ -19,7 +19,7 @@ pub enum GameState {
     InGame,
 }
 
-pub(super) fn plugin(app: &mut App) {
+pub fn plugin(app: &mut App) {
     app.init_state::<GameState>();
     app.add_plugins((loading::plugin, main_menu::plugin, in_game::plugin));
 }

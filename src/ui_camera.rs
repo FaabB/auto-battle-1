@@ -4,7 +4,7 @@
 
 use bevy::prelude::*;
 
-pub(super) fn plugin(app: &mut App) {
+pub fn plugin(app: &mut App) {
     app.register_type::<UiCamera>();
     app.add_systems(Startup, spawn_ui_camera);
 }

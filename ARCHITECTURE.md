@@ -20,12 +20,12 @@ pub(super) fn plugin(app: &mut App) {
             Update,
             do_stuff
                 .in_set(GameSet::Input)
-                .run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
+                .run_if(crate::gameplay_running),
         );
 }
 ```
 
-The top-level compositor in `lib.rs` is the only `pub fn plugin` -- all others are `pub(super) fn plugin`.
+The top-level compositor in `lib.rs` is the only `pub fn plugin` -- all others are `pub(super) fn plugin` (or `pub fn plugin` when inside a `pub(crate)` parent module, per clippy `redundant_pub_crate`).
 
 ### Why function plugins
 
@@ -55,7 +55,7 @@ This matches foxtrot's convention and keeps each plugin function readable and co
 ```
 src/
 ├── main.rs              # App assembly only (DefaultPlugins + auto_battle::plugin)
-├── lib.rs               # Z-layer constants, GameSet, top-level plugin compositor
+├── lib.rs               # Z-layer constants, GameSet, gameplay_running(), top-level compositor
 ├── testing.rs           # Test helpers (#[cfg(test)])
 ├── ui_camera.rs         # Global UI camera that persists across all states
 ├── screens/             # Screen state management
@@ -64,18 +64,37 @@ src/
 │   ├── main_menu.rs     # MainMenu → opens Menu::Main
 │   └── in_game.rs       # InGame → ESC opens Menu::Pause
 ├── menus/               # Menu overlay state and UI
-│   ├── mod.rs           # Menu enum (None, Main, Pause)
+│   ├── mod.rs           # Menu enum (None, Main, Pause, Victory, Defeat)
 │   ├── main_menu.rs     # Main menu UI and input
-│   └── pause.rs         # Pause menu UI and input
-├── gameplay/            # Compositor for all gameplay domain plugins
-│   ├── mod.rs           # Composes sub-plugins
+│   ├── pause.rs         # Pause menu UI and input
+│   └── endgame.rs       # Victory/Defeat overlay UI and input
+├── gameplay/            # Cross-cutting components + compositor for domain plugins
+│   ├── mod.rs           # Team, Health, Target components + composes sub-plugins
+│   ├── endgame.rs       # Victory/defeat detection (fortress health checks)
 │   ├── battlefield/     # Grid layout, zones, camera panning, rendering
 │   │   ├── mod.rs       # Components, constants, GridIndex, plugin
 │   │   ├── camera.rs    # Camera setup and panning
 │   │   └── renderer.rs  # Battlefield sprite spawning
-│   └── building/        # Placement systems, grid cursor, building components
-│       ├── mod.rs       # Components (Building, Occupied, GridCursor), plugin
-│       └── placement.rs # Cursor tracking and placement systems
+│   ├── building/        # Placement systems, grid cursor, building components
+│   │   ├── mod.rs       # Components (Building, Occupied, GridCursor), plugin
+│   │   ├── placement.rs # Cursor tracking and placement systems
+│   │   └── production.rs# Barracks unit spawning on timer
+│   ├── combat/          # Attack, death, health bars
+│   │   ├── mod.rs       # Compositor + re-exports (AttackTimer, DeathCheck, HealthBarConfig)
+│   │   ├── attack.rs    # Projectile spawning and damage
+│   │   ├── death.rs     # DeathCheck SystemSet + despawn dead entities
+│   │   └── health_bar.rs# Health bar spawning and updates
+│   ├── economy/         # Gold, shop, income, UI
+│   │   ├── mod.rs       # Gold resource, building costs, compositor
+│   │   ├── income.rs    # Farm income + kill rewards
+│   │   ├── shop.rs      # Shop logic (cards, reroll, selection)
+│   │   ├── shop_ui.rs   # Shop panel UI (card buttons, reroll button)
+│   │   └── ui.rs        # Gold HUD display
+│   └── units/           # Unit components, AI, movement, spawning
+│       ├── mod.rs       # Unit, CombatStats, Movement, CurrentTarget + plugin
+│       ├── ai.rs        # Target finding and retargeting
+│       ├── movement.rs  # Unit movement toward targets
+│       └── spawn.rs     # Enemy spawning with ramping difficulty
 ├── theme/               # Shared color palette and UI widget constructors
 │   ├── mod.rs           # Plugin (empty for now, ready for interaction.rs)
 │   ├── palette.rs       # Color constants
@@ -83,8 +102,6 @@ src/
 └── dev_tools/           # Debug-only tools (feature-gated on `dev`)
     └── mod.rs           # Stub, ready for debug overlays and inspector
 ```
-
-Future domain plugins go under `gameplay/`: `units/`, `combat/`, `economy/`, `waves/`.
 
 ### When to create a subdirectory
 
@@ -122,19 +139,19 @@ This matches both foxtrot and bevy_new_2d, where `main.rs` only assembles the ap
 
 | Scope | Visibility | Example |
 |-------|-----------|---------|
-| Plugin functions | `pub(super)` | `pub(super) fn plugin(app: &mut App)` |
+| Plugin functions | `pub(super)` or `pub` | `pub(super) fn plugin(app: &mut App)` |
 | Components, resources, constants used cross-module | `pub` | `pub struct Health { ... }` |
 | Systems (called only by their own plugin) | private (no `pub`) | `fn setup_camera(...)` |
 | Systems called by parent `mod.rs` | `pub(super)` | `pub(super) fn camera_pan(...)` |
 | Component fields accessed cross-module | `pub` | `pub current: f32` |
 | Top-level compositor | `pub` | `pub fn plugin(app: &mut App)` in `lib.rs` |
-| Module declarations in `lib.rs` | `pub` | `pub mod gameplay;` |
-| Sub-module declarations in compositors | `pub(crate)` | `pub(crate) mod battlefield;` |
+| Module declarations in `lib.rs` | `pub(crate)` | `pub(crate) mod gameplay;` |
+| Sub-module declarations in compositors | `pub` | `pub mod battlefield;` (inside `pub(crate)` parent) |
 | Private sub-modules | `mod` | `mod camera;` in `battlefield/mod.rs` |
 
-**Key rule:** Items inside a `pub(crate)` module use `pub` (not `pub(crate)`) since the module boundary already constrains visibility. Clippy's `redundant_pub_crate` lint enforces this.
+**Key rule:** Items inside a `pub(crate)` module use `pub` (not `pub(crate)`) since the module boundary already constrains visibility. Clippy's `redundant_pub_crate` lint enforces this. This means `pub(super) fn plugin` becomes `pub fn plugin` when the parent module is `pub(crate)`.
 
-This matches foxtrot exactly. In foxtrot, `pub(crate)` is used on module declarations, and items within those modules use `pub`. The module boundary is the real visibility gate.
+Re-exports for integration tests: types that external `tests/` crate needs (e.g., `GameState`) are re-exported from `lib.rs` via `pub use screens::GameState;`.
 
 ---
 
@@ -165,8 +182,10 @@ use crate::menus::Menu;
 Gameplay systems that should only run when the game is active (not paused, not in a menu):
 
 ```rust
-.run_if(in_state(GameState::InGame).and(in_state(Menu::None)))
+.run_if(crate::gameplay_running)
 ```
+
+This is a shared helper in `lib.rs` that checks `in_state(GameState::InGame).and(in_state(Menu::None))`.
 
 Menu-specific systems:
 
@@ -202,7 +221,7 @@ Components live with their systems in domain plugins, never in a shared `compone
 - `PlayerFortress`, `BuildSlot`, `GridIndex` -- `src/gameplay/battlefield/mod.rs`
 - `UiCamera` -- `src/ui_camera.rs`
 
-Cross-cutting components (e.g., `Health` used by units and fortresses) should live in the domain that defines the concept, with other modules importing via `use crate::gameplay::combat::Health;`.
+Cross-cutting components (e.g., `Health` used by units and fortresses) should live in the domain that defines the concept, with other modules importing via `use crate::gameplay::Health;`.
 
 ### When something is shared
 
@@ -310,7 +329,7 @@ app.add_systems(
     Update,
     camera_pan
         .in_set(GameSet::Input)
-        .run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
+        .run_if(crate::gameplay_running),
 );
 ```
 

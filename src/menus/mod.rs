@@ -27,7 +27,7 @@ pub enum Menu {
     Defeat,
 }
 
-pub(super) fn plugin(app: &mut App) {
+pub fn plugin(app: &mut App) {
     app.init_state::<Menu>();
     app.add_plugins((main_menu::plugin, pause::plugin, endgame::plugin));
 }

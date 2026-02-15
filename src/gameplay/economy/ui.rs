@@ -4,6 +4,7 @@ use bevy::prelude::*;
 
 use super::Gold;
 use crate::screens::GameState;
+use crate::{GameSet, gameplay_running};
 
 /// Marker for the gold display text entity.
 #[derive(Component, Debug, Clone, Copy, Reflect)]
@@ -12,6 +13,7 @@ struct GoldDisplay;
 
 fn spawn_gold_hud(mut commands: Commands) {
     commands.spawn((
+        Name::new("Gold Display"),
         Text::new(format!("Gold: {}", super::STARTING_GOLD)),
         TextFont {
             font_size: 28.0,
@@ -42,7 +44,7 @@ pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
         update_gold_display
-            .in_set(crate::GameSet::Ui)
-            .run_if(in_state(GameState::InGame).and(in_state(crate::menus::Menu::None))),
+            .in_set(GameSet::Ui)
+            .run_if(gameplay_running),
     );
 }

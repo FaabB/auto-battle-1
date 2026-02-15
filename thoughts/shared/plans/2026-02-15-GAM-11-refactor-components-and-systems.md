@@ -168,12 +168,12 @@ Test files within these modules also need import updates where they reference `T
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` passes — all imports resolve
-- [ ] `cargo test` passes — all existing tests pass with updated imports
-- [ ] `cargo clippy` passes — no new warnings
+- [x] `cargo build` passes — all imports resolve
+- [x] `cargo test` passes — all existing tests pass with updated imports
+- [x] `cargo clippy` passes — no new warnings
 
 #### Manual Verification:
-- [ ] `cargo run` launches and game plays identically
+- [x] `cargo run` launches and game plays identically
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause for manual confirmation before proceeding.
 
@@ -343,15 +343,15 @@ pub(super) fn plugin(app: &mut App) {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` passes
-- [ ] `cargo test` passes — all combat tests pass in their new locations
-- [ ] `cargo clippy` passes
-- [ ] `check_death` is no longer `pub` — verify no external references
+- [x] `cargo build` passes
+- [x] `cargo test` passes — all combat tests pass in their new locations
+- [x] `cargo clippy` passes
+- [x] `check_death` is no longer `pub` — verify no external references
 
 #### Manual Verification:
-- [ ] Game runs identically — combat, death, health bars all work
-- [ ] Endgame detection still triggers correctly (ordering preserved)
-- [ ] Kill gold still awarded (ordering preserved)
+- [x] Game runs identically — combat, death, health bars all work
+- [x] Endgame detection still triggers correctly (ordering preserved)
+- [x] Kill gold still awarded (ordering preserved)
 
 **Implementation Note**: Pause for manual verification before proceeding.
 
@@ -516,9 +516,9 @@ This replaces the repeated `in_state(GameState::InGame).and(in_state(Menu::None)
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` passes
-- [ ] `cargo test` passes
-- [ ] `cargo clippy` passes — no `redundant_pub_crate` warnings from visibility changes
+- [x] `cargo build` passes
+- [x] `cargo test` passes (152 unit + 2 integration)
+- [x] `cargo clippy` passes — no `redundant_pub_crate` warnings from visibility changes
 
 #### Manual Verification:
 - [ ] Game pauses correctly when ESC is pressed (open_pause_menu still works)
@@ -603,9 +603,9 @@ Add `Name::new(...)` to all spawned entities for Bevy inspector support.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` passes
-- [ ] `cargo test` passes
-- [ ] `cargo clippy` passes
+- [x] `cargo build` passes
+- [x] `cargo test` passes (152 unit + 2 integration)
+- [x] `cargo clippy` passes
 
 #### Manual Verification:
 - [ ] Run with `bevy-inspector-egui` (if available) — all entities show meaningful names
@@ -722,14 +722,14 @@ fn clicking_ui_button_does_not_place_building() {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` passes
-- [ ] `cargo test` passes — existing AI tests pass, new click-through test passes
-- [ ] `cargo clippy` passes
+- [x] `cargo build` passes
+- [x] `cargo test` passes — existing AI tests pass, new click-through test passes
+- [x] `cargo clippy` passes
 
 #### Manual Verification:
-- [ ] Units still find targets and switch to closer enemies
-- [ ] Clicking shop cards does NOT place buildings on the grid behind them
-- [ ] Clicking empty grid cells still places buildings normally
+- [x] Units still find targets and switch to closer enemies
+- [x] Clicking shop cards does NOT place buildings on the grid behind them
+- [x] Clicking empty grid cells still places buildings normally
 
 **Implementation Note**: Pause for manual verification before proceeding.
 
@@ -803,13 +803,13 @@ After Phase 3 replaces `run_if(in_state(...))` with `gameplay_running`, many inl
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` passes
-- [ ] `cargo test` passes
-- [ ] `cargo clippy` passes — no dead_code warnings on Z constants
+- [x] `cargo build` passes
+- [x] `cargo test` passes
+- [x] `cargo clippy` passes — no dead_code warnings on Z constants
 
 #### Manual Verification:
-- [ ] Game runs identically
-- [ ] No visual or behavioral changes
+- [x] Game runs identically
+- [x] No visual or behavioral changes
 
 ---
 

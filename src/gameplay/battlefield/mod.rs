@@ -7,8 +7,8 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-use crate::menus::Menu;
 use crate::screens::GameState;
+use crate::{GameSet, gameplay_running};
 
 // === Grid Constants ===
 
@@ -104,7 +104,7 @@ pub struct CombatZone;
 pub struct BattlefieldBackground;
 
 /// Marks a grid cell in the build zone.
-#[derive(Component, Debug, Clone, Reflect)]
+#[derive(Component, Debug, Clone, Copy, Reflect)]
 #[reflect(Component)]
 pub struct BuildSlot {
     pub row: u16,
@@ -189,8 +189,8 @@ pub(super) fn plugin(app: &mut App) {
     .add_systems(
         Update,
         camera::camera_pan
-            .in_set(crate::GameSet::Input)
-            .run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
+            .in_set(GameSet::Input)
+            .run_if(gameplay_running),
     );
 }
 
@@ -270,7 +270,7 @@ mod tests {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
-    use crate::gameplay::units::Health;
+    use crate::gameplay::Health;
     use crate::testing::assert_entity_count;
     use pretty_assertions::assert_eq;
 

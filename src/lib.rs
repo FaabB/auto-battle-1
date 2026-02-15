@@ -1,14 +1,17 @@
 //! Auto-battle game library.
 
 #[cfg(feature = "dev")]
-pub mod dev_tools;
-pub mod gameplay;
-pub mod menus;
-pub mod screens;
+pub(crate) mod dev_tools;
+pub(crate) mod gameplay;
+pub(crate) mod menus;
+pub(crate) mod screens;
 #[cfg(test)]
-pub mod testing;
-pub mod theme;
-pub mod ui_camera;
+pub(crate) mod testing;
+pub(crate) mod theme;
+pub(crate) mod ui_camera;
+
+// Re-export types needed by integration tests in `tests/`.
+pub use screens::GameState;
 
 use bevy::prelude::*;
 
@@ -27,9 +30,6 @@ pub(crate) const Z_GRID_CURSOR: f32 = 2.0;
 pub(crate) const Z_BUILDING: f32 = 3.0;
 /// Units (Ticket 3).
 pub(crate) const Z_UNIT: f32 = 4.0;
-/// Health bars (future: Ticket 5).
-#[allow(dead_code)]
-pub(crate) const Z_HEALTH_BAR: f32 = 5.0;
 
 // === Global System Ordering ===
 // Domain plugins register their Update systems in the appropriate set.
@@ -53,6 +53,15 @@ pub(crate) enum GameSet {
     Death,
     /// UI: health bars, gold display, wave counter.
     Ui,
+}
+
+/// Run condition: true when gameplay is active (`InGame` state, no menu open).
+/// Use with `.run_if(gameplay_running)` on gameplay systems.
+pub(crate) fn gameplay_running(
+    game_state: Res<State<screens::GameState>>,
+    menu: Res<State<menus::Menu>>,
+) -> bool {
+    game_state.get() == &screens::GameState::InGame && menu.get() == &menus::Menu::None
 }
 
 /// Composes all game plugins. Call from `main.rs`.
@@ -124,6 +133,5 @@ mod tests {
         assert!(Z_GRID < Z_GRID_CURSOR);
         assert!(Z_GRID_CURSOR < Z_BUILDING);
         assert!(Z_BUILDING < Z_UNIT);
-        assert!(Z_UNIT < Z_HEALTH_BAR);
     }
 }

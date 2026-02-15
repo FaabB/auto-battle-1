@@ -1,21 +1,66 @@
-//! Gameplay domain plugins: battlefield, buildings, units, combat, economy, and (future) waves.
+//! Gameplay domain plugins and cross-cutting components.
+//!
+//! # Entity Archetypes
+//!
+//! **Units**: `Unit`, `Team`, `Target`, `CurrentTarget`, `Health`, `CombatStats`, `Movement`,
+//!           `AttackTimer`, `HealthBarConfig`, `Mesh2d`, `MeshMaterial2d`
+//!
+//! **Buildings**: `Building`, `Team`, `Target`, `ProductionTimer` or `IncomeTimer`
+//!           (`Health` added in GAM-21)
+//!
+//! **Fortresses**: `PlayerFortress`/`EnemyFortress`, `Team`, `Target`, `Health`, `HealthBarConfig`
 
-pub(crate) mod battlefield;
-pub(crate) mod building;
-pub(crate) mod combat;
-pub(crate) mod economy;
-pub(crate) mod endgame;
-pub(crate) mod units;
+pub mod battlefield;
+pub mod building;
+pub mod combat;
+pub mod economy;
+pub mod endgame_detection;
+pub mod units;
 
 use bevy::prelude::*;
 
-pub(super) fn plugin(app: &mut App) {
+// === Cross-Cutting Components ===
+
+/// Which side an entity belongs to. Used on units, buildings, and fortresses.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash, Reflect)]
+#[reflect(Component)]
+pub enum Team {
+    Player,
+    Enemy,
+}
+
+/// Hit points for any damageable entity (units, fortresses, future: buildings).
+#[derive(Component, Debug, Clone, Reflect)]
+#[reflect(Component)]
+pub struct Health {
+    pub current: f32,
+    pub max: f32,
+}
+
+impl Health {
+    #[must_use]
+    pub const fn new(max: f32) -> Self {
+        Self { current: max, max }
+    }
+}
+
+/// Marker: this entity can be targeted by units.
+/// Placed on units, buildings, and fortresses.
+#[derive(Component, Debug, Clone, Copy, Reflect)]
+#[reflect(Component)]
+pub struct Target;
+
+pub fn plugin(app: &mut App) {
+    app.register_type::<Team>()
+        .register_type::<Health>()
+        .register_type::<Target>();
+
     app.add_plugins((
         battlefield::plugin,
         building::plugin,
         combat::plugin,
         economy::plugin,
-        endgame::plugin,
+        endgame_detection::plugin,
         units::plugin,
     ));
 }

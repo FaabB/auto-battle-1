@@ -6,10 +6,13 @@ mod production;
 use bevy::prelude::*;
 
 use crate::gameplay::battlefield::{BATTLEFIELD_HEIGHT, BattlefieldSetup, CELL_SIZE};
-use crate::menus::Menu;
 use crate::screens::GameState;
+use crate::{GameSet, gameplay_running};
 
 // === Constants ===
+
+/// Barracks production interval in seconds.
+pub const BARRACKS_PRODUCTION_INTERVAL: f32 = 3.0;
 
 /// Color for the grid cursor hover highlight.
 const GRID_CURSOR_COLOR: Color = Color::srgba(1.0, 1.0, 1.0, 0.2);
@@ -120,14 +123,14 @@ pub(super) fn plugin(app: &mut App) {
             placement::handle_building_placement,
         )
             .chain_ignore_deferred()
-            .in_set(crate::GameSet::Input)
-            .run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
+            .in_set(GameSet::Input)
+            .run_if(gameplay_running),
     )
     .add_systems(
         Update,
         production::tick_production_and_spawn_units
-            .in_set(crate::GameSet::Production)
-            .run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
+            .in_set(GameSet::Production)
+            .run_if(gameplay_running),
     );
 }
 

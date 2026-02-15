@@ -10,9 +10,10 @@ use crate::gameplay::combat::{
     UNIT_HEALTH_BAR_Y_OFFSET,
 };
 use crate::gameplay::units::{
-    CombatStats, CurrentTarget, Health, Movement, SOLDIER_ATTACK_RANGE, SOLDIER_ATTACK_SPEED,
-    SOLDIER_DAMAGE, SOLDIER_HEALTH, SOLDIER_MOVE_SPEED, Target, Team, Unit, UnitAssets,
+    CombatStats, CurrentTarget, Movement, SOLDIER_ATTACK_RANGE, SOLDIER_ATTACK_SPEED,
+    SOLDIER_DAMAGE, SOLDIER_HEALTH, SOLDIER_MOVE_SPEED, Unit, UnitAssets,
 };
+use crate::gameplay::{Health, Target, Team};
 use crate::screens::GameState;
 
 /// Ticks production timers on all buildings and spawns units when timers fire.
@@ -31,6 +32,7 @@ pub(super) fn tick_production_and_spawn_units(
             let spawn_y = transform.translation.y;
 
             commands.spawn((
+                Name::new("Player Soldier"),
                 Unit,
                 Team::Player,
                 Target,

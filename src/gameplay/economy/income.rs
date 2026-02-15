@@ -3,8 +3,9 @@
 use bevy::prelude::*;
 
 use super::Gold;
-use crate::gameplay::units::{Health, Team};
-use crate::screens::GameState;
+use crate::gameplay::combat::DeathCheck;
+use crate::gameplay::{Health, Team};
+use crate::{GameSet, gameplay_running};
 
 // === Components ===
 
@@ -44,16 +45,16 @@ pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         Update,
         tick_farm_income
-            .in_set(crate::GameSet::Production)
-            .run_if(in_state(GameState::InGame).and(in_state(crate::menus::Menu::None))),
+            .in_set(GameSet::Production)
+            .run_if(gameplay_running),
     );
 
     app.add_systems(
         Update,
         award_kill_gold
-            .in_set(crate::GameSet::Death)
-            .before(crate::gameplay::combat::check_death)
-            .run_if(in_state(GameState::InGame).and(in_state(crate::menus::Menu::None))),
+            .in_set(GameSet::Death)
+            .before(DeathCheck)
+            .run_if(gameplay_running),
     );
 }
 
