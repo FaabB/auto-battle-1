@@ -359,21 +359,21 @@ fn farm_hp_constant() {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (clippy + build)
-- [ ] `make test` passes (all existing + new tests)
-- [ ] New tests: `placed_building_has_health`, `placed_building_has_health_bar_config`, `building_death_removes_occupied_from_slot`, `building_death_slot_remains_when_not_in_grid_index`, `barracks_hp_constant`, `farm_hp_constant`
-- [ ] Existing health bar tests pass with observer-based spawning (no `.chain_ignore_deferred()`)
+- [x] `make check` passes (clippy + build)
+- [x] `make test` passes (all existing + new tests)
+- [x] New tests: `placed_building_has_health`, `placed_building_has_health_bar_config`, `building_death_removes_occupied_from_slot`, `building_death_slot_remains_when_not_in_grid_index`, `barracks_hp_constant`, `farm_hp_constant`
+- [x] Existing health bar tests pass with observer-based spawning (no `.chain_ignore_deferred()`)
 
 #### Manual Verification:
-- [ ] Place a barracks — health bar appears above it
-- [ ] Let enemies attack the barracks — health bar decreases
-- [ ] Barracks despawns when HP reaches 0
-- [ ] After barracks despawns, the grid cell shows as empty (no occupied highlight)
-- [ ] Can place a new building on the same cell after the old one died
-- [ ] Farms also take damage and die correctly
-- [ ] Barracks death stops unit production (no phantom spawns)
-- [ ] Farm death stops income generation
-- [ ] Health bars still appear on enemy units (observer works for all entity types)
+- [x] Place a barracks — health bar appears above it
+- [x] Let enemies attack the barracks — health bar decreases
+- [x] Barracks despawns when HP reaches 0
+- [x] After barracks despawns, the grid cell shows as empty (no occupied highlight)
+- [x] Can place a new building on the same cell after the old one died
+- [x] Farms also take damage and die correctly
+- [x] Barracks death stops unit production (no phantom spawns)
+- [x] Farm death stops income generation
+- [x] Health bars still appear on enemy units (observer works for all entity types)
 
 ## Verified API Patterns (Bevy 0.18)
 

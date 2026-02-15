@@ -25,6 +25,23 @@ const FARM_COLOR: Color = Color::srgb(0.2, 0.6, 0.1);
 /// Building sprite size (slightly smaller than cell to show grid outline).
 const BUILDING_SPRITE_SIZE: f32 = CELL_SIZE - 4.0;
 
+// === Building HP Constants ===
+
+/// Barracks HP — tankier than farms, takes several hits to destroy.
+pub const BARRACKS_HP: f32 = 300.0;
+
+/// Farm HP — fragile, prioritize protecting them.
+pub const FARM_HP: f32 = 150.0;
+
+/// Building health bar width (wider than units since buildings are larger).
+const BUILDING_HEALTH_BAR_WIDTH: f32 = 40.0;
+
+/// Building health bar height.
+const BUILDING_HEALTH_BAR_HEIGHT: f32 = 4.0;
+
+/// Building health bar Y offset (above center of building sprite).
+const BUILDING_HEALTH_BAR_Y_OFFSET: f32 = 36.0;
+
 // === Components ===
 
 /// A placed building on the grid.
@@ -101,6 +118,34 @@ pub const fn building_color(building_type: BuildingType) -> Color {
     }
 }
 
+/// Get the max HP for a building type.
+#[must_use]
+pub const fn building_hp(building_type: BuildingType) -> f32 {
+    match building_type {
+        BuildingType::Barracks => BARRACKS_HP,
+        BuildingType::Farm => FARM_HP,
+    }
+}
+
+// === Observers ===
+
+/// When a building is removed (death, despawn), clear the `Occupied` marker
+/// from the corresponding build slot so the grid cell can be reused.
+fn clear_build_slot_on_building_removed(
+    remove: On<Remove, Building>,
+    buildings: Query<&Building>,
+    grid_index: Res<crate::gameplay::battlefield::GridIndex>,
+    mut commands: Commands,
+) {
+    let Ok(building) = buildings.get(remove.entity) else {
+        return;
+    };
+    let Some(slot_entity) = grid_index.get(building.grid_col, building.grid_row) else {
+        return;
+    };
+    commands.entity(slot_entity).remove::<Occupied>();
+}
+
 // === Plugin ===
 
 pub(super) fn plugin(app: &mut App) {
@@ -111,6 +156,8 @@ pub(super) fn plugin(app: &mut App) {
         .register_type::<HoveredCell>()
         .register_type::<ProductionTimer>()
         .init_resource::<HoveredCell>();
+
+    app.add_observer(clear_build_slot_on_building_removed);
 
     app.add_systems(
         OnEnter(GameState::InGame),
@@ -213,5 +260,94 @@ mod tests {
     fn farm_color_is_green() {
         let color = building_color(BuildingType::Farm);
         assert_eq!(color, FARM_COLOR);
+    }
+
+    // --- building_hp tests ---
+
+    #[test]
+    fn barracks_hp_constant() {
+        assert_eq!(building_hp(BuildingType::Barracks), BARRACKS_HP);
+    }
+
+    #[test]
+    fn farm_hp_constant() {
+        assert_eq!(building_hp(BuildingType::Farm), FARM_HP);
+    }
+}
+
+#[cfg(test)]
+mod observer_tests {
+    use super::*;
+    use crate::gameplay::Health;
+    use crate::gameplay::battlefield::{BuildSlot, GridIndex};
+    use crate::testing::assert_entity_count;
+
+    fn create_observer_test_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<GridIndex>();
+        app.add_observer(clear_build_slot_on_building_removed);
+        app
+    }
+
+    #[test]
+    fn building_death_removes_occupied_from_slot() {
+        let mut app = create_observer_test_app();
+
+        // Spawn a build slot and register it in the grid index
+        let slot = app
+            .world_mut()
+            .spawn((BuildSlot { col: 2, row: 3 }, Occupied))
+            .id();
+        app.world_mut()
+            .resource_mut::<GridIndex>()
+            .insert(2, 3, slot);
+
+        // Spawn a building at that grid position
+        let building = app
+            .world_mut()
+            .spawn((
+                Building {
+                    building_type: BuildingType::Barracks,
+                    grid_col: 2,
+                    grid_row: 3,
+                },
+                Health::new(BARRACKS_HP),
+            ))
+            .id();
+
+        app.update();
+
+        // Despawn the building (simulates check_death)
+        app.world_mut().despawn(building);
+        app.update(); // Process deferred commands from observer
+
+        // Slot should no longer be occupied
+        assert_entity_count::<(With<BuildSlot>, With<Occupied>)>(&mut app, 0);
+        // Slot entity itself should still exist
+        assert_entity_count::<With<BuildSlot>>(&mut app, 1);
+    }
+
+    #[test]
+    fn building_death_slot_remains_when_not_in_grid_index() {
+        let mut app = create_observer_test_app();
+
+        // Spawn a building without a matching grid index entry
+        let building = app
+            .world_mut()
+            .spawn((
+                Building {
+                    building_type: BuildingType::Farm,
+                    grid_col: 0,
+                    grid_row: 0,
+                },
+                Health::new(FARM_HP),
+            ))
+            .id();
+
+        app.update();
+        app.world_mut().despawn(building);
+        app.update();
+        // Should not panic — gracefully handles missing slot
     }
 }

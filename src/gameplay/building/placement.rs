@@ -3,13 +3,15 @@
 use bevy::prelude::*;
 
 use super::{
+    BUILDING_HEALTH_BAR_HEIGHT, BUILDING_HEALTH_BAR_WIDTH, BUILDING_HEALTH_BAR_Y_OFFSET,
     BUILDING_SPRITE_SIZE, Building, BuildingType, CELL_SIZE, GRID_CURSOR_COLOR, GridCursor,
-    HoveredCell, Occupied, ProductionTimer, building_color, world_to_build_grid,
+    HoveredCell, Occupied, ProductionTimer, building_color, building_hp, world_to_build_grid,
 };
 use crate::gameplay::battlefield::{
     BUILD_ZONE_START_COL, GridIndex, col_to_world_x, row_to_world_y,
 };
-use crate::gameplay::{Target, Team};
+use crate::gameplay::combat::HealthBarConfig;
+use crate::gameplay::{Health, Target, Team};
 
 use super::BARRACKS_PRODUCTION_INTERVAL;
 use crate::screens::GameState;
@@ -122,6 +124,12 @@ pub(super) fn handle_building_placement(
         },
         Team::Player,
         Target,
+        Health::new(building_hp(building_type)),
+        HealthBarConfig {
+            width: BUILDING_HEALTH_BAR_WIDTH,
+            height: BUILDING_HEALTH_BAR_HEIGHT,
+            y_offset: BUILDING_HEALTH_BAR_Y_OFFSET,
+        },
         Sprite::from_color(
             building_color(building_type),
             Vec2::splat(BUILDING_SPRITE_SIZE),
@@ -402,5 +410,41 @@ mod integration_tests {
         let gold = app.world().resource::<crate::gameplay::economy::Gold>();
         assert_eq!(gold.0, crate::gameplay::economy::BARRACKS_COST - 1);
         assert_entity_count::<With<Building>>(&mut app, 0);
+    }
+
+    // === Building Health Tests (GAM-21) ===
+
+    #[test]
+    fn placed_building_has_health() {
+        use crate::gameplay::Health;
+        use crate::gameplay::building::BARRACKS_HP;
+
+        let mut app = create_placement_test_app();
+
+        app.world_mut().resource_mut::<HoveredCell>().0 = Some((2, 3));
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+        app.update();
+
+        let mut query = app.world_mut().query_filtered::<&Health, With<Building>>();
+        let health = query.single(app.world()).unwrap();
+        assert_eq!(health.current, BARRACKS_HP);
+        assert_eq!(health.max, BARRACKS_HP);
+    }
+
+    #[test]
+    fn placed_building_has_health_bar_config() {
+        use crate::gameplay::combat::HealthBarConfig;
+
+        let mut app = create_placement_test_app();
+
+        app.world_mut().resource_mut::<HoveredCell>().0 = Some((2, 3));
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+        app.update();
+
+        assert_entity_count::<(With<Building>, With<HealthBarConfig>)>(&mut app, 1);
     }
 }

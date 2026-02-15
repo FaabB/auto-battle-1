@@ -3,7 +3,6 @@
 use bevy::prelude::*;
 use rand::Rng;
 
-use crate::{GameSet, Z_UNIT, gameplay_running};
 use crate::gameplay::battlefield::{
     BATTLEFIELD_ROWS, ENEMY_FORT_START_COL, col_to_world_x, row_to_world_y,
 };
@@ -12,6 +11,7 @@ use crate::gameplay::combat::{
     UNIT_HEALTH_BAR_Y_OFFSET,
 };
 use crate::screens::GameState;
+use crate::{GameSet, Z_UNIT, gameplay_running};
 
 use crate::gameplay::{Health, Target, Team};
 

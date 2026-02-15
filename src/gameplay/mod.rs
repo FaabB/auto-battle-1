@@ -5,8 +5,8 @@
 //! **Units**: `Unit`, `Team`, `Target`, `CurrentTarget`, `Health`, `CombatStats`, `Movement`,
 //!           `AttackTimer`, `HealthBarConfig`, `Mesh2d`, `MeshMaterial2d`
 //!
-//! **Buildings**: `Building`, `Team`, `Target`, `ProductionTimer` or `IncomeTimer`
-//!           (`Health` added in GAM-21)
+//! **Buildings**: `Building`, `Team`, `Target`, `Health`, `HealthBarConfig`,
+//!           `ProductionTimer` or `IncomeTimer`
 //!
 //! **Fortresses**: `PlayerFortress`/`EnemyFortress`, `Team`, `Target`, `Health`, `HealthBarConfig`
 
@@ -29,7 +29,7 @@ pub enum Team {
     Enemy,
 }
 
-/// Hit points for any damageable entity (units, fortresses, future: buildings).
+/// Hit points for any damageable entity (units, buildings, fortresses).
 #[derive(Component, Debug, Clone, Reflect)]
 #[reflect(Component)]
 pub struct Health {

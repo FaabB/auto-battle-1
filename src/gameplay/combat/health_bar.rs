@@ -43,37 +43,38 @@ pub struct HealthBarConfig {
 
 // === Systems ===
 
-/// Spawns health bar child entities on any entity that just received a `Health` component.
-/// Runs in `GameSet::Ui`.
+/// Spawns health bar child entities when `Health` is added to an entity with `HealthBarConfig`.
 fn spawn_health_bars(
+    add: On<Add, Health>,
+    configs: Query<&HealthBarConfig>,
     mut commands: Commands,
-    new_entities: Query<(Entity, &HealthBarConfig), Added<Health>>,
 ) {
-    for (entity, config) in &new_entities {
-        commands.entity(entity).with_children(|parent| {
-            // Red background (full width, always visible)
-            parent.spawn((
-                Name::new("Health Bar BG"),
-                Sprite::from_color(HEALTH_BAR_BG_COLOR, Vec2::new(config.width, config.height)),
-                Transform::from_xyz(0.0, config.y_offset, 1.0),
-                HealthBarBackground,
-            ));
-            // Green fill (scales with HP ratio, rendered in front of background)
-            parent.spawn((
-                Name::new("Health Bar Fill"),
-                Sprite::from_color(
-                    HEALTH_BAR_FILL_COLOR,
-                    Vec2::new(config.width, config.height),
-                ),
-                Transform::from_xyz(0.0, config.y_offset, 1.1),
-                HealthBarFill,
-            ));
-        });
-    }
+    let Ok(config) = configs.get(add.entity) else {
+        return; // Entity has Health but no HealthBarConfig (shouldn't happen, but safe)
+    };
+    commands.entity(add.entity).with_children(|parent| {
+        // Red background (full width, always visible)
+        parent.spawn((
+            Name::new("Health Bar BG"),
+            Sprite::from_color(HEALTH_BAR_BG_COLOR, Vec2::new(config.width, config.height)),
+            Transform::from_xyz(0.0, config.y_offset, 1.0),
+            HealthBarBackground,
+        ));
+        // Green fill (scales with HP ratio, rendered in front of background)
+        parent.spawn((
+            Name::new("Health Bar Fill"),
+            Sprite::from_color(
+                HEALTH_BAR_FILL_COLOR,
+                Vec2::new(config.width, config.height),
+            ),
+            Transform::from_xyz(0.0, config.y_offset, 1.1),
+            HealthBarFill,
+        ));
+    });
 }
 
 /// Updates health bar fill width based on current/max HP.
-/// Runs in `GameSet::Ui`, after `spawn_health_bars`.
+/// Runs in `GameSet::Ui`.
 fn update_health_bars(
     health_query: Query<(&Health, &Children, &HealthBarConfig)>,
     mut bar_query: Query<&mut Transform, With<HealthBarFill>>,
@@ -97,10 +98,13 @@ pub(super) fn plugin(app: &mut App) {
         .register_type::<HealthBarFill>()
         .register_type::<HealthBarConfig>();
 
+    // Observer: spawn health bars immediately when Health is added
+    app.add_observer(spawn_health_bars);
+
+    // System: update health bar fill each frame (no longer needs chain)
     app.add_systems(
         Update,
-        (spawn_health_bars, update_health_bars)
-            .chain_ignore_deferred()
+        update_health_bars
             .in_set(GameSet::Ui)
             .run_if(gameplay_running),
     );
@@ -127,7 +131,8 @@ mod integration_tests {
     fn create_health_bar_test_app() -> App {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
-        app.add_systems(Update, (spawn_health_bars, update_health_bars).chain());
+        app.add_observer(spawn_health_bars);
+        app.add_systems(Update, update_health_bars);
         app
     }
 
