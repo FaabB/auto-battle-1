@@ -11,6 +11,7 @@ fn create_game_app() -> App {
     app.add_plugins(MinimalPlugins);
     app.add_plugins(StatesPlugin);
     app.add_plugins(InputPlugin);
+    app.add_plugins(TransformPlugin);
     app.add_plugins(auto_battle::plugin);
     app
 }

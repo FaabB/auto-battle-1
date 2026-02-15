@@ -4,6 +4,7 @@ mod ai;
 mod movement;
 pub mod spawn;
 
+use avian2d::prelude::*;
 use bevy::prelude::*;
 
 use crate::gameplay::combat::{
@@ -150,6 +151,12 @@ pub fn spawn_unit(
             MeshMaterial2d(material),
             Transform::from_xyz(position.x, position.y, Z_UNIT),
             DespawnOnExit(GameState::InGame),
+        ))
+        .insert((
+            RigidBody::Dynamic,
+            Collider::circle(UNIT_RADIUS),
+            LockedAxes::ROTATION_LOCKED,
+            LinearVelocity::ZERO,
         ))
         .id()
 }

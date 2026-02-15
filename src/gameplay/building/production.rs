@@ -3,10 +3,10 @@
 use bevy::prelude::*;
 
 use super::ProductionTimer;
+use crate::Z_UNIT;
 use crate::gameplay::battlefield::CELL_SIZE;
 use crate::gameplay::building::building_stats;
 use crate::gameplay::units::{UnitAssets, spawn_unit};
-use crate::Z_UNIT;
 
 /// Ticks production timers on all buildings and spawns units when timers fire.
 pub(super) fn tick_production_and_spawn_units(

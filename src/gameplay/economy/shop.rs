@@ -16,7 +16,6 @@ const REROLL_BASE_COST: u32 = 5;
 /// Maximum reroll cost (cap).
 const MAX_REROLL_COST: u32 = 40;
 
-
 // === Resources ===
 
 /// The player's current shop offering of building cards.

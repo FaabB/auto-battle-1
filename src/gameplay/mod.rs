@@ -3,12 +3,14 @@
 //! # Entity Archetypes
 //!
 //! **Units**: `Unit`, `Team`, `Target`, `CurrentTarget`, `Health`, `CombatStats`, `Movement`,
-//!           `AttackTimer`, `HealthBarConfig`, `Mesh2d`, `MeshMaterial2d`
+//!           `AttackTimer`, `HealthBarConfig`, `Mesh2d`, `MeshMaterial2d`,
+//!           `RigidBody::Dynamic`, `Collider`, `LockedAxes`, `LinearVelocity`
 //!
 //! **Buildings**: `Building`, `Team`, `Target`, `Health`, `HealthBarConfig`,
-//!           `ProductionTimer` or `IncomeTimer`
+//!           `ProductionTimer` or `IncomeTimer`, `RigidBody::Static`, `Collider`
 //!
-//! **Fortresses**: `PlayerFortress`/`EnemyFortress`, `Team`, `Target`, `Health`, `HealthBarConfig`
+//! **Fortresses**: `PlayerFortress`/`EnemyFortress`, `Team`, `Target`, `Health`,
+//!           `HealthBarConfig`, `RigidBody::Static`, `Collider`
 
 pub mod battlefield;
 pub mod building;

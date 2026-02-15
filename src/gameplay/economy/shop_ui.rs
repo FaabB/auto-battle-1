@@ -215,9 +215,7 @@ fn update_card_text(
 
     for (name_text, mut text) in &mut name_query {
         let slot = name_text.0;
-        *text = Text::new(
-            shop.cards[slot].map_or("—", |bt| bt.display_name()),
-        );
+        *text = Text::new(shop.cards[slot].map_or("—", |bt| bt.display_name()));
     }
 
     for (cost_text, mut text) in &mut cost_query {

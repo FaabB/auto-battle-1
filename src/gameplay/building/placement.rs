@@ -1,5 +1,6 @@
 //! Building placement systems: grid cursor spawning, hover tracking, click-to-place.
 
+use avian2d::prelude::*;
 use bevy::prelude::*;
 
 use super::{
@@ -135,6 +136,9 @@ pub(super) fn handle_building_placement(
         ),
         Transform::from_xyz(world_x, world_y, Z_BUILDING),
         DespawnOnExit(GameState::InGame),
+        // Physics
+        RigidBody::Static,
+        Collider::rectangle(BUILDING_SPRITE_SIZE, BUILDING_SPRITE_SIZE),
     ));
 
     // Data-driven timer insertion — no per-type match needed
@@ -418,8 +422,7 @@ mod integration_tests {
         use crate::gameplay::Health;
 
         let mut app = create_placement_test_app();
-        let expected_hp =
-            crate::gameplay::building::building_stats(BuildingType::Barracks).hp;
+        let expected_hp = crate::gameplay::building::building_stats(BuildingType::Barracks).hp;
 
         app.world_mut().resource_mut::<HoveredCell>().0 = Some((2, 3));
         app.world_mut()

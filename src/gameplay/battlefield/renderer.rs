@@ -1,5 +1,6 @@
 //! Battlefield zone and entity spawning.
 
+use avian2d::prelude::*;
 use bevy::prelude::*;
 
 use super::{
@@ -31,6 +32,7 @@ const COMBAT_ZONE_COLOR: Color = Color::srgb(0.15, 0.15, 0.2);
 const BACKGROUND_COLOR: Color = Color::srgb(0.1, 0.1, 0.12);
 
 /// Spawns all battlefield entities: zone sprites with markers, and build slot grid.
+#[allow(clippy::too_many_lines)]
 pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<GridIndex>) {
     let fortress_size = Vec2::new(f32::from(FORTRESS_COLS) * CELL_SIZE, BATTLEFIELD_HEIGHT);
 
@@ -69,6 +71,9 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
             Z_ZONE,
         ),
         DespawnOnExit(GameState::InGame),
+        // Physics
+        RigidBody::Static,
+        Collider::rectangle(fortress_size.x, fortress_size.y),
     ));
 
     // Building zone (dark blue-gray)
@@ -122,6 +127,9 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
             Z_ZONE,
         ),
         DespawnOnExit(GameState::InGame),
+        // Physics
+        RigidBody::Static,
+        Collider::rectangle(fortress_size.x, fortress_size.y),
     ));
 
     // Build slots: 10 rows × 6 cols — visible grid cells, indexed for O(1) lookup

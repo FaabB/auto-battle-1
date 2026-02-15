@@ -86,11 +86,6 @@ pub fn assert_entity_count<F: bevy::ecs::query::QueryFilter>(app: &mut App, expe
     );
 }
 
-/// Helper to advance the app by one frame.
-pub fn tick(app: &mut App) {
-    app.update();
-}
-
 /// Helper to advance the app by multiple frames.
 #[allow(dead_code)]
 pub fn tick_multiple(app: &mut App, count: usize) {

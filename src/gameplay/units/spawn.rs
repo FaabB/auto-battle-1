@@ -177,8 +177,8 @@ mod tests {
 
 #[cfg(test)]
 mod integration_tests {
-    use super::*;
     use super::super::{CombatStats, CurrentTarget, Movement, Unit, UnitType};
+    use super::*;
     use crate::gameplay::{Health, Target, Team};
     use crate::testing::{assert_entity_count, transition_to_ingame};
     use std::time::Duration;
