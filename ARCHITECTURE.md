@@ -351,25 +351,91 @@ Both foxtrot and bevy_new_2d use a similar pattern -- foxtrot has `PausableSyste
 
 ## Observers
 
-Observers (`add_observer`) are used for one-time setup triggered by component addition:
+Observers (`add_observer`) react to component lifecycle events. Foxtrot uses 47+ observers for entity setup, cleanup, and UI reactions. All lifecycle event types (`Add`, `Remove`, `Insert`, `Replace`, `Despawn`) and the `On` system param are in `bevy::prelude::*` — no explicit import needed.
+
+### Lifecycle events (Bevy 0.18)
+
+| Event | When it fires | Component still on entity? |
+|-------|--------------|---------------------------|
+| `Add` | Component added to entity that didn't have it | Yes (just added) |
+| `Insert` | Component added, even if already present (runs after `Add`) | Yes |
+| `Replace` | Component about to be replaced or removed (runs before `Remove`) | Yes (old value) |
+| `Remove` | Component removed and **not** replaced. Also fires during despawn | Yes (about to be removed) |
+| `Despawn` | Entity is being despawned (runs after `Remove` for each component) | Varies |
+
+**Ordering during despawn**: `Replace` → `Remove` → `Despawn`.
+
+### Observer handler pattern
+
+The first parameter is `On<Event, Component>`. `On` derefs to the event struct, so `.entity` gives the target entity:
 
 ```rust
+// Add observer — entity setup (foxtrot's primary pattern)
 app.add_observer(setup_player);
 
 fn setup_player(add: On<Add, Player>, mut commands: Commands) {
     commands.entity(add.entity).insert(( /* physics, collider, etc */ ));
 }
+
+// Remove observer — cleanup when component is removed or entity despawned
+app.add_observer(clear_build_slot);
+
+fn clear_build_slot(
+    remove: On<Remove, Building>,
+    buildings: Query<&Building>,
+    grid_index: Res<GridIndex>,
+    mut commands: Commands,
+) {
+    let Ok(building) = buildings.get(remove.entity) else { return };
+    // Building data is still queryable — Remove fires before actual removal
+    if let Some(slot) = grid_index.get(building.grid_col, building.grid_row) {
+        commands.entity(slot).remove::<Occupied>();
+    }
+}
 ```
 
-This replaces the pattern of "spawn entity, then run system next frame to configure it." Foxtrot uses observers extensively for entity setup (player, NPC, props).
+**Key**: `event.entity` (via `Deref`) = the entity the event targets. `event.observer()` = the observer entity itself (rarely needed).
+
+Handlers support full system params: `Query`, `Res`, `ResMut`, `Commands`, `Single`, etc.
+
+### Registration order
+
+Observers are registered in the plugin function between resources and systems:
+
+```rust
+pub(super) fn plugin(app: &mut App) {
+    app.register_type::<MyComponent>();     // 1. Types
+    app.init_resource::<MyResource>();       // 2. Resources
+    app.add_observer(clear_build_slot);       // 3. Observers
+    app.add_systems(Update, my_system);      // 4. Systems
+}
+```
 
 ### When to use observers vs systems
 
-- **Observer**: One-time reactions to component Add/Remove events
+- **Observer (`On<Add, T>`)**: One-time entity setup triggered by component addition (replaces "spawn then configure next frame")
+- **Observer (`On<Remove, T>`)**: Cleanup when a component is removed or entity despawned (e.g., clearing grid slots, re-enabling collision)
 - **OnEnter system**: Setup that happens when entering a state
 - **Update system**: Continuous per-frame logic
 
-We don't use observers yet but should adopt them when entity setup becomes complex (e.g., spawning units with physics components).
+### Naming conventions (from foxtrot)
+
+| Pattern | Use case | Example |
+|---------|----------|---------|
+| `setup_*` | Entity configuration on `Add` | `setup_player`, `setup_npc_agent` |
+| `spawn_*` | Spawning child entities on `Add` | `spawn_view_model` |
+| Verb phrase | Action on `Remove` or custom events | `clear_build_slot`, `enable_collision_with_no_longer_held_prop` |
+| `on_add` | Generic `Add` handler | `on_add` (in `npc/mod.rs`) |
+
+Parameter names match the action: `add: On<Add, T>`, `remove: On<Remove, T>`, `_on: On<Event>` (when unused).
+
+### Hooks vs observers
+
+Bevy has two lifecycle reaction mechanisms:
+- **Hooks** (`Component::on_add()`, `on_remove()`) — low-level, run synchronously with limited `DeferredWorld` access. Defined per-component type. Use for structural invariants.
+- **Observers** (`app.add_observer()`) — high-level, run with full system params (`Query`, `Res`, `Commands`). Multiple observers per event. Use for game logic.
+
+We use observers (not hooks) for all lifecycle reactions.
 
 ---
 
@@ -470,7 +536,8 @@ Two `app.update()` calls are needed (inside `transition_to_ingame`): first trigg
 | Z-layer constants | `Z_` prefix | `Z_BUILDING`, `Z_UNIT` |
 | System sets | `GameSet::Variant` | `GameSet::Input`, `GameSet::Combat` |
 | Widget constructors | Return `impl Bundle` | `fn button(text: ...) -> impl Bundle` |
-| Observer targets | `on_add_*` or match event | `fn on_add(add: On<Add, Npc>)` |
+| Observer (Add) | `setup_*`, `spawn_*`, `on_add` | `fn setup_player(add: On<Add, Player>)` |
+| Observer (Remove) | verb phrase describing action | `fn clear_build_slot(remove: On<Remove, Building>)` |
 | Module doc comments | `//!` at top of file | `//! Battlefield grid layout and rendering.` |
 
 ---
