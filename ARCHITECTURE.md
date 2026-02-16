@@ -476,6 +476,36 @@ pub enum CollisionLayer { Default, Character, Prop }
 
 Foxtrot uses this pattern with 10+ third-party crates. Not needed yet for auto-battle-1 (no complex third-party deps beyond Bevy itself). Create when needed.
 
+### Collision Layer System
+
+The game uses avian2d collision layers for physics filtering and damage delivery.
+
+#### `CollisionLayer` enum (`third_party/avian.rs`)
+
+| Layer | Purpose | On which entities |
+|-------|---------|-------------------|
+| `Pushbox` | Physical presence — blocks movement | Units, buildings, fortresses |
+| `Hitbox` | Attack collider — deals damage | Projectiles (future: melee swings) |
+| `Hurtbox` | Damageable surface | Units, buildings, fortresses |
+
+#### Entity collision setup
+
+| Entity | Memberships | Filters |
+|--------|-------------|---------|
+| Unit / Building / Fortress | `[Pushbox, Hurtbox]` | `[Pushbox, Hitbox]` |
+| Projectile | `[Hitbox]` | `[Hurtbox]` |
+
+Pushbox entities push/block each other (Pushbox↔Pushbox). Projectile hitboxes overlap with target hurtboxes (Hitbox↔Hurtbox) without physical response (`Sensor`).
+
+#### `surface_distance()` wrapper (`third_party/avian.rs`)
+
+Game systems use `surface_distance(&collider1, pos1, &collider2, pos2)` for range checks — never `contact_query` directly. This abstracts the physics dependency to one file.
+
+#### Two-tier testing
+
+- **Tier 1** (primary): `MinimalPlugins` with `Collider` components on test entities. `surface_distance()` is a pure geometric function — no physics pipeline needed. `CollidingEntities` manually populated for hitbox tests.
+- **Tier 2** (smoke): Integration tests with `PhysicsPlugins` to validate collision layer wiring. Used sparingly — avian2d's `FixedUpdate` pipeline is unreliable under `MinimalPlugins` (see GAM-29).
+
 ---
 
 ## Testing Patterns

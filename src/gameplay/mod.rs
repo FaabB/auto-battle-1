@@ -4,13 +4,16 @@
 //!
 //! **Units**: `Unit`, `Team`, `Target`, `CurrentTarget`, `Health`, `CombatStats`, `Movement`,
 //!           `AttackTimer`, `HealthBarConfig`, `Mesh2d`, `MeshMaterial2d`,
-//!           `RigidBody::Dynamic`, `Collider`, `LockedAxes`, `LinearVelocity`
+//!           `RigidBody::Dynamic`, `Collider`, `CollisionLayers`, `LockedAxes`, `LinearVelocity`
 //!
 //! **Buildings**: `Building`, `Team`, `Target`, `Health`, `HealthBarConfig`,
-//!           `ProductionTimer` or `IncomeTimer`, `RigidBody::Static`, `Collider`
+//!           `ProductionTimer` or `IncomeTimer`, `RigidBody::Static`, `Collider`, `CollisionLayers`
 //!
 //! **Fortresses**: `PlayerFortress`/`EnemyFortress`, `Team`, `Target`, `Health`,
-//!           `HealthBarConfig`, `RigidBody::Static`, `Collider`
+//!           `HealthBarConfig`, `RigidBody::Static`, `Collider`, `CollisionLayers`
+//!
+//! **Projectiles**: `Projectile`, `Team`, `Hitbox`, `Sensor`, `RigidBody::Kinematic`,
+//!           `Collider`, `CollisionLayers`, `CollisionEventsEnabled`, `CollidingEntities`
 
 pub mod battlefield;
 pub mod building;

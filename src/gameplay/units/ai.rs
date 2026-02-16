@@ -1,8 +1,10 @@
 //! Unit AI: target selection.
 
+use avian2d::prelude::*;
 use bevy::prelude::*;
 
 use crate::gameplay::{Target, Team};
+use crate::third_party::surface_distance;
 
 use super::{BACKTRACK_DISTANCE, CurrentTarget, Unit};
 
@@ -17,12 +19,21 @@ const RETARGET_INTERVAL_FRAMES: u32 = 10;
 /// - Respects the backtrack limit — ignores enemies too far behind.
 pub(super) fn unit_find_target(
     mut counter: Local<u32>,
-    mut units: Query<(Entity, &Team, &GlobalTransform, &mut CurrentTarget), With<Unit>>,
-    all_targets: Query<(Entity, &Team, &GlobalTransform), With<Target>>,
+    mut units: Query<
+        (
+            Entity,
+            &Team,
+            &GlobalTransform,
+            &Collider,
+            &mut CurrentTarget,
+        ),
+        With<Unit>,
+    >,
+    all_targets: Query<(Entity, &Team, &GlobalTransform, &Collider), With<Target>>,
 ) {
     *counter = counter.wrapping_add(1);
 
-    for (entity, team, transform, mut current_target) in &mut units {
+    for (entity, team, transform, unit_collider, mut current_target) in &mut units {
         let has_valid_target = current_target.0.is_some_and(|e| all_targets.get(e).is_ok());
 
         // Stagger: each unit retargets on a different frame based on its entity index
@@ -40,13 +51,13 @@ pub(super) fn unit_find_target(
 
         // Find nearest enemy target within backtrack limit
         let mut nearest: Option<(Entity, f32)> = None;
-        for (candidate, candidate_team, candidate_pos) in &all_targets {
+        for (candidate, candidate_team, candidate_pos, candidate_collider) in &all_targets {
             if candidate == entity || *candidate_team != opposing_team {
                 continue;
             }
             let candidate_xy = candidate_pos.translation().xy();
 
-            // Backtrack filter: ignore targets too far behind
+            // Backtrack filter: ignore targets too far behind (uses x-distance, not surface)
             let behind = match team {
                 Team::Player => my_pos.x - candidate_xy.x,
                 Team::Enemy => candidate_xy.x - my_pos.x,
@@ -55,7 +66,7 @@ pub(super) fn unit_find_target(
                 continue;
             }
 
-            let dist = my_pos.distance(candidate_xy);
+            let dist = surface_distance(unit_collider, my_pos, candidate_collider, candidate_xy);
             if nearest.is_none_or(|(_, d)| dist < d) {
                 nearest = Some((candidate, dist));
             }
@@ -68,6 +79,7 @@ pub(super) fn unit_find_target(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gameplay::units::UNIT_RADIUS;
 
     /// Spawn a unit entity with Transform + GlobalTransform at the given position.
     fn spawn_unit(world: &mut World, team: Team, x: f32, y: f32) -> Entity {
@@ -79,6 +91,7 @@ mod tests {
                 CurrentTarget(None),
                 Transform::from_xyz(x, y, 0.0),
                 GlobalTransform::from(Transform::from_xyz(x, y, 0.0)),
+                Collider::circle(UNIT_RADIUS),
             ))
             .id()
     }
@@ -91,6 +104,7 @@ mod tests {
                 Target,
                 Transform::from_xyz(x, y, 0.0),
                 GlobalTransform::from(Transform::from_xyz(x, y, 0.0)),
+                Collider::circle(5.0),
             ))
             .id()
     }

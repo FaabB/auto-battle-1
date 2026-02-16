@@ -13,6 +13,7 @@ use super::{
 use crate::gameplay::combat::HealthBarConfig;
 use crate::gameplay::{Health, Target, Team};
 use crate::screens::GameState;
+use crate::third_party::CollisionLayer;
 use crate::{Z_BACKGROUND, Z_GRID, Z_ZONE};
 
 use super::{
@@ -74,6 +75,10 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
         // Physics
         RigidBody::Static,
         Collider::rectangle(fortress_size.x, fortress_size.y),
+        CollisionLayers::new(
+            [CollisionLayer::Pushbox, CollisionLayer::Hurtbox],
+            [CollisionLayer::Pushbox, CollisionLayer::Hitbox],
+        ),
     ));
 
     // Building zone (dark blue-gray)
@@ -130,6 +135,10 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
         // Physics
         RigidBody::Static,
         Collider::rectangle(fortress_size.x, fortress_size.y),
+        CollisionLayers::new(
+            [CollisionLayer::Pushbox, CollisionLayer::Hurtbox],
+            [CollisionLayer::Pushbox, CollisionLayer::Hitbox],
+        ),
     ));
 
     // Build slots: 10 rows × 6 cols — visible grid cells, indexed for O(1) lookup

@@ -13,6 +13,7 @@ use crate::gameplay::combat::{
 };
 use crate::gameplay::{Health, Target, Team};
 use crate::screens::GameState;
+use crate::third_party::CollisionLayer;
 use crate::{GameSet, Z_UNIT, gameplay_running};
 
 // === Constants ===
@@ -101,7 +102,7 @@ pub const fn unit_stats(unit_type: UnitType) -> UnitStats {
             damage: 10.0,
             attack_speed: 1.0,
             move_speed: 50.0,
-            attack_range: 30.0,
+            attack_range: 5.0,
         },
     }
 }
@@ -155,6 +156,10 @@ pub fn spawn_unit(
         .insert((
             RigidBody::Dynamic,
             Collider::circle(UNIT_RADIUS),
+            CollisionLayers::new(
+                [CollisionLayer::Pushbox, CollisionLayer::Hurtbox],
+                [CollisionLayer::Pushbox, CollisionLayer::Hitbox],
+            ),
             LockedAxes::ROTATION_LOCKED,
             LinearVelocity::ZERO,
         ))
