@@ -69,16 +69,16 @@ app.add_systems(OnEnter(Menu::None), unpause_virtual_time);
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (clippy + compile)
-- [ ] `make test` passes (all existing tests still work)
-- [ ] New unit tests pass:
+- [x] `make check` passes (clippy + compile)
+- [x] `make test` passes (all existing tests still work)
+- [x] New unit tests pass:
   - `virtual_time_paused_on_menu_exit_none` — transition from `Menu::None` → `Menu::Pause` pauses `Time<Virtual>`
   - `virtual_time_unpaused_on_menu_enter_none` — transition from `Menu::Pause` → `Menu::None` unpauses `Time<Virtual>`
 
 #### Manual Verification:
-- [ ] Run game → build barracks → wait for units → press ESC → units freeze completely (no drift)
-- [ ] Press ESC again → units resume moving normally
-- [ ] Let game reach victory/defeat → units freeze when overlay appears
+- [x] Run game → build barracks → wait for units → press ESC → units freeze completely (no drift)
+- [x] Press ESC again → units resume moving normally
+- [x] Let game reach victory/defeat → units freeze when overlay appears
 
 ---
 
