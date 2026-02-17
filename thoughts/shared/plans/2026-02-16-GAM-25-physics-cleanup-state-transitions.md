@@ -160,8 +160,8 @@ mod cleanup_tests {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (no clippy/compile errors)
-- [ ] `make test` passes (all existing + new tests)
+- [x] `make check` passes (no clippy/compile errors)
+- [x] `make test` passes (all existing + new tests)
 
 #### Manual Verification:
 - [ ] Run the game, spawn units via barracks, let combat play out

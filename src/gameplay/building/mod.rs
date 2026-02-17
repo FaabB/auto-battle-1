@@ -179,6 +179,18 @@ fn clear_build_slot_on_building_removed(
     commands.entity(slot_entity).remove::<Occupied>();
 }
 
+/// Strip `Building` markers before `DespawnOnExit` batch-despawns entities.
+/// This fires the `On<Remove, Building>` observer while build-slot entities
+/// still exist, preventing "Entity despawned" warnings during state transitions.
+fn strip_buildings_before_despawn(
+    mut commands: Commands,
+    buildings: Query<Entity, With<Building>>,
+) {
+    for entity in &buildings {
+        commands.entity(entity).remove::<Building>();
+    }
+}
+
 // === Plugin ===
 
 pub(super) fn plugin(app: &mut App) {
@@ -191,6 +203,9 @@ pub(super) fn plugin(app: &mut App) {
         .init_resource::<HoveredCell>();
 
     app.add_observer(clear_build_slot_on_building_removed);
+
+    // Strip Building markers before DespawnOnExit to prevent observer warnings.
+    app.add_systems(OnExit(GameState::InGame), strip_buildings_before_despawn);
 
     app.add_systems(
         OnEnter(GameState::InGame),
