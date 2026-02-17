@@ -40,8 +40,8 @@ pub(super) fn tick_production_and_spawn_units(
 mod integration_tests {
     use super::*;
     use crate::gameplay::building::{Building, BuildingType, HoveredCell, ProductionTimer};
-    use crate::gameplay::units::{CombatStats, Movement, Unit};
-    use crate::gameplay::{Health, Team};
+    use crate::gameplay::units::Unit;
+    use crate::gameplay::{CombatStats, Health, Movement, Team};
     use crate::menus::Menu;
     use crate::screens::GameState;
     use crate::testing::{assert_entity_count, transition_to_ingame};

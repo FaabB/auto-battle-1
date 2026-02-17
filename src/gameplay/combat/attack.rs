@@ -3,8 +3,7 @@
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
-use crate::gameplay::units::{CombatStats, CurrentTarget, Unit};
-use crate::gameplay::{Health, Team};
+use crate::gameplay::{CombatStats, CurrentTarget, Health, Team};
 use crate::screens::GameState;
 use crate::third_party::{CollisionLayer, surface_distance};
 use crate::{GameSet, Z_UNIT, gameplay_running};
@@ -47,25 +46,27 @@ pub struct Hitbox;
 // === Systems ===
 
 /// Ticks attack timers and spawns projectiles toward targets in range.
-/// Uses surface-to-surface distance so units can attack large targets (buildings, fortresses).
+/// Uses surface-to-surface distance so entities can attack large targets (buildings, fortresses).
 /// Runs in `GameSet::Combat`.
-fn unit_attack(
+fn attack(
     time: Res<Time>,
-    mut attackers: Query<
-        (
-            &CurrentTarget,
-            &CombatStats,
-            &mut AttackTimer,
-            &GlobalTransform,
-            &Collider,
-            &Team,
-        ),
-        With<Unit>,
-    >,
+    mut attackers: Query<(
+        &CurrentTarget,
+        &CombatStats,
+        &mut AttackTimer,
+        &GlobalTransform,
+        &Collider,
+        &Team,
+    )>,
     targets: Query<(&GlobalTransform, &Collider)>,
     mut commands: Commands,
 ) {
     for (target, stats, mut timer, attacker_pos, attacker_collider, team) in &mut attackers {
+        // Always tick the timer so it stays warm — entities fire on a cadence
+        // regardless of whether a target is currently in range.
+        timer.0.tick(time.delta());
+        let ready = timer.0.just_finished();
+
         let Some(target_entity) = target.0 else {
             continue;
         };
@@ -84,9 +85,7 @@ fn unit_attack(
             continue;
         }
 
-        // Tick and spawn projectile when timer fires
-        timer.0.tick(time.delta());
-        if timer.0.just_finished() {
+        if ready {
             commands.spawn((
                 Name::new("Projectile"),
                 Projectile {
@@ -190,7 +189,7 @@ pub(super) fn plugin(app: &mut App) {
     // (prevents instant-hit invisible projectiles).
     app.add_systems(
         Update,
-        (unit_attack, move_projectiles, handle_projectile_hits)
+        (attack, move_projectiles, handle_projectile_hits)
             .chain_ignore_deferred()
             .in_set(GameSet::Combat)
             .run_if(gameplay_running),
@@ -212,10 +211,8 @@ mod tests {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
-    use crate::gameplay::Team;
-    use crate::gameplay::units::{
-        CombatStats, CurrentTarget, Movement, UNIT_RADIUS, Unit, UnitType, unit_stats,
-    };
+    use crate::gameplay::units::{UNIT_RADIUS, Unit, UnitType, unit_stats};
+    use crate::gameplay::{CombatStats, CurrentTarget, Movement, Team};
     use crate::testing::assert_entity_count;
     use pretty_assertions::assert_eq;
     use std::time::Duration;
@@ -225,7 +222,7 @@ mod integration_tests {
     fn create_attack_test_app() -> App {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
-        app.add_systems(Update, unit_attack);
+        app.add_systems(Update, attack);
         app.update(); // Initialize time (first frame delta=0)
         app
     }
@@ -521,6 +518,42 @@ mod integration_tests {
 
         let health = app.world().get::<Health>(enemy).unwrap();
         assert_eq!(health.current, 100.0);
+        assert_entity_count::<With<Projectile>>(&mut app, 1);
+    }
+
+    #[test]
+    fn fortress_can_attack_in_range() {
+        let mut app = create_attack_test_app();
+
+        // Spawn a "fortress-like" entity (no Unit marker)
+        let mut timer = Timer::from_seconds(0.001, TimerMode::Repeating);
+        timer.set_elapsed(Duration::from_nanos(999_000));
+        let fortress = app
+            .world_mut()
+            .spawn((
+                Team::Player,
+                CurrentTarget(None),
+                CombatStats {
+                    damage: 50.0,
+                    attack_speed: 0.5,
+                    range: 200.0,
+                },
+                AttackTimer(timer),
+                Transform::from_xyz(64.0, 320.0, 0.0),
+                GlobalTransform::from(Transform::from_xyz(64.0, 320.0, 0.0)),
+                Collider::rectangle(128.0, 128.0),
+            ))
+            .id();
+
+        let target = spawn_target(app.world_mut(), 200.0, 100.0);
+
+        // Set fortress target
+        app.world_mut()
+            .get_mut::<CurrentTarget>(fortress)
+            .unwrap()
+            .0 = Some(target);
+
+        advance_and_update(&mut app, Duration::from_millis(100));
         assert_entity_count::<With<Projectile>>(&mut app, 1);
     }
 

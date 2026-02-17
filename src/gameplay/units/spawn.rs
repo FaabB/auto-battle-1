@@ -3,9 +3,7 @@
 use bevy::prelude::*;
 use rand::Rng;
 
-use crate::gameplay::battlefield::{
-    BATTLEFIELD_ROWS, ENEMY_FORT_START_COL, col_to_world_x, row_to_world_y,
-};
+use crate::gameplay::battlefield::{CELL_SIZE, EnemyFortress, FORTRESS_ROWS};
 use crate::screens::GameState;
 use crate::{GameSet, Z_UNIT, gameplay_running};
 
@@ -26,9 +24,6 @@ pub const MIN_INTERVAL: f32 = 0.5;
 
 /// Duration (seconds) over which the interval ramps from START to MIN.
 pub const RAMP_DURATION: f32 = 600.0; // 10 minutes
-
-/// Column where enemies spawn (at the enemy fortress).
-const ENEMY_SPAWN_COL: u16 = ENEMY_FORT_START_COL; // col 80
 
 // === Resource ===
 
@@ -75,10 +70,13 @@ fn reset_enemy_spawn_timer(mut commands: Commands) {
 }
 
 /// Tick the spawn timer and spawn an enemy when it fires.
+/// Uses `Single` to read the enemy fortress position — if the fortress is destroyed
+/// (despawned), this system is silently skipped and no more enemies spawn.
 fn tick_enemy_spawner(
     time: Res<Time>,
     mut spawn_timer: ResMut<EnemySpawnTimer>,
     unit_assets: Res<UnitAssets>,
+    enemy_fortress: Single<&Transform, With<EnemyFortress>>,
     mut commands: Commands,
 ) {
     spawn_timer.elapsed_secs += time.delta_secs();
@@ -88,10 +86,12 @@ fn tick_enemy_spawner(
         return;
     }
 
-    // Pick a random row
-    let row = rand::rng().random_range(0..BATTLEFIELD_ROWS);
-    let spawn_x = col_to_world_x(ENEMY_SPAWN_COL);
-    let spawn_y = row_to_world_y(row);
+    let fortress_pos = enemy_fortress.translation;
+
+    // Spawn within the fortress footprint
+    let half_height = f32::from(FORTRESS_ROWS) * CELL_SIZE / 2.0;
+    let spawn_x = fortress_pos.x;
+    let spawn_y = fortress_pos.y + rand::rng().random_range(-half_height..half_height);
 
     super::spawn_unit(
         &mut commands,
@@ -193,6 +193,13 @@ mod integration_tests {
         app.add_systems(OnEnter(GameState::InGame), super::super::setup_unit_assets);
         plugin(&mut app);
         transition_to_ingame(&mut app);
+
+        // Spawn a mock enemy fortress for the spawner to read position from
+        app.world_mut().spawn((
+            EnemyFortress,
+            Team::Enemy,
+            Transform::from_xyz(5152.0, 320.0, 0.0), // Approx col 80 center
+        ));
         app
     }
 
@@ -291,5 +298,50 @@ mod integration_tests {
         nearly_expire_timer(&mut app);
         app.update();
         assert_entity_count::<(With<Unit>, With<Team>)>(&mut app, 2);
+    }
+
+    #[test]
+    fn enemy_spawns_at_fortress_position() {
+        let mut app = create_spawn_test_app();
+
+        nearly_expire_timer(&mut app);
+        app.update();
+
+        let mut query = app.world_mut().query_filtered::<&Transform, With<Unit>>();
+        let unit_transform = query.single(app.world()).unwrap();
+        // Should spawn at fortress X (5152.0)
+        assert!(
+            (unit_transform.translation.x - 5152.0).abs() < f32::EPSILON,
+            "Unit should spawn at fortress X, got {}",
+            unit_transform.translation.x,
+        );
+        // Y should be within fortress footprint (320 ± 64)
+        let fortress_y = 320.0;
+        let half_height = f32::from(crate::gameplay::battlefield::FORTRESS_ROWS)
+            * crate::gameplay::battlefield::CELL_SIZE
+            / 2.0;
+        assert!(
+            (unit_transform.translation.y - fortress_y).abs() <= half_height,
+            "Unit should spawn within fortress Y range, got {}",
+            unit_transform.translation.y,
+        );
+    }
+
+    #[test]
+    fn no_enemies_spawn_when_fortress_destroyed() {
+        let mut app = create_spawn_test_app();
+
+        // Despawn the enemy fortress
+        let mut fortress_query = app
+            .world_mut()
+            .query_filtered::<Entity, With<EnemyFortress>>();
+        let fortress = fortress_query.single(app.world()).unwrap();
+        app.world_mut().despawn(fortress);
+
+        // Nearly expire timer and update — system should be skipped
+        nearly_expire_timer(&mut app);
+        app.update();
+
+        assert_entity_count::<(With<Unit>, With<Team>)>(&mut app, 0);
     }
 }

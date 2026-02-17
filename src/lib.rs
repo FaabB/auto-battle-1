@@ -21,8 +21,10 @@ use bevy::prelude::*;
 
 /// Background layer (behind everything).
 pub(crate) const Z_BACKGROUND: f32 = -1.0;
-/// Zone sprites (fortresses, build zone, combat zone).
+/// Zone backdrop sprites (fortress zones, build zone, combat zone).
 pub(crate) const Z_ZONE: f32 = 0.0;
+/// Fortress entities (above zone backdrops).
+pub(crate) const Z_FORTRESS: f32 = 0.5;
 /// Grid cell sprites in the build zone.
 pub(crate) const Z_GRID: f32 = 1.0;
 /// Grid cursor / hover highlight.

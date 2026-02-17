@@ -21,6 +21,9 @@ pub const BATTLEFIELD_ROWS: u16 = 10;
 /// Number of columns for each fortress.
 pub const FORTRESS_COLS: u16 = 2;
 
+/// Number of rows for each fortress (2×2 building).
+pub const FORTRESS_ROWS: u16 = 2;
+
 /// Number of columns in the building zone.
 pub const BUILD_ZONE_COLS: u16 = 6;
 
@@ -43,11 +46,22 @@ pub const BATTLEFIELD_HEIGHT: f32 = BATTLEFIELD_ROWS as f32 * CELL_SIZE;
 /// survivable, but 20+ breaking through will destroy the fortress.
 pub const FORTRESS_HP: f32 = 2000.0;
 
+// === Fortress Combat Stats ===
+
+/// Fortress damage per projectile — high damage, slow rate.
+pub const FORTRESS_DAMAGE: f32 = 50.0;
+
+/// Fortress attacks per second — slow turret cadence.
+pub const FORTRESS_ATTACK_SPEED: f32 = 0.5;
+
+/// Fortress attack range in pixels (~5 cells).
+pub const FORTRESS_RANGE: f32 = 300.0;
+
 /// Fortress health bar dimensions — larger than unit bars for visibility.
 const FORTRESS_HEALTH_BAR_WIDTH: f32 = 100.0;
 const FORTRESS_HEALTH_BAR_HEIGHT: f32 = 6.0;
-/// Y offset from fortress center (centered on the fortress sprite).
-const FORTRESS_HEALTH_BAR_Y_OFFSET: f32 = 0.0;
+/// Y offset: above the 128px fortress. Half height (64) + padding (10) = 74.
+const FORTRESS_HEALTH_BAR_Y_OFFSET: f32 = 74.0;
 
 // === Zone Column Ranges (start column, inclusive) ===
 
@@ -265,6 +279,20 @@ mod tests {
         assert!(FORTRESS_HEALTH_BAR_HEIGHT > 0.0);
         assert!(FORTRESS_HEALTH_BAR_Y_OFFSET >= 0.0);
     }
+
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn fortress_rows_is_two() {
+        assert_eq!(FORTRESS_ROWS, 2);
+    }
+
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn fortress_combat_stats_are_positive() {
+        assert!(FORTRESS_DAMAGE > 0.0);
+        assert!(FORTRESS_ATTACK_SPEED > 0.0);
+        assert!(FORTRESS_RANGE > 0.0);
+    }
 }
 
 #[cfg(test)]
@@ -285,7 +313,7 @@ mod integration_tests {
     #[test]
     fn spawn_battlefield_creates_expected_sprites() {
         let mut app = create_battlefield_test_app();
-        assert_entity_count::<With<Sprite>>(&mut app, 65); // 5 zones + 60 grid cells
+        assert_entity_count::<With<Sprite>>(&mut app, 67); // 5 zones + 2 fortress zone backdrops + 60 grid cells
     }
 
     #[test]
@@ -304,7 +332,7 @@ mod integration_tests {
     fn all_battlefield_entities_have_despawn_on_exit() {
         let mut app = create_battlefield_test_app();
         // All 5 zones + 60 grid cells have DespawnOnExit
-        assert_entity_count::<(With<Sprite>, With<DespawnOnExit<GameState>>)>(&mut app, 65);
+        assert_entity_count::<(With<Sprite>, With<DespawnOnExit<GameState>>)>(&mut app, 67);
     }
 
     #[test]
@@ -419,5 +447,35 @@ mod integration_tests {
         let mut app = create_battlefield_test_app();
         assert_entity_count::<(With<PlayerFortress>, With<HealthBarConfig>)>(&mut app, 1);
         assert_entity_count::<(With<EnemyFortress>, With<HealthBarConfig>)>(&mut app, 1);
+    }
+
+    #[test]
+    fn fortress_is_2x2_cells() {
+        let mut app = create_battlefield_test_app();
+        let expected = Vec2::new(
+            f32::from(FORTRESS_COLS) * CELL_SIZE,
+            f32::from(FORTRESS_ROWS) * CELL_SIZE,
+        );
+        let mut query = app
+            .world_mut()
+            .query_filtered::<&Sprite, With<PlayerFortress>>();
+        let sprite = query.single(app.world()).unwrap();
+        assert_eq!(sprite.custom_size, Some(expected));
+    }
+
+    #[test]
+    fn fortress_has_combat_stats() {
+        use crate::gameplay::CombatStats;
+        let mut app = create_battlefield_test_app();
+        assert_entity_count::<(With<PlayerFortress>, With<CombatStats>)>(&mut app, 1);
+        assert_entity_count::<(With<EnemyFortress>, With<CombatStats>)>(&mut app, 1);
+    }
+
+    #[test]
+    fn fortress_has_current_target() {
+        use crate::gameplay::CurrentTarget;
+        let mut app = create_battlefield_test_app();
+        assert_entity_count::<(With<PlayerFortress>, With<CurrentTarget>)>(&mut app, 1);
+        assert_entity_count::<(With<EnemyFortress>, With<CurrentTarget>)>(&mut app, 1);
     }
 }

@@ -1,42 +1,44 @@
-//! Unit AI: target selection.
+//! AI: target selection for all combat entities (units, fortresses, turrets).
 
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
-use crate::gameplay::{Target, Team};
+use super::{CurrentTarget, Movement, Target, Team};
 use crate::third_party::surface_distance;
+use crate::{GameSet, gameplay_running};
 
-use super::{BACKTRACK_DISTANCE, CurrentTarget, Unit};
+/// Maximum distance (pixels) a mobile entity will backtrack to chase a target behind it.
+/// 2 cells = 128 pixels.
+const BACKTRACK_DISTANCE: f32 = 2.0 * super::battlefield::CELL_SIZE;
 
-/// How many frames between full re-evaluations for units that already have a valid target.
-/// Units with no target (or a despawned target) always evaluate immediately.
+/// How many frames between full re-evaluations for entities that already have a valid target.
+/// Entities with no target (or a despawned target) always evaluate immediately.
 const RETARGET_INTERVAL_FRAMES: u32 = 10;
 
-/// Finds the nearest valid target for each unit. Runs in `GameSet::Ai`.
+/// Finds the nearest valid target for each entity with `CurrentTarget`. Runs in `GameSet::Ai`.
 ///
-/// - Units without a target evaluate every frame (so newly spawned units react instantly).
-/// - Units with a valid target only re-evaluate every [`RETARGET_INTERVAL_FRAMES`] frames.
-/// - Respects the backtrack limit — ignores enemies too far behind.
-pub(super) fn unit_find_target(
+/// Works for both units (with `Movement`) and static entities like fortresses (no `Movement`).
+/// - Entities without a target evaluate every frame (so newly spawned units react instantly).
+/// - Entities with a valid target only re-evaluate every [`RETARGET_INTERVAL_FRAMES`] frames.
+/// - Backtrack limit only applies to mobile entities (those with `Movement`).
+fn find_target(
     mut counter: Local<u32>,
-    mut units: Query<
-        (
-            Entity,
-            &Team,
-            &GlobalTransform,
-            &Collider,
-            &mut CurrentTarget,
-        ),
-        With<Unit>,
-    >,
+    mut seekers: Query<(
+        Entity,
+        &Team,
+        &GlobalTransform,
+        &Collider,
+        &mut CurrentTarget,
+        Option<&Movement>,
+    )>,
     all_targets: Query<(Entity, &Team, &GlobalTransform, &Collider), With<Target>>,
 ) {
     *counter = counter.wrapping_add(1);
 
-    for (entity, team, transform, unit_collider, mut current_target) in &mut units {
+    for (entity, team, transform, seeker_collider, mut current_target, movement) in &mut seekers {
         let has_valid_target = current_target.0.is_some_and(|e| all_targets.get(e).is_ok());
 
-        // Stagger: each unit retargets on a different frame based on its entity index
+        // Stagger: each entity retargets on a different frame based on its entity index
         let should_retarget =
             (entity.index().index().wrapping_add(*counter)) % RETARGET_INTERVAL_FRAMES == 0;
         if has_valid_target && !should_retarget {
@@ -49,7 +51,7 @@ pub(super) fn unit_find_target(
             Team::Enemy => Team::Player,
         };
 
-        // Find nearest enemy target within backtrack limit
+        // Find nearest enemy target (backtrack filter only for mobile entities)
         let mut nearest: Option<(Entity, f32)> = None;
         for (candidate, candidate_team, candidate_pos, candidate_collider) in &all_targets {
             if candidate == entity || *candidate_team != opposing_team {
@@ -57,16 +59,18 @@ pub(super) fn unit_find_target(
             }
             let candidate_xy = candidate_pos.translation().xy();
 
-            // Backtrack filter: ignore targets too far behind (uses x-distance, not surface)
-            let behind = match team {
-                Team::Player => my_pos.x - candidate_xy.x,
-                Team::Enemy => candidate_xy.x - my_pos.x,
-            };
-            if behind > BACKTRACK_DISTANCE {
-                continue;
+            // Backtrack filter: only applies to moving entities (units)
+            if movement.is_some() {
+                let behind = match team {
+                    Team::Player => my_pos.x - candidate_xy.x,
+                    Team::Enemy => candidate_xy.x - my_pos.x,
+                };
+                if behind > BACKTRACK_DISTANCE {
+                    continue;
+                }
             }
 
-            let dist = surface_distance(unit_collider, my_pos, candidate_collider, candidate_xy);
+            let dist = surface_distance(seeker_collider, my_pos, candidate_collider, candidate_xy);
             if nearest.is_none_or(|(_, d)| dist < d) {
                 nearest = Some((candidate, dist));
             }
@@ -76,12 +80,23 @@ pub(super) fn unit_find_target(
     }
 }
 
+// === Plugin ===
+
+pub(super) fn plugin(app: &mut App) {
+    app.add_systems(
+        Update,
+        find_target.in_set(GameSet::Ai).run_if(gameplay_running),
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gameplay::units::UNIT_RADIUS;
+    use crate::gameplay::units::{UNIT_RADIUS, Unit};
+    use pretty_assertions::assert_eq;
 
     /// Spawn a unit entity with Transform + GlobalTransform at the given position.
+    /// Includes `Movement` so the backtrack filter applies (matching real units).
     fn spawn_unit(world: &mut World, team: Team, x: f32, y: f32) -> Entity {
         world
             .spawn((
@@ -89,6 +104,7 @@ mod tests {
                 team,
                 Target,
                 CurrentTarget(None),
+                Movement { speed: 50.0 },
                 Transform::from_xyz(x, y, 0.0),
                 GlobalTransform::from(Transform::from_xyz(x, y, 0.0)),
                 Collider::circle(UNIT_RADIUS),
@@ -112,7 +128,7 @@ mod tests {
     fn create_ai_test_app() -> App {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
-        app.add_systems(Update, unit_find_target);
+        app.add_systems(Update, find_target);
         app
     }
 
@@ -217,5 +233,58 @@ mod tests {
 
         let ct = app.world().get::<CurrentTarget>(enemy).unwrap();
         assert_eq!(ct.0, Some(building));
+    }
+
+    #[test]
+    fn fortress_targets_nearest_enemy() {
+        let mut app = create_ai_test_app();
+
+        // Spawn a fortress-like entity (no Unit, no Movement — static)
+        let fortress = app
+            .world_mut()
+            .spawn((
+                Team::Player,
+                Target,
+                CurrentTarget(None),
+                Transform::from_xyz(64.0, 320.0, 0.0),
+                GlobalTransform::from(Transform::from_xyz(64.0, 320.0, 0.0)),
+                Collider::rectangle(128.0, 128.0),
+            ))
+            .id();
+
+        // Spawn two enemy targets
+        let near_enemy = spawn_target(app.world_mut(), Team::Enemy, 200.0, 320.0);
+        let _far_enemy = spawn_target(app.world_mut(), Team::Enemy, 500.0, 320.0);
+
+        app.update();
+
+        let ct = app.world().get::<CurrentTarget>(fortress).unwrap();
+        assert_eq!(ct.0, Some(near_enemy));
+    }
+
+    #[test]
+    fn static_entity_has_no_backtrack_limit() {
+        let mut app = create_ai_test_app();
+
+        // Fortress at x=500 with enemy "behind" at x=100 (would be filtered for units)
+        let fortress = app
+            .world_mut()
+            .spawn((
+                Team::Player,
+                Target,
+                CurrentTarget(None),
+                Transform::from_xyz(500.0, 320.0, 0.0),
+                GlobalTransform::from(Transform::from_xyz(500.0, 320.0, 0.0)),
+                Collider::rectangle(128.0, 128.0),
+            ))
+            .id();
+
+        let behind_enemy = spawn_target(app.world_mut(), Team::Enemy, 100.0, 320.0);
+
+        app.update();
+
+        // Static entity (no Movement) should target regardless of direction
+        let ct = app.world().get::<CurrentTarget>(fortress).unwrap();
+        assert_eq!(ct.0, Some(behind_enemy));
     }
 }

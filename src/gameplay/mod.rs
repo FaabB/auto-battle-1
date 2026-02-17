@@ -9,12 +9,14 @@
 //! **Buildings**: `Building`, `Team`, `Target`, `Health`, `HealthBarConfig`,
 //!           `ProductionTimer` or `IncomeTimer`, `RigidBody::Static`, `Collider`, `CollisionLayers`
 //!
-//! **Fortresses**: `PlayerFortress`/`EnemyFortress`, `Team`, `Target`, `Health`,
-//!           `HealthBarConfig`, `RigidBody::Static`, `Collider`, `CollisionLayers`
+//! **Fortresses**: `PlayerFortress`/`EnemyFortress`, `Team`, `Target`, `CurrentTarget`,
+//!           `Health`, `CombatStats`, `AttackTimer`, `HealthBarConfig`,
+//!           `RigidBody::Static`, `Collider`, `CollisionLayers`
 //!
 //! **Projectiles**: `Projectile`, `Team`, `Hitbox`, `Sensor`, `RigidBody::Kinematic`,
 //!           `Collider`, `CollisionLayers`, `CollisionEventsEnabled`, `CollidingEntities`
 
+pub mod ai;
 pub mod battlefield;
 pub mod building;
 pub mod combat;
@@ -55,12 +57,38 @@ impl Health {
 #[reflect(Component)]
 pub struct Target;
 
+/// Tracks the entity this entity is currently moving toward / attacking.
+/// Updated by the AI system; read by movement and combat systems.
+#[derive(Component, Debug, Clone, Copy, Reflect)]
+#[reflect(Component)]
+pub struct CurrentTarget(pub Option<Entity>);
+
+/// Movement speed for any mobile entity.
+#[derive(Component, Debug, Clone, Reflect)]
+#[reflect(Component)]
+pub struct Movement {
+    pub speed: f32,
+}
+
+/// Combat parameters for any attacking entity (units, fortresses, future turrets).
+#[derive(Component, Debug, Clone, Reflect)]
+#[reflect(Component)]
+pub struct CombatStats {
+    pub damage: f32,
+    pub attack_speed: f32,
+    pub range: f32,
+}
+
 pub fn plugin(app: &mut App) {
     app.register_type::<Team>()
         .register_type::<Health>()
-        .register_type::<Target>();
+        .register_type::<Target>()
+        .register_type::<CurrentTarget>()
+        .register_type::<Movement>()
+        .register_type::<CombatStats>();
 
     app.add_plugins((
+        ai::plugin,
         battlefield::plugin,
         building::plugin,
         combat::plugin,

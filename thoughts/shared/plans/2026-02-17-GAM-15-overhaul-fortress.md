@@ -26,7 +26,7 @@ Rework fortresses from full-height zone markers (2×10 cells, 128×640px) into c
 
 After implementation:
 1. Fortresses are 2×2 cells (128×128px) centered vertically in their columns
-2. Both fortresses fire projectiles at enemy units within 200px range (turret-like: 50 dmg, 0.5 attacks/sec)
+2. Both fortresses fire projectiles at enemy units within 300px range (turret-like: 50 dmg, 0.5 attacks/sec)
 3. Enemy units spawn at the enemy fortress entity's position (not a hardcoded column)
 4. If enemy fortress is destroyed, enemy spawning stops naturally
 5. Health bars sit above the fortress, proportional to its visual size
@@ -122,15 +122,15 @@ Note: `Sprite::from_color()` stores size in the `Sprite` component's internal `c
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (no clippy warnings)
-- [ ] `make test` passes (all existing + new tests)
-- [ ] `make build` passes
+- [x] `make check` passes (no clippy warnings)
+- [x] `make test` passes (all existing + new tests) — 175 tests pass
+- [x] `make build` passes
 
 #### Manual Verification:
-- [ ] Fortress appears as a small square centered vertically in its column
-- [ ] Health bar sits above the fortress (not centered on it)
-- [ ] Health bar updates correctly when fortress takes damage
-- [ ] No visual regression in other zones
+- [x] Fortress appears as a small square centered vertically in its column
+- [x] Health bar sits above the fortress (not centered on it)
+- [x] Health bar updates correctly when fortress takes damage
+- [x] No visual regression in other zones
 
 **Implementation Note**: Pause here for manual verification before proceeding.
 
@@ -156,8 +156,8 @@ pub const FORTRESS_DAMAGE: f32 = 50.0;
 /// Fortress attacks per second — slow turret cadence.
 pub const FORTRESS_ATTACK_SPEED: f32 = 0.5;
 
-/// Fortress attack range in pixels (~3 cells).
-pub const FORTRESS_RANGE: f32 = 200.0;
+/// Fortress attack range in pixels (~5 cells).
+pub const FORTRESS_RANGE: f32 = 300.0;
 ```
 
 #### 2. Add combat components to fortress spawn
@@ -323,7 +323,7 @@ fn fortress_can_attack_in_range() {
         CombatStats {
             damage: 50.0,
             attack_speed: 0.5,
-            range: 200.0,
+            range: 300.0,
         },
         AttackTimer(timer),
         Transform::from_xyz(64.0, 320.0, 0.0),
@@ -420,18 +420,18 @@ fn fortress_has_current_target() {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes (all existing + new tests)
-- [ ] `make build` passes
+- [x] `make check` passes
+- [x] `make test` passes (all existing + new tests) — 181 tests pass
+- [x] `make build` passes
 
 #### Manual Verification:
-- [ ] Fortresses fire projectiles at enemy units within range
-- [ ] Projectiles originate from fortress position
-- [ ] Fortress correctly targets nearest enemy
-- [ ] Fortress stops attacking when no enemies in range
-- [ ] Both player and enemy fortress attack
-- [ ] No friendly fire from fortress projectiles
-- [ ] Endgame detection still works (fortress can still die)
+- [x] Fortresses fire projectiles at enemy units within range
+- [x] Projectiles originate from fortress position
+- [x] Fortress correctly targets nearest enemy
+- [x] Fortress stops attacking when no enemies in range
+- [x] Both player and enemy fortress attack
+- [x] No friendly fire from fortress projectiles
+- [x] Endgame detection still works (fortress can still die)
 
 **Implementation Note**: Pause here for manual verification before proceeding.
 
@@ -580,15 +580,15 @@ fn no_enemies_spawn_when_fortress_destroyed() {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes (all existing + new tests)
-- [ ] `make build` passes
+- [x] `make check` passes
+- [x] `make test` passes (all existing + new tests) — 183 tests pass
+- [x] `make build` passes
 
 #### Manual Verification:
-- [ ] Enemy units spawn from the enemy fortress position (not from the right edge)
-- [ ] When enemy fortress is destroyed, no more enemies spawn
-- [ ] Enemy units still move left toward player fortress after spawning
-- [ ] Spawn timing/ramping still works correctly
+- [x] Enemy units spawn from the enemy fortress position (not from the right edge)
+- [x] When enemy fortress is destroyed, no more enemies spawn
+- [x] Enemy units still move left toward player fortress after spawning
+- [x] Spawn timing/ramping still works correctly
 
 ---
 

@@ -1,6 +1,5 @@
 //! Unit components, constants, and shared rendering assets.
 
-mod ai;
 mod movement;
 pub mod spawn;
 
@@ -11,7 +10,7 @@ use crate::gameplay::combat::{
     AttackTimer, HealthBarConfig, UNIT_HEALTH_BAR_HEIGHT, UNIT_HEALTH_BAR_WIDTH,
     UNIT_HEALTH_BAR_Y_OFFSET,
 };
-use crate::gameplay::{Health, Target, Team};
+use crate::gameplay::{CombatStats, CurrentTarget, Health, Movement, Target, Team};
 use crate::screens::GameState;
 use crate::third_party::CollisionLayer;
 use crate::{GameSet, Z_UNIT, gameplay_running};
@@ -27,38 +26,12 @@ const PLAYER_UNIT_COLOR: Color = Color::srgb(0.2, 0.8, 0.2);
 /// Enemy unit color (red).
 const ENEMY_UNIT_COLOR: Color = Color::srgb(0.8, 0.2, 0.2);
 
-/// Maximum distance (pixels) a unit will backtrack to chase a target behind it.
-/// 2 cells = 128 pixels.
-pub const BACKTRACK_DISTANCE: f32 = 2.0 * crate::gameplay::battlefield::CELL_SIZE;
-
 // === Components ===
 
 /// Marker for unit entities.
 #[derive(Component, Debug, Clone, Copy, Reflect)]
 #[reflect(Component)]
 pub struct Unit;
-
-/// Combat parameters.
-#[derive(Component, Debug, Clone, Reflect)]
-#[reflect(Component)]
-pub struct CombatStats {
-    pub damage: f32,
-    pub attack_speed: f32,
-    pub range: f32,
-}
-
-/// Movement speed.
-#[derive(Component, Debug, Clone, Reflect)]
-#[reflect(Component)]
-pub struct Movement {
-    pub speed: f32,
-}
-
-/// Tracks the entity this unit is currently moving toward / attacking.
-/// Updated by the AI system; read by movement and (future) combat systems.
-#[derive(Component, Debug, Clone, Copy, Reflect)]
-#[reflect(Component)]
-pub struct CurrentTarget(pub Option<Entity>);
 
 // === Unit Type System ===
 
@@ -193,22 +166,11 @@ fn setup_unit_assets(
 // === Plugin ===
 
 pub(super) fn plugin(app: &mut App) {
-    app.register_type::<Unit>()
-        .register_type::<UnitType>()
-        .register_type::<CombatStats>()
-        .register_type::<Movement>()
-        .register_type::<CurrentTarget>();
+    app.register_type::<Unit>().register_type::<UnitType>();
 
     app.add_systems(OnEnter(GameState::InGame), setup_unit_assets);
 
     spawn::plugin(app);
-
-    app.add_systems(
-        Update,
-        ai::unit_find_target
-            .in_set(GameSet::Ai)
-            .run_if(gameplay_running),
-    );
 
     app.add_systems(
         Update,

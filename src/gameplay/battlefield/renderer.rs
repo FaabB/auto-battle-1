@@ -6,20 +6,17 @@ use bevy::prelude::*;
 use super::{
     BATTLEFIELD_HEIGHT, BATTLEFIELD_ROWS, BATTLEFIELD_WIDTH, BUILD_ZONE_COLS, BUILD_ZONE_START_COL,
     BattlefieldBackground, BuildSlot, BuildZone, CELL_SIZE, COMBAT_ZONE_COLS,
-    COMBAT_ZONE_START_COL, CombatZone, ENEMY_FORT_START_COL, EnemyFortress, FORTRESS_COLS,
-    GridIndex, PLAYER_FORT_START_COL, PlayerFortress, battlefield_center_y, col_to_world_x,
-    row_to_world_y, zone_center_x,
+    COMBAT_ZONE_START_COL, CombatZone, ENEMY_FORT_START_COL, EnemyFortress, FORTRESS_ATTACK_SPEED,
+    FORTRESS_COLS, FORTRESS_DAMAGE, FORTRESS_HEALTH_BAR_HEIGHT, FORTRESS_HEALTH_BAR_WIDTH,
+    FORTRESS_HEALTH_BAR_Y_OFFSET, FORTRESS_HP, FORTRESS_RANGE, FORTRESS_ROWS, GridIndex,
+    PLAYER_FORT_START_COL, PlayerFortress, battlefield_center_y, col_to_world_x, row_to_world_y,
+    zone_center_x,
 };
-use crate::gameplay::combat::HealthBarConfig;
-use crate::gameplay::{Health, Target, Team};
+use crate::gameplay::combat::{AttackTimer, HealthBarConfig};
+use crate::gameplay::{CombatStats, CurrentTarget, Health, Target, Team};
 use crate::screens::GameState;
 use crate::third_party::CollisionLayer;
-use crate::{Z_BACKGROUND, Z_GRID, Z_ZONE};
-
-use super::{
-    FORTRESS_HEALTH_BAR_HEIGHT, FORTRESS_HEALTH_BAR_WIDTH, FORTRESS_HEALTH_BAR_Y_OFFSET,
-    FORTRESS_HP,
-};
+use crate::{Z_BACKGROUND, Z_FORTRESS, Z_GRID, Z_ZONE};
 
 /// Color for individual grid cells in the build zone.
 const GRID_CELL_COLOR: Color = Color::srgb(0.3, 0.3, 0.4);
@@ -35,7 +32,10 @@ const BACKGROUND_COLOR: Color = Color::srgb(0.1, 0.1, 0.12);
 /// Spawns all battlefield entities: zone sprites with markers, and build slot grid.
 #[allow(clippy::too_many_lines)]
 pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<GridIndex>) {
-    let fortress_size = Vec2::new(f32::from(FORTRESS_COLS) * CELL_SIZE, BATTLEFIELD_HEIGHT);
+    let fortress_size = Vec2::new(
+        f32::from(FORTRESS_COLS) * CELL_SIZE,
+        f32::from(FORTRESS_ROWS) * CELL_SIZE,
+    );
 
     // Background (slightly larger than battlefield for visual framing)
     commands.spawn((
@@ -53,6 +53,20 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
         DespawnOnExit(GameState::InGame),
     ));
 
+    let fortress_zone_size = Vec2::new(f32::from(FORTRESS_COLS) * CELL_SIZE, BATTLEFIELD_HEIGHT);
+
+    // Player fortress zone backdrop (full-height, behind the fortress entity)
+    commands.spawn((
+        Name::new("Player Fortress Zone"),
+        Sprite::from_color(COMBAT_ZONE_COLOR, fortress_zone_size),
+        Transform::from_xyz(
+            zone_center_x(PLAYER_FORT_START_COL, FORTRESS_COLS),
+            battlefield_center_y(),
+            Z_ZONE,
+        ),
+        DespawnOnExit(GameState::InGame),
+    ));
+
     // Player fortress (blue)
     commands.spawn((
         Name::new("Player Fortress"),
@@ -65,11 +79,21 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
             height: FORTRESS_HEALTH_BAR_HEIGHT,
             y_offset: FORTRESS_HEALTH_BAR_Y_OFFSET,
         },
+        CombatStats {
+            damage: FORTRESS_DAMAGE,
+            attack_speed: FORTRESS_ATTACK_SPEED,
+            range: FORTRESS_RANGE,
+        },
+        AttackTimer(Timer::from_seconds(
+            1.0 / FORTRESS_ATTACK_SPEED,
+            TimerMode::Repeating,
+        )),
+        CurrentTarget(None),
         Sprite::from_color(PLAYER_FORT_COLOR, fortress_size),
         Transform::from_xyz(
             zone_center_x(PLAYER_FORT_START_COL, FORTRESS_COLS),
             battlefield_center_y(),
-            Z_ZONE,
+            Z_FORTRESS,
         ),
         DespawnOnExit(GameState::InGame),
         // Physics
@@ -113,6 +137,18 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
         DespawnOnExit(GameState::InGame),
     ));
 
+    // Enemy fortress zone backdrop (full-height, behind the fortress entity)
+    commands.spawn((
+        Name::new("Enemy Fortress Zone"),
+        Sprite::from_color(COMBAT_ZONE_COLOR, fortress_zone_size),
+        Transform::from_xyz(
+            zone_center_x(ENEMY_FORT_START_COL, FORTRESS_COLS),
+            battlefield_center_y(),
+            Z_ZONE,
+        ),
+        DespawnOnExit(GameState::InGame),
+    ));
+
     // Enemy fortress (red)
     commands.spawn((
         Name::new("Enemy Fortress"),
@@ -125,11 +161,21 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
             height: FORTRESS_HEALTH_BAR_HEIGHT,
             y_offset: FORTRESS_HEALTH_BAR_Y_OFFSET,
         },
+        CombatStats {
+            damage: FORTRESS_DAMAGE,
+            attack_speed: FORTRESS_ATTACK_SPEED,
+            range: FORTRESS_RANGE,
+        },
+        AttackTimer(Timer::from_seconds(
+            1.0 / FORTRESS_ATTACK_SPEED,
+            TimerMode::Repeating,
+        )),
+        CurrentTarget(None),
         Sprite::from_color(ENEMY_FORT_COLOR, fortress_size),
         Transform::from_xyz(
             zone_center_x(ENEMY_FORT_START_COL, FORTRESS_COLS),
             battlefield_center_y(),
-            Z_ZONE,
+            Z_FORTRESS,
         ),
         DespawnOnExit(GameState::InGame),
         // Physics
