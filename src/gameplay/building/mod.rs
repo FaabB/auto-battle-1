@@ -16,16 +16,16 @@ use crate::{GameSet, gameplay_running};
 const GRID_CURSOR_COLOR: Color = Color::srgba(1.0, 1.0, 1.0, 0.2);
 
 /// Building sprite size (slightly smaller than cell to show grid outline).
-const BUILDING_SPRITE_SIZE: f32 = CELL_SIZE - 4.0;
+const BUILDING_SPRITE_SIZE: f32 = 40.0;
 
 /// Building health bar width (wider than units since buildings are larger).
-const BUILDING_HEALTH_BAR_WIDTH: f32 = 40.0;
+const BUILDING_HEALTH_BAR_WIDTH: f32 = 28.0;
 
 /// Building health bar height.
-const BUILDING_HEALTH_BAR_HEIGHT: f32 = 4.0;
+const BUILDING_HEALTH_BAR_HEIGHT: f32 = 3.0;
 
 /// Building health bar Y offset (above center of building sprite).
-const BUILDING_HEALTH_BAR_Y_OFFSET: f32 = 36.0;
+const BUILDING_HEALTH_BAR_Y_OFFSET: f32 = 26.0;
 
 // === Components ===
 

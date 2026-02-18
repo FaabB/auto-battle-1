@@ -147,17 +147,17 @@ spawn_attacker(app.world_mut(), 100.0, Some(target)); // surface distance = 14 -
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (clippy + build)
-- [ ] `make test` passes (all unit + integration tests)
+- [x] `make check` passes (clippy + build)
+- [x] `make test` passes (all unit + integration tests)
 
 #### Manual Verification:
-- [ ] Run the game — units visibly smaller (12px diameter vs 24px)
-- [ ] Buildings visibly smaller within their grid cells (40px in 64px cell)
-- [ ] Visible gaps between adjacent buildings
-- [ ] Projectiles still visible but smaller
-- [ ] Health bars proportionally smaller and correctly positioned above entities
-- [ ] Units can walk through gaps between adjacent buildings
-- [ ] Fortress unchanged at 2×2 cell size
+- [x] Run the game — units visibly smaller (12px diameter vs 24px)
+- [x] Buildings visibly smaller within their grid cells (40px in 64px cell)
+- [x] Visible gaps between adjacent buildings
+- [x] Projectiles still visible but smaller
+- [x] Health bars proportionally smaller and correctly positioned above entities
+- [x] Units can walk through gaps between adjacent buildings
+- [x] Fortress unchanged at 2×2 cell size
 
 ## Testing Strategy
 

@@ -14,7 +14,7 @@ use crate::{GameSet, Z_UNIT, gameplay_running};
 const PROJECTILE_SPEED: f32 = 200.0;
 
 /// Projectile visual radius (pixels).
-const PROJECTILE_RADIUS: f32 = 3.0;
+const PROJECTILE_RADIUS: f32 = 2.0;
 
 /// Projectile color (yellow).
 const PROJECTILE_COLOR: Color = Color::srgb(1.0, 1.0, 0.3);
@@ -289,8 +289,8 @@ mod integration_tests {
     fn unit_spawns_projectile_in_range() {
         let mut app = create_attack_test_app();
 
-        let target = spawn_target(app.world_mut(), 120.0, 100.0);
-        spawn_attacker(app.world_mut(), 100.0, Some(target)); // surface distance = 3 < range 5
+        let target = spawn_target(app.world_mut(), 114.0, 100.0);
+        spawn_attacker(app.world_mut(), 100.0, Some(target)); // surface distance = 14 - 6 - 5 = 3 < range 5
 
         advance_and_update(&mut app, Duration::from_millis(100));
 
@@ -347,7 +347,7 @@ mod integration_tests {
     fn attack_respects_cooldown() {
         let mut app = create_attack_test_app();
 
-        let target = spawn_target(app.world_mut(), 120.0, 100.0);
+        let target = spawn_target(app.world_mut(), 114.0, 100.0);
         let stats = unit_stats(UnitType::Soldier);
 
         // Spawn attacker with fresh timer (NOT nearly elapsed)

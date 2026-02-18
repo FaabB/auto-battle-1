@@ -18,7 +18,7 @@ use crate::{GameSet, Z_UNIT, gameplay_running};
 // === Constants ===
 
 /// Visual radius of a unit circle.
-pub const UNIT_RADIUS: f32 = 12.0;
+pub const UNIT_RADIUS: f32 = 6.0;
 
 /// Player unit color (green).
 const PLAYER_UNIT_COLOR: Color = Color::srgb(0.2, 0.8, 0.2);

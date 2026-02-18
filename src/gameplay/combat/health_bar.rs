@@ -12,13 +12,13 @@ const HEALTH_BAR_BG_COLOR: Color = Color::srgb(0.8, 0.1, 0.1);
 const HEALTH_BAR_FILL_COLOR: Color = Color::srgb(0.1, 0.9, 0.1);
 
 /// Default health bar width for units (pixels).
-pub const UNIT_HEALTH_BAR_WIDTH: f32 = 20.0;
+pub const UNIT_HEALTH_BAR_WIDTH: f32 = 10.0;
 
 /// Default health bar height for units (pixels).
-pub const UNIT_HEALTH_BAR_HEIGHT: f32 = 3.0;
+pub const UNIT_HEALTH_BAR_HEIGHT: f32 = 2.0;
 
 /// Default health bar Y offset for units (pixels above center).
-pub const UNIT_HEALTH_BAR_Y_OFFSET: f32 = 18.0;
+pub const UNIT_HEALTH_BAR_Y_OFFSET: f32 = 10.0;
 
 // === Components ===
 
