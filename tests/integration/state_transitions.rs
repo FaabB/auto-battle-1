@@ -12,6 +12,9 @@ fn create_game_app() -> App {
     app.add_plugins(StatesPlugin);
     app.add_plugins(InputPlugin);
     app.add_plugins(TransformPlugin);
+    app.add_plugins(bevy::asset::AssetPlugin::default());
+    // Gizmo support needed by vleue_navigator's debug-with-gizmos feature (active in dev builds)
+    app.add_plugins(bevy::gizmos::GizmoPlugin);
     app.add_plugins(auto_battle::plugin);
     app
 }

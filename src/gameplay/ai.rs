@@ -11,18 +11,45 @@ use crate::{GameSet, gameplay_running};
 /// 2 cells = 128 pixels.
 const BACKTRACK_DISTANCE: f32 = 2.0 * super::battlefield::CELL_SIZE;
 
-/// How many frames between full re-evaluations for entities that already have a valid target.
-/// Entities with no target (or a despawned target) always evaluate immediately.
-const RETARGET_INTERVAL_FRAMES: u32 = 10;
+/// Number of stagger slots. Entities are distributed across slots by their index.
+/// Each timer tick evaluates one slot's worth of entities, spreading the load.
+/// Full retarget cycle = `RETARGET_SLOT_INTERVAL_SECS * RETARGET_SLOTS` = 0.15s.
+const RETARGET_SLOTS: u32 = 10;
+
+/// Seconds between slot ticks (0.15s full cycle / 10 slots = 0.015s per slot).
+/// Entities without a target (or with a despawned target) always evaluate immediately.
+const RETARGET_SLOT_INTERVAL_SECS: f32 = 0.015;
+
+/// Timer and slot state for staggered retargeting.
+/// Entities re-evaluate targets in round-robin fashion: slot 0 first, then slot 1, etc.
+/// The timer fires every `RETARGET_INTERVAL_SECS / RETARGET_SLOTS` seconds.
+/// Exposed as a resource so tests can manipulate slot and timer state.
+#[derive(Resource, Debug, Reflect)]
+#[reflect(Resource)]
+pub struct RetargetTimer {
+    pub timer: Timer,
+    pub current_slot: u32,
+}
+
+impl Default for RetargetTimer {
+    fn default() -> Self {
+        Self {
+            timer: Timer::from_seconds(RETARGET_SLOT_INTERVAL_SECS, TimerMode::Repeating),
+            current_slot: 0,
+        }
+    }
+}
 
 /// Finds the nearest valid target for each entity with `CurrentTarget`. Runs in `GameSet::Ai`.
 ///
 /// Works for both units (with `Movement`) and static entities like fortresses (no `Movement`).
 /// - Entities without a target evaluate every frame (so newly spawned units react instantly).
-/// - Entities with a valid target only re-evaluate every [`RETARGET_INTERVAL_FRAMES`] frames.
+/// - Entities with a valid target re-evaluate on their stagger slot (once per
+///   [`RETARGET_INTERVAL_SECS`] cycle, spread across [`RETARGET_SLOTS`] time intervals).
 /// - Backtrack limit only applies to mobile entities (those with `Movement`).
-fn find_target(
-    mut counter: Local<u32>,
+pub fn find_target(
+    time: Res<Time>,
+    mut retarget_timer: ResMut<RetargetTimer>,
     mut seekers: Query<(
         Entity,
         &Team,
@@ -33,16 +60,23 @@ fn find_target(
     )>,
     all_targets: Query<(Entity, &Team, &GlobalTransform, &Collider), With<Target>>,
 ) {
-    *counter = counter.wrapping_add(1);
+    retarget_timer.timer.tick(time.delta());
+    let slot_advanced = retarget_timer.timer.just_finished();
+    if slot_advanced {
+        retarget_timer.current_slot = (retarget_timer.current_slot + 1) % RETARGET_SLOTS;
+    }
 
     for (entity, team, transform, seeker_collider, mut current_target, movement) in &mut seekers {
         let has_valid_target = current_target.0.is_some_and(|e| all_targets.get(e).is_ok());
 
-        // Stagger: each entity retargets on a different frame based on its entity index
-        let should_retarget =
-            (entity.index().index().wrapping_add(*counter)) % RETARGET_INTERVAL_FRAMES == 0;
-        if has_valid_target && !should_retarget {
-            continue;
+        if has_valid_target {
+            if !slot_advanced {
+                continue;
+            }
+            let entity_slot = entity.index().index() % RETARGET_SLOTS;
+            if entity_slot != retarget_timer.current_slot {
+                continue;
+            }
         }
 
         let my_pos = transform.translation().xy();
@@ -83,6 +117,8 @@ fn find_target(
 // === Plugin ===
 
 pub(super) fn plugin(app: &mut App) {
+    app.init_resource::<RetargetTimer>();
+    app.register_type::<RetargetTimer>();
     app.add_systems(
         Update,
         find_target.in_set(GameSet::Ai).run_if(gameplay_running),
@@ -128,8 +164,27 @@ mod tests {
     fn create_ai_test_app() -> App {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
+        app.init_resource::<RetargetTimer>();
         app.add_systems(Update, find_target);
         app
+    }
+
+    /// Set the retarget timer so the NEXT `app.update()` will fire the slot
+    /// that `entity` belongs to. Sets `current_slot` to entity's slot - 1
+    /// and nearly expires the timer so the next tick advances into the entity's slot.
+    fn set_retarget_for_entity(app: &mut App, entity: Entity) {
+        let entity_slot = entity.index().index() % RETARGET_SLOTS;
+        let prev_slot = if entity_slot == 0 {
+            RETARGET_SLOTS - 1
+        } else {
+            entity_slot - 1
+        };
+        let mut timer = app.world_mut().resource_mut::<RetargetTimer>();
+        timer.current_slot = prev_slot;
+        let duration = timer.timer.duration();
+        timer
+            .timer
+            .set_elapsed(duration - std::time::Duration::from_nanos(1));
     }
 
     #[test]
@@ -182,13 +237,13 @@ mod tests {
     }
 
     #[test]
-    fn unit_switches_to_closer_target_on_retarget_frame() {
+    fn unit_switches_to_closer_target_on_retarget() {
         let mut app = create_ai_test_app();
 
         let player = spawn_unit(app.world_mut(), Team::Player, 100.0, 100.0);
         let enemy_far = spawn_unit(app.world_mut(), Team::Enemy, 300.0, 100.0);
 
-        // First update gives a target (counter=1, no target yet → evaluates)
+        // First update gives a target (no target yet → evaluates immediately)
         app.update();
         let ct = app.world().get::<CurrentTarget>(player).unwrap();
         assert_eq!(ct.0, Some(enemy_far));
@@ -196,10 +251,10 @@ mod tests {
         // Spawn a closer enemy
         let enemy_near = spawn_unit(app.world_mut(), Team::Enemy, 150.0, 100.0);
 
-        // Run enough updates to trigger a retarget frame (counter resets at 10)
-        for _ in 0..RETARGET_INTERVAL_FRAMES {
-            app.update();
-        }
+        // Set timer to fire on the player's slot next update
+        set_retarget_for_entity(&mut app, player);
+
+        app.update();
 
         // Should have switched to the closer enemy
         let ct = app.world().get::<CurrentTarget>(player).unwrap();

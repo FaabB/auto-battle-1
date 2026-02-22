@@ -13,10 +13,12 @@ use super::{
     zone_center_x,
 };
 use crate::gameplay::combat::{AttackTimer, HealthBarConfig};
+use crate::gameplay::units::UNIT_RADIUS;
 use crate::gameplay::{CombatStats, CurrentTarget, Health, Target, Team};
 use crate::screens::GameState;
-use crate::third_party::CollisionLayer;
+use crate::third_party::{CollisionLayer, NavObstacle};
 use crate::{Z_BACKGROUND, Z_FORTRESS, Z_GRID, Z_ZONE};
+use vleue_navigator::prelude::*;
 
 /// Color for individual grid cells in the build zone.
 const GRID_CELL_COLOR: Color = Color::srgb(0.3, 0.3, 0.4);
@@ -68,42 +70,45 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
     ));
 
     // Player fortress (blue)
-    commands.spawn((
-        Name::new("Player Fortress"),
-        PlayerFortress,
-        Team::Player,
-        Target,
-        Health::new(FORTRESS_HP),
-        HealthBarConfig {
-            width: FORTRESS_HEALTH_BAR_WIDTH,
-            height: FORTRESS_HEALTH_BAR_HEIGHT,
-            y_offset: FORTRESS_HEALTH_BAR_Y_OFFSET,
-        },
-        CombatStats {
-            damage: FORTRESS_DAMAGE,
-            attack_speed: FORTRESS_ATTACK_SPEED,
-            range: FORTRESS_RANGE,
-        },
-        AttackTimer(Timer::from_seconds(
-            1.0 / FORTRESS_ATTACK_SPEED,
-            TimerMode::Repeating,
-        )),
-        CurrentTarget(None),
-        Sprite::from_color(PLAYER_FORT_COLOR, fortress_size),
-        Transform::from_xyz(
-            zone_center_x(PLAYER_FORT_START_COL, FORTRESS_COLS),
-            battlefield_center_y(),
-            Z_FORTRESS,
-        ),
-        DespawnOnExit(GameState::InGame),
-        // Physics
-        RigidBody::Static,
-        Collider::rectangle(fortress_size.x, fortress_size.y),
-        CollisionLayers::new(
-            [CollisionLayer::Pushbox, CollisionLayer::Hurtbox],
-            [CollisionLayer::Pushbox, CollisionLayer::Hitbox],
-        ),
-    ));
+    commands
+        .spawn((
+            Name::new("Player Fortress"),
+            PlayerFortress,
+            Team::Player,
+            Target,
+            Health::new(FORTRESS_HP),
+            HealthBarConfig {
+                width: FORTRESS_HEALTH_BAR_WIDTH,
+                height: FORTRESS_HEALTH_BAR_HEIGHT,
+                y_offset: FORTRESS_HEALTH_BAR_Y_OFFSET,
+            },
+            CombatStats {
+                damage: FORTRESS_DAMAGE,
+                attack_speed: FORTRESS_ATTACK_SPEED,
+                range: FORTRESS_RANGE,
+            },
+            AttackTimer(Timer::from_seconds(
+                1.0 / FORTRESS_ATTACK_SPEED,
+                TimerMode::Repeating,
+            )),
+            CurrentTarget(None),
+            Sprite::from_color(PLAYER_FORT_COLOR, fortress_size),
+            Transform::from_xyz(
+                zone_center_x(PLAYER_FORT_START_COL, FORTRESS_COLS),
+                battlefield_center_y(),
+                Z_FORTRESS,
+            ),
+            DespawnOnExit(GameState::InGame),
+        ))
+        .insert((
+            NavObstacle,
+            RigidBody::Static,
+            Collider::rectangle(fortress_size.x, fortress_size.y),
+            CollisionLayers::new(
+                [CollisionLayer::Pushbox, CollisionLayer::Hurtbox],
+                [CollisionLayer::Pushbox, CollisionLayer::Hitbox],
+            ),
+        ));
 
     // Building zone (dark blue-gray)
     commands.spawn((
@@ -150,42 +155,45 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
     ));
 
     // Enemy fortress (red)
-    commands.spawn((
-        Name::new("Enemy Fortress"),
-        EnemyFortress,
-        Team::Enemy,
-        Target,
-        Health::new(FORTRESS_HP),
-        HealthBarConfig {
-            width: FORTRESS_HEALTH_BAR_WIDTH,
-            height: FORTRESS_HEALTH_BAR_HEIGHT,
-            y_offset: FORTRESS_HEALTH_BAR_Y_OFFSET,
-        },
-        CombatStats {
-            damage: FORTRESS_DAMAGE,
-            attack_speed: FORTRESS_ATTACK_SPEED,
-            range: FORTRESS_RANGE,
-        },
-        AttackTimer(Timer::from_seconds(
-            1.0 / FORTRESS_ATTACK_SPEED,
-            TimerMode::Repeating,
-        )),
-        CurrentTarget(None),
-        Sprite::from_color(ENEMY_FORT_COLOR, fortress_size),
-        Transform::from_xyz(
-            zone_center_x(ENEMY_FORT_START_COL, FORTRESS_COLS),
-            battlefield_center_y(),
-            Z_FORTRESS,
-        ),
-        DespawnOnExit(GameState::InGame),
-        // Physics
-        RigidBody::Static,
-        Collider::rectangle(fortress_size.x, fortress_size.y),
-        CollisionLayers::new(
-            [CollisionLayer::Pushbox, CollisionLayer::Hurtbox],
-            [CollisionLayer::Pushbox, CollisionLayer::Hitbox],
-        ),
-    ));
+    commands
+        .spawn((
+            Name::new("Enemy Fortress"),
+            EnemyFortress,
+            Team::Enemy,
+            Target,
+            Health::new(FORTRESS_HP),
+            HealthBarConfig {
+                width: FORTRESS_HEALTH_BAR_WIDTH,
+                height: FORTRESS_HEALTH_BAR_HEIGHT,
+                y_offset: FORTRESS_HEALTH_BAR_Y_OFFSET,
+            },
+            CombatStats {
+                damage: FORTRESS_DAMAGE,
+                attack_speed: FORTRESS_ATTACK_SPEED,
+                range: FORTRESS_RANGE,
+            },
+            AttackTimer(Timer::from_seconds(
+                1.0 / FORTRESS_ATTACK_SPEED,
+                TimerMode::Repeating,
+            )),
+            CurrentTarget(None),
+            Sprite::from_color(ENEMY_FORT_COLOR, fortress_size),
+            Transform::from_xyz(
+                zone_center_x(ENEMY_FORT_START_COL, FORTRESS_COLS),
+                battlefield_center_y(),
+                Z_FORTRESS,
+            ),
+            DespawnOnExit(GameState::InGame),
+        ))
+        .insert((
+            NavObstacle,
+            RigidBody::Static,
+            Collider::rectangle(fortress_size.x, fortress_size.y),
+            CollisionLayers::new(
+                [CollisionLayer::Pushbox, CollisionLayer::Hurtbox],
+                [CollisionLayer::Pushbox, CollisionLayer::Hitbox],
+            ),
+        ));
 
     // Build slots: 10 rows × 6 cols — visible grid cells, indexed for O(1) lookup
     for row in 0..BATTLEFIELD_ROWS {
@@ -206,4 +214,23 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
             grid_index.insert(col, row, entity);
         }
     }
+
+    // NavMesh for unit pathfinding — covers the full battlefield.
+    // Obstacles (buildings, fortresses with NavObstacle marker) are auto-carved by
+    // NavmeshUpdaterPlugin. Agent radius ensures paths keep unit centers clear.
+    commands.spawn((
+        Name::new("Battlefield NavMesh"),
+        NavMeshSettings {
+            fixed: Triangulation::from_outer_edges(&[
+                Vec2::new(0.0, 0.0),
+                Vec2::new(BATTLEFIELD_WIDTH, 0.0),
+                Vec2::new(BATTLEFIELD_WIDTH, BATTLEFIELD_HEIGHT),
+                Vec2::new(0.0, BATTLEFIELD_HEIGHT),
+            ]),
+            agent_radius: UNIT_RADIUS,
+            ..default()
+        },
+        NavMeshUpdateMode::Direct,
+        DespawnOnExit(GameState::InGame),
+    ));
 }

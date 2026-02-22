@@ -15,7 +15,7 @@ use crate::gameplay::combat::HealthBarConfig;
 use crate::gameplay::{Health, Target, Team};
 
 use crate::screens::GameState;
-use crate::third_party::CollisionLayer;
+use crate::third_party::{CollisionLayer, NavObstacle};
 use crate::{Z_BUILDING, Z_GRID_CURSOR};
 
 /// Spawns the semi-transparent grid cursor entity. Hidden by default.
@@ -137,6 +137,7 @@ pub(super) fn handle_building_placement(
         ),
         Transform::from_xyz(world_x, world_y, Z_BUILDING),
         DespawnOnExit(GameState::InGame),
+        NavObstacle,
         // Physics
         RigidBody::Static,
         Collider::rectangle(BUILDING_SPRITE_SIZE, BUILDING_SPRITE_SIZE),

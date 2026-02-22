@@ -123,9 +123,9 @@ pub fn plugin(app: &mut bevy::prelude::App) {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` succeeds with new dependency
-- [ ] `make check` passes (clippy + formatting)
-- [ ] `make test` — all existing tests pass
+- [x] `cargo build` succeeds with new dependency
+- [x] `make check` passes (clippy + formatting)
+- [x] `make test` — all existing tests pass
 
 #### Manual Verification:
 - [ ] Game starts without errors (vleue_navigator plugin initializes)
@@ -210,47 +210,62 @@ Add `NavObstacle` to the `commands.spawn((...))` tuple in `handle_building_place
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` succeeds
-- [ ] `make check` passes
-- [ ] `make test` — all existing tests pass (NavObstacle is just a marker, no behavior change)
+- [x] `cargo build` succeeds
+- [x] `make check` passes
+- [x] `make test` — all existing tests pass (NavObstacle is just a marker, no behavior change)
 
 #### Manual Verification:
 - [ ] Run game, place some buildings. No errors in console.
-- [ ] If debug gizmos are enabled (Phase 5), the navmesh visualization should show holes where buildings/fortresses are.
+- [ ] If debug gizmos are enabled (Phase 6), the navmesh visualization should show holes where buildings/fortresses are.
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause here for manual confirmation before proceeding.
 
 ---
 
-## Phase 3: Convert Frame-Based Intervals to Time-Based
+## Phase 3: Convert Frame-Based Intervals to Time-Based (with Stagger)
 
 ### Overview
-Convert `find_target`'s `RETARGET_INTERVAL_FRAMES` (frame-count-based) to a time-based `RetargetTimer` resource. This fixes frame-rate-dependent behavior (0.17s at 60fps vs 0.33s at 30fps) and establishes the pattern for the new `PathRefreshTimer`.
+Convert `find_target`'s `RETARGET_INTERVAL_FRAMES` (frame-count-based) to a time-based slotted `RetargetTimer` resource. This fixes frame-rate-dependent behavior (0.17s at 60fps vs 0.33s at 30fps) while **preserving per-entity stagger** — entities are distributed across time slots so they don't all re-evaluate simultaneously. Also establishes the timer-resource pattern for the new `PathRefreshTimer`.
+
+**Design**: A timer fires every `RETARGET_INTERVAL_SECS / RETARGET_SLOTS` seconds (0.015s). Each fire advances a slot counter (0→1→...→9→0). An entity evaluates when `entity_index % RETARGET_SLOTS == current_slot`. Result: each entity evaluates once per full 0.15s cycle, staggered across 10 time slots (same behavior as frame-based, but FPS-independent).
 
 ### Changes Required:
 
-#### 1. Convert find_target to time-based
+#### 1. Convert find_target to time-based with slotted stagger
 **File**: `src/gameplay/ai.rs`
-**Changes**: Replace `RETARGET_INTERVAL_FRAMES` + `Local<u32>` with a `RetargetTimer` resource
+**Changes**: Replace `RETARGET_INTERVAL_FRAMES` + `Local<u32>` with a `RetargetTimer` resource containing a timer and slot counter
 
 Replace the constants and system:
 ```rust
-/// Seconds between full re-evaluations for entities that already have a valid target.
-/// Entities with no target (or a despawned target) always evaluate immediately.
+/// Seconds for a full retarget cycle across all slots.
+/// Each entity re-evaluates once per cycle. Entities without a target
+/// (or with a despawned target) always evaluate immediately.
 const RETARGET_INTERVAL_SECS: f32 = 0.15;
 
-/// Timer controlling how often entities with valid targets re-evaluate.
-/// Exposed as a resource so tests can manipulate it with `nearly_expire_timer` pattern.
+/// Number of stagger slots. Entities are distributed across slots by their index.
+/// Each timer tick evaluates one slot's worth of entities, spreading the load.
+const RETARGET_SLOTS: u32 = 10;
+
+/// Timer and slot state for staggered retargeting.
+/// Entities re-evaluate targets in round-robin fashion: slot 0 first, then slot 1, etc.
+/// The timer fires every `RETARGET_INTERVAL_SECS / RETARGET_SLOTS` seconds.
+/// Exposed as a resource so tests can manipulate slot and timer state.
 #[derive(Resource, Debug, Reflect)]
 #[reflect(Resource)]
-pub struct RetargetTimer(pub Timer);
+pub struct RetargetTimer {
+    pub timer: Timer,
+    pub current_slot: u32,
+}
 
 impl Default for RetargetTimer {
     fn default() -> Self {
-        Self(Timer::from_seconds(
-            RETARGET_INTERVAL_SECS,
-            TimerMode::Repeating,
-        ))
+        Self {
+            timer: Timer::from_seconds(
+                RETARGET_INTERVAL_SECS / RETARGET_SLOTS as f32,
+                TimerMode::Repeating,
+            ),
+            current_slot: 0,
+        }
     }
 }
 
@@ -258,7 +273,8 @@ impl Default for RetargetTimer {
 ///
 /// Works for both units (with `Movement`) and static entities like fortresses (no `Movement`).
 /// - Entities without a target evaluate every frame (so newly spawned units react instantly).
-/// - Entities with a valid target only re-evaluate every [`RETARGET_INTERVAL_SECS`] seconds.
+/// - Entities with a valid target re-evaluate on their stagger slot (once per
+///   [`RETARGET_INTERVAL_SECS`] cycle, spread across [`RETARGET_SLOTS`] time intervals).
 /// - Backtrack limit only applies to mobile entities (those with `Movement`).
 pub fn find_target(
     time: Res<Time>,
@@ -273,14 +289,23 @@ pub fn find_target(
     )>,
     all_targets: Query<(Entity, &Team, &GlobalTransform, &Collider), With<Target>>,
 ) {
-    retarget_timer.0.tick(time.delta());
-    let refresh_due = retarget_timer.0.just_finished();
+    retarget_timer.timer.tick(time.delta());
+    let slot_advanced = retarget_timer.timer.just_finished();
+    if slot_advanced {
+        retarget_timer.current_slot = (retarget_timer.current_slot + 1) % RETARGET_SLOTS;
+    }
 
     for (entity, team, transform, seeker_collider, mut current_target, movement) in &mut seekers {
         let has_valid_target = current_target.0.is_some_and(|e| all_targets.get(e).is_ok());
 
-        if has_valid_target && !refresh_due {
-            continue;
+        if has_valid_target {
+            if !slot_advanced {
+                continue;
+            }
+            let entity_slot = entity.index().index() % RETARGET_SLOTS;
+            if entity_slot != retarget_timer.current_slot {
+                continue;
+            }
         }
 
         // ... rest of targeting logic unchanged ...
@@ -302,7 +327,7 @@ pub(super) fn plugin(app: &mut App) {
 
 #### 2. Update find_target tests
 **File**: `src/gameplay/ai.rs` (test section)
-**Changes**: Update `create_ai_test_app` to init the resource, update `unit_switches_to_closer_target_on_retarget_frame` to use timer manipulation instead of frame counting.
+**Changes**: Update `create_ai_test_app` to init the resource. Add `set_retarget_for_entity` helper. Update `unit_switches_to_closer_target_on_retarget_frame` to use slot manipulation.
 
 Update test app helper:
 ```rust
@@ -315,10 +340,29 @@ Update test app helper:
     }
 ```
 
+Add test helper to set the timer so the next update evaluates a specific entity's slot:
+```rust
+    /// Set the retarget timer so the NEXT `app.update()` will fire the slot
+    /// that `entity` belongs to. Sets `current_slot` to entity's slot − 1
+    /// and nearly expires the timer so the next tick advances into the entity's slot.
+    fn set_retarget_for_entity(app: &mut App, entity: Entity) {
+        let entity_slot = entity.index().index() % RETARGET_SLOTS;
+        let prev_slot = if entity_slot == 0 {
+            RETARGET_SLOTS - 1
+        } else {
+            entity_slot - 1
+        };
+        let mut timer = app.world_mut().resource_mut::<RetargetTimer>();
+        timer.current_slot = prev_slot;
+        let duration = timer.timer.duration();
+        timer.timer.set_elapsed(duration - std::time::Duration::from_nanos(1));
+    }
+```
+
 Update the retarget test:
 ```rust
     #[test]
-    fn unit_switches_to_closer_target_on_retarget_frame() {
+    fn unit_switches_to_closer_target_on_retarget() {
         let mut app = create_ai_test_app();
 
         let player = spawn_unit(app.world_mut(), Team::Player, 100.0, 100.0);
@@ -332,10 +376,8 @@ Update the retarget test:
         // Spawn a closer enemy
         let enemy_near = spawn_unit(app.world_mut(), Team::Enemy, 150.0, 100.0);
 
-        // Nearly expire the retarget timer so the next update triggers refresh
-        let mut timer = app.world_mut().resource_mut::<RetargetTimer>();
-        let duration = timer.0.duration();
-        timer.0.set_elapsed(duration - std::time::Duration::from_nanos(1));
+        // Set timer to fire on the player's slot next update
+        set_retarget_for_entity(&mut app, player);
 
         app.update();
 
@@ -348,9 +390,9 @@ Update the retarget test:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` succeeds
-- [ ] `make check` passes
-- [ ] `make test` — all AI tests pass with new timer-based logic
+- [x] `cargo build` succeeds
+- [x] `make check` passes
+- [x] `make test` — all AI tests pass with new timer-based slotted logic
 
 ---
 
@@ -537,9 +579,9 @@ In `spawn_unit` (line ~98), add to the component tuple:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` succeeds
-- [ ] `make check` passes
-- [ ] `make test` — all existing tests pass
+- [x] `cargo build` succeeds
+- [x] `make check` passes
+- [x] `make test` — all existing tests pass
 
 #### Manual Verification:
 - [ ] Run game, observe no errors. Units still move (paths are computed but movement system doesn't use them yet — that's Phase 5).
@@ -797,16 +839,16 @@ Add new tests for waypoint following:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` succeeds
-- [ ] `make check` passes
-- [ ] `make test` — all tests pass (including new waypoint tests)
+- [x] `cargo build` succeeds
+- [x] `make check` passes
+- [x] `make test` — all tests pass (including new waypoint tests)
 
 #### Manual Verification:
-- [ ] Run game, place buildings in a wall pattern with one gap
-- [ ] Observe enemy units routing through the gap instead of getting stuck on buildings
-- [ ] Verify units still reach and attack the player fortress
-- [ ] Verify units stop at attack range of their targets
-- [ ] Destroy a building in the wall — units update their route through the new opening
+- [x] Run game, place buildings in a wall pattern with one gap
+- [x] Observe enemy units routing through the gap instead of getting stuck on buildings
+- [x] Verify units still reach and attack the player fortress
+- [x] Verify units stop at attack range of their targets
+- [x] Destroy a building in the wall — units update their route through the new opening
 
 **Implementation Note**: This is the core behavior change. Thorough manual testing is important here.
 
@@ -870,15 +912,15 @@ fn debug_draw_unit_paths(
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` succeeds (with and without `dev` feature)
-- [ ] `make check` passes
-- [ ] `make test` passes
+- [x] `cargo build` succeeds (with and without `dev` feature)
+- [x] `make check` passes
+- [x] `make test` passes
 
 #### Manual Verification:
-- [ ] Run game with dev feature — see red-tinted navmesh overlay on the battlefield
-- [ ] Navmesh shows holes where buildings and fortresses are
-- [ ] See yellow lines showing unit paths
-- [ ] Place a building — navmesh updates visually (hole appears)
+- [x] Run game with dev feature — see red-tinted navmesh overlay on the battlefield
+- [x] Navmesh shows holes where buildings and fortresses are
+- [x] See yellow lines showing unit paths
+- [x] Place a building — navmesh updates visually (hole appears)
 
 ---
 
@@ -967,9 +1009,9 @@ Note: Integration testing of `compute_paths` requires a fully-built NavMesh asse
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make test` — all new and existing tests pass
-- [ ] `make check` passes
-- [ ] Test coverage maintained or increased
+- [x] `make test` — all new and existing tests pass (192 unit + 2 integration)
+- [x] `make check` passes
+- [x] Test coverage maintained or increased
 
 ---
 

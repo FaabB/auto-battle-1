@@ -6,11 +6,12 @@ rust-version = "1.85"
 
 [features]
 default = ["dev"]
-dev = ["bevy/dynamic_linking"]
+dev = ["bevy/dynamic_linking", "vleue_navigator/debug-with-gizmos"]
 
 [dependencies]
 bevy = { version = "0.18", default-features = false, features = ["2d"] }
 avian2d = { version = "0.5", default-features = false, features = ["2d", "parry-f32", "debug-plugin", "parallel"] }
+vleue_navigator = { version = "0.15", default-features = false, features = ["avian2d"] }
 rand = "0.9"
 
 [dev-dependencies]

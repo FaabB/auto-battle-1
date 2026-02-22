@@ -91,16 +91,17 @@ src/
 │   │   ├── shop_ui.rs   # Shop panel UI (card buttons, reroll button)
 │   │   └── ui.rs        # Gold HUD display
 │   └── units/           # Unit components, AI, movement, spawning
-│       ├── mod.rs       # Unit, CombatStats, Movement, CurrentTarget + plugin
-│       ├── ai.rs        # Target finding and retargeting
-│       ├── movement.rs  # Unit movement toward targets
-│       └── spawn.rs     # Enemy spawning with ramping difficulty
+│       ├── mod.rs          # Unit, CombatStats, Movement, CurrentTarget + plugin
+│       ├── ai.rs           # Target finding and retargeting
+│       ├── movement.rs     # Unit movement toward targets (follows NavPath waypoints)
+│       ├── pathfinding.rs  # NavPath component and navmesh path computation
+│       └── spawn.rs        # Enemy spawning with ramping difficulty
 ├── theme/               # Shared color palette and UI widget constructors
 │   ├── mod.rs           # Plugin (empty for now, ready for interaction.rs)
 │   ├── palette.rs       # Color constants
 │   └── widget.rs        # Reusable widget constructors (header, label, overlay)
 └── dev_tools/           # Debug-only tools (feature-gated on `dev`)
-    └── mod.rs           # Stub, ready for debug overlays and inspector
+    └── mod.rs           # Navmesh debug overlay (F3), unit path gizmos
 ```
 
 ### When to create a subdirectory
@@ -446,13 +447,19 @@ The `src/dev_tools/` module is feature-gated on `dev`:
 ```toml
 [features]
 default = ["dev"]
-dev = ["bevy/dynamic_linking"]
+dev = ["bevy/dynamic_linking", "vleue_navigator/debug-with-gizmos"]
 ```
 
 - `cargo run` includes dev tools (default features)
 - `cargo run --release --no-default-features` excludes them
 
 Debug spawners, inspector overlays, state logging, and other development-only tools belong here. Both foxtrot and bevy_new_2d gate dev tools the same way, with foxtrot additionally enabling `bevy_dev_tools`, `bevy_ui_debug`, and `bevy-inspector-egui` under the `dev` feature.
+
+### Debug keybindings
+
+| Key | Action | Details |
+|-----|--------|---------|
+| F3 | Toggle navmesh debug overlay | Shows red navmesh triangulation + yellow unit path lines. Off by default. |
 
 ---
 

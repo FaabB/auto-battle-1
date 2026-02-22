@@ -1,6 +1,7 @@
 //! Unit components, constants, and shared rendering assets.
 
 mod movement;
+pub mod pathfinding;
 pub mod spawn;
 
 use avian2d::prelude::*;
@@ -127,6 +128,7 @@ pub fn spawn_unit(
             DespawnOnExit(GameState::InGame),
         ))
         .insert((
+            pathfinding::NavPath::default(),
             RigidBody::Dynamic,
             Collider::circle(UNIT_RADIUS),
             CollisionLayers::new(
@@ -166,7 +168,11 @@ fn setup_unit_assets(
 // === Plugin ===
 
 pub(super) fn plugin(app: &mut App) {
-    app.register_type::<Unit>().register_type::<UnitType>();
+    app.register_type::<Unit>()
+        .register_type::<UnitType>()
+        .register_type::<pathfinding::NavPath>()
+        .register_type::<pathfinding::PathRefreshTimer>()
+        .init_resource::<pathfinding::PathRefreshTimer>();
 
     app.add_systems(OnEnter(GameState::InGame), setup_unit_assets);
 
@@ -174,8 +180,12 @@ pub(super) fn plugin(app: &mut App) {
 
     app.add_systems(
         Update,
-        movement::unit_movement
-            .in_set(GameSet::Movement)
+        (
+            pathfinding::compute_paths
+                .in_set(GameSet::Ai)
+                .after(crate::gameplay::ai::find_target),
+            movement::unit_movement.in_set(GameSet::Movement),
+        )
             .run_if(gameplay_running),
     );
 }
