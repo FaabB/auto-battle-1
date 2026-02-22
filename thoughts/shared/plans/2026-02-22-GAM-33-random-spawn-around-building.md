@@ -308,17 +308,17 @@ fn enemy_spawns_near_fortress() {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (no clippy/compiler errors)
-- [ ] `make test` passes (all tests green)
-- [ ] New `random_navigable_spawn` unit test passes
-- [ ] Updated position tests verify distance, not exact coordinates
+- [x] `make check` passes (no clippy/compiler errors)
+- [x] `make test` passes (all tests green)
+- [x] New `random_navigable_spawn` unit test passes
+- [x] Updated position tests verify distance, not exact coordinates
 
 #### Manual Verification:
-- [ ] Place a barracks and observe units spawning around it (not always to the right)
-- [ ] Multiple units from same barracks appear at different positions
-- [ ] Place two adjacent barracks — units don't spawn inside the neighbor building
-- [ ] Enemy units spawn around fortress at varying positions
-- [ ] Navmesh pathfinding works immediately for newly spawned units (no "stuck" frames)
+- [x] Place a barracks and observe units spawning around it (not always to the right)
+- [x] Multiple units from same barracks appear at different positions
+- [x] Place two adjacent barracks — units don't spawn inside the neighbor building
+- [x] Enemy units spawn around fortress at varying positions
+- [x] Navmesh pathfinding works immediately for newly spawned units (no "stuck" frames)
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause for manual confirmation.
 

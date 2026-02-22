@@ -1,15 +1,19 @@
 //! Continuous enemy spawning with ramping difficulty.
 
 use bevy::prelude::*;
-use rand::Rng;
+use vleue_navigator::prelude::*;
 
-use crate::gameplay::battlefield::{CELL_SIZE, EnemyFortress, FORTRESS_ROWS};
+use crate::gameplay::battlefield::EnemyFortress;
 use crate::screens::GameState;
 use crate::{GameSet, Z_UNIT, gameplay_running};
 
 use crate::gameplay::Team;
 
 use super::UnitAssets;
+
+/// Radius from fortress center where spawned enemies appear.
+/// Clears the 2×2 fortress footprint (128×128px, half-diagonal ≈ 90px).
+const FORTRESS_SPAWN_RADIUS: f32 = 80.0;
 
 // === Constants ===
 
@@ -77,6 +81,8 @@ fn tick_enemy_spawner(
     mut spawn_timer: ResMut<EnemySpawnTimer>,
     unit_assets: Res<UnitAssets>,
     enemy_fortress: Single<&Transform, With<EnemyFortress>>,
+    navmeshes: Option<Res<Assets<NavMesh>>>,
+    navmesh_query: Option<Single<(&ManagedNavMesh, &NavMeshStatus)>>,
     mut commands: Commands,
 ) {
     spawn_timer.elapsed_secs += time.delta_secs();
@@ -88,16 +94,20 @@ fn tick_enemy_spawner(
 
     let fortress_pos = enemy_fortress.translation;
 
-    // Spawn within the fortress footprint
-    let half_height = f32::from(FORTRESS_ROWS) * CELL_SIZE / 2.0;
-    let spawn_x = fortress_pos.x;
-    let spawn_y = fortress_pos.y + rand::rng().random_range(-half_height..half_height);
+    // Extract navmesh if available and built
+    let navmesh = navmesh_query.and_then(|inner| {
+        let (managed, status) = *inner;
+        let meshes = navmeshes.as_ref()?;
+        (*status == NavMeshStatus::Built).then(|| meshes.get(managed))?
+    });
+
+    let spawn_xy = super::random_navigable_spawn(fortress_pos.xy(), FORTRESS_SPAWN_RADIUS, navmesh);
 
     super::spawn_unit(
         &mut commands,
         super::UnitType::Soldier,
         Team::Enemy,
-        Vec3::new(spawn_x, spawn_y, Z_UNIT),
+        spawn_xy.extend(Z_UNIT),
         &unit_assets,
     );
 
@@ -301,7 +311,7 @@ mod integration_tests {
     }
 
     #[test]
-    fn enemy_spawns_at_fortress_position() {
+    fn enemy_spawns_near_fortress() {
         let mut app = create_spawn_test_app();
 
         nearly_expire_timer(&mut app);
@@ -309,21 +319,14 @@ mod integration_tests {
 
         let mut query = app.world_mut().query_filtered::<&Transform, With<Unit>>();
         let unit_transform = query.single(app.world()).unwrap();
-        // Should spawn at fortress X (5152.0)
-        assert!(
-            (unit_transform.translation.x - 5152.0).abs() < f32::EPSILON,
-            "Unit should spawn at fortress X, got {}",
-            unit_transform.translation.x,
-        );
-        // Y should be within fortress footprint (320 ± 64)
+        let fortress_x = 5152.0;
         let fortress_y = 320.0;
-        let half_height = f32::from(crate::gameplay::battlefield::FORTRESS_ROWS)
-            * crate::gameplay::battlefield::CELL_SIZE
-            / 2.0;
+        let dx = unit_transform.translation.x - fortress_x;
+        let dy = unit_transform.translation.y - fortress_y;
+        let dist = dx.hypot(dy);
         assert!(
-            (unit_transform.translation.y - fortress_y).abs() <= half_height,
-            "Unit should spawn within fortress Y range, got {}",
-            unit_transform.translation.y,
+            (dist - FORTRESS_SPAWN_RADIUS).abs() < 0.01,
+            "Expected unit at distance {FORTRESS_SPAWN_RADIUS} from fortress, got {dist}"
         );
     }
 

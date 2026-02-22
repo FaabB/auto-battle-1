@@ -6,6 +6,7 @@ pub mod spawn;
 
 use avian2d::prelude::*;
 use bevy::prelude::*;
+use vleue_navigator::prelude::NavMesh;
 
 use crate::gameplay::combat::{
     AttackTimer, HealthBarConfig, UNIT_HEALTH_BAR_HEIGHT, UNIT_HEALTH_BAR_WIDTH,
@@ -141,6 +142,38 @@ pub fn spawn_unit(
         .id()
 }
 
+// === Spawn Placement ===
+
+/// Max retry attempts for finding a navigable spawn point.
+const SPAWN_PLACEMENT_ATTEMPTS: u32 = 8;
+
+/// Pick a random position at `radius` from `center` that is navigable.
+///
+/// Tries up to `SPAWN_PLACEMENT_ATTEMPTS` random angles. When `navmesh` is `Some`,
+/// each candidate is validated with `is_in_mesh()`. When `None` (navmesh not built
+/// yet), returns the first random point without validation.
+///
+/// Falls back to `center` if all attempts land outside the mesh.
+pub fn random_navigable_spawn(center: Vec2, radius: f32, navmesh: Option<&NavMesh>) -> Vec2 {
+    use rand::Rng;
+    let mut rng = rand::rng();
+
+    for _ in 0..SPAWN_PLACEMENT_ATTEMPTS {
+        let angle = rng.random_range(0.0..std::f32::consts::TAU);
+        let point = Vec2::new(
+            radius.mul_add(angle.cos(), center.x),
+            radius.mul_add(angle.sin(), center.y),
+        );
+
+        if navmesh.is_none_or(|mesh| mesh.is_in_mesh(point)) {
+            return point;
+        }
+    }
+
+    // All attempts failed — spawn at center (pathfinding handles off-mesh start)
+    center
+}
+
 // === Resources ===
 
 /// Shared mesh and material handles for unit circle rendering.
@@ -226,6 +259,18 @@ mod tests {
     #[test]
     fn unit_type_all_contains_soldier() {
         assert!(UnitType::ALL.contains(&UnitType::Soldier));
+    }
+
+    #[test]
+    fn random_navigable_spawn_correct_distance_without_navmesh() {
+        let center = Vec2::new(100.0, 200.0);
+        let radius = 40.0;
+        let result = random_navigable_spawn(center, radius, None);
+        let dist = center.distance(result);
+        assert!(
+            (dist - radius).abs() < 0.01,
+            "Expected distance {radius}, got {dist}"
+        );
     }
 }
 

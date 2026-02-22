@@ -1,34 +1,47 @@
 //! Building production: timer ticking and unit spawning.
 
 use bevy::prelude::*;
+use vleue_navigator::prelude::*;
 
 use super::ProductionTimer;
 use crate::Z_UNIT;
-use crate::gameplay::battlefield::CELL_SIZE;
 use crate::gameplay::building::building_stats;
-use crate::gameplay::units::{UnitAssets, spawn_unit};
+use crate::gameplay::units::{UnitAssets, random_navigable_spawn, spawn_unit};
+
+/// Radius from building center where spawned units appear.
+/// Clears the 40px building sprite + 6px unit radius with margin.
+const BUILDING_SPAWN_RADIUS: f32 = 40.0;
 
 /// Ticks production timers on all buildings and spawns units when timers fire.
 pub(super) fn tick_production_and_spawn_units(
     time: Res<Time>,
     mut buildings: Query<(&super::Building, &mut ProductionTimer, &Transform)>,
     unit_assets: Res<UnitAssets>,
+    navmeshes: Option<Res<Assets<NavMesh>>>,
+    navmesh_query: Option<Single<(&ManagedNavMesh, &NavMeshStatus)>>,
     mut commands: Commands,
 ) {
+    // Extract navmesh if available and built
+    let navmesh = navmesh_query.and_then(|inner| {
+        let (managed, status) = *inner;
+        let meshes = navmeshes.as_ref()?;
+        (*status == NavMeshStatus::Built).then(|| meshes.get(managed))?
+    });
+
     for (building, mut timer, transform) in &mut buildings {
         timer.0.tick(time.delta());
 
         if timer.0.just_finished() {
             let stats = building_stats(building.building_type);
             if let Some(unit_type) = stats.produced_unit {
-                let spawn_x = transform.translation.x + CELL_SIZE;
-                let spawn_y = transform.translation.y;
+                let center = transform.translation.xy();
+                let spawn_xy = random_navigable_spawn(center, BUILDING_SPAWN_RADIUS, navmesh);
 
                 spawn_unit(
                     &mut commands,
                     unit_type,
                     crate::gameplay::Team::Player,
-                    Vec3::new(spawn_x, spawn_y, Z_UNIT),
+                    spawn_xy.extend(Z_UNIT),
                     &unit_assets,
                 );
             }
@@ -186,7 +199,7 @@ mod integration_tests {
     }
 
     #[test]
-    fn unit_spawns_to_right_of_building() {
+    fn unit_spawns_near_building() {
         let mut app = create_production_test_app();
 
         let building_x = 320.0;
@@ -206,8 +219,13 @@ mod integration_tests {
 
         let mut query = app.world_mut().query_filtered::<&Transform, With<Unit>>();
         let transform = query.single(app.world()).unwrap();
-        assert_eq!(transform.translation.x, building_x + CELL_SIZE);
-        assert_eq!(transform.translation.y, building_y);
+        let dx = transform.translation.x - building_x;
+        let dy = transform.translation.y - building_y;
+        let dist = dx.hypot(dy);
+        assert!(
+            (dist - BUILDING_SPAWN_RADIUS).abs() < 0.01,
+            "Expected unit at distance {BUILDING_SPAWN_RADIUS} from building, got {dist}"
+        );
     }
 
     #[test]
