@@ -59,19 +59,14 @@ mod integration_tests {
     use crate::screens::GameState;
     use crate::testing::{assert_entity_count, transition_to_ingame};
     use pretty_assertions::assert_eq;
-    use std::time::Duration;
 
     /// Helper: app with battlefield + units + full building plugin, no `InputPlugin`.
     /// Used for production system tests where we manually spawn buildings.
     fn create_production_test_app() -> App {
         let mut app = crate::testing::create_base_test_app_no_input();
-        app.init_resource::<ButtonInput<KeyCode>>()
-            .init_resource::<ButtonInput<MouseButton>>();
-        app.init_resource::<Assets<Mesh>>();
-        app.init_resource::<Assets<ColorMaterial>>();
-        // Building placement requires Gold and Shop resources.
-        app.init_resource::<crate::gameplay::economy::Gold>();
-        app.init_resource::<crate::gameplay::economy::shop::Shop>();
+        crate::testing::init_input_resources(&mut app);
+        crate::testing::init_asset_resources(&mut app);
+        crate::testing::init_economy_resources(&mut app);
 
         app.configure_sets(
             Update,
@@ -86,10 +81,9 @@ mod integration_tests {
     }
 
     /// Create a timer that will fire on the next `tick()` with any positive delta.
-    /// Sets elapsed to just under the duration so the system's own tick triggers it.
     fn nearly_elapsed_timer() -> Timer {
         let mut timer = Timer::from_seconds(0.001, TimerMode::Repeating);
-        timer.set_elapsed(Duration::from_nanos(999_000));
+        crate::testing::nearly_expire_timer(&mut timer);
         timer
     }
 
@@ -100,15 +94,13 @@ mod integration_tests {
 
         // Use isolated placement setup (without update_grid_cursor which clears HoveredCell).
         let mut app = crate::testing::create_base_test_app_no_input();
-        app.init_resource::<ButtonInput<KeyCode>>()
-            .init_resource::<ButtonInput<MouseButton>>();
+        crate::testing::init_input_resources(&mut app);
         app.add_plugins(crate::gameplay::battlefield::plugin);
         app.register_type::<Building>()
             .register_type::<super::super::Occupied>()
             .register_type::<ProductionTimer>()
-            .init_resource::<HoveredCell>()
-            .init_resource::<crate::gameplay::economy::Gold>()
-            .init_resource::<Shop>();
+            .init_resource::<HoveredCell>();
+        crate::testing::init_economy_resources(&mut app);
         app.add_systems(
             Update,
             super::super::placement::handle_building_placement

@@ -51,3 +51,35 @@ fn handle_main_menu_input(
         next_menu.set(Menu::None);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use bevy::prelude::*;
+
+    use crate::menus::Menu;
+    use crate::screens::GameState;
+
+    #[test]
+    fn space_starts_game() {
+        let mut app = crate::testing::create_base_test_app_no_input();
+        crate::testing::init_input_resources(&mut app);
+        app.add_systems(Update, super::handle_main_menu_input);
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Space);
+        app.update();
+
+        let next_game = app.world().resource::<NextState<GameState>>();
+        assert!(
+            matches!(*next_game, NextState::Pending(GameState::InGame)),
+            "Expected NextState<GameState>::InGame, got {next_game:?}"
+        );
+
+        let next_menu = app.world().resource::<NextState<Menu>>();
+        assert!(
+            matches!(*next_menu, NextState::Pending(Menu::None)),
+            "Expected NextState<Menu>::None, got {next_menu:?}"
+        );
+    }
+}

@@ -103,8 +103,7 @@ mod integration_tests {
     #[test]
     fn gold_initialized_on_enter_ingame() {
         let mut app = crate::testing::create_base_test_app();
-        app.init_resource::<Assets<Mesh>>();
-        app.init_resource::<Assets<ColorMaterial>>();
+        crate::testing::init_asset_resources(&mut app);
         app.add_plugins(crate::gameplay::plugin);
         transition_to_ingame(&mut app);
 
@@ -115,8 +114,7 @@ mod integration_tests {
     #[test]
     fn gold_reset_on_reenter_ingame() {
         let mut app = crate::testing::create_base_test_app();
-        app.init_resource::<Assets<Mesh>>();
-        app.init_resource::<Assets<ColorMaterial>>();
+        crate::testing::init_asset_resources(&mut app);
         app.add_plugins(crate::gameplay::plugin);
         transition_to_ingame(&mut app);
 
@@ -143,8 +141,7 @@ mod integration_tests {
     #[test]
     fn gold_hud_spawned_on_enter_ingame() {
         let mut app = crate::testing::create_base_test_app();
-        app.init_resource::<Assets<Mesh>>();
-        app.init_resource::<Assets<ColorMaterial>>();
+        crate::testing::init_asset_resources(&mut app);
         app.add_plugins(crate::gameplay::plugin);
         transition_to_ingame(&mut app);
 

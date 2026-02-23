@@ -282,8 +282,7 @@ mod integration_tests {
     #[test]
     fn unit_assets_created_on_enter_ingame() {
         let mut app = crate::testing::create_base_test_app();
-        app.init_resource::<Assets<Mesh>>();
-        app.init_resource::<Assets<ColorMaterial>>();
+        crate::testing::init_asset_resources(&mut app);
         app.add_plugins(plugin);
         transition_to_ingame(&mut app);
 

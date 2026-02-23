@@ -57,3 +57,49 @@ fn handle_pause_input(
         // Menu::Main will be set by the MainMenu screen's OnEnter system.
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use bevy::prelude::*;
+
+    use crate::menus::Menu;
+    use crate::screens::GameState;
+
+    #[test]
+    fn escape_unpauses() {
+        let mut app = crate::testing::create_base_test_app_no_input();
+        crate::testing::init_input_resources(&mut app);
+        app.add_systems(Update, super::handle_pause_input);
+        crate::testing::transition_to_ingame(&mut app);
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Escape);
+        app.update();
+
+        let next_menu = app.world().resource::<NextState<Menu>>();
+        assert!(
+            matches!(*next_menu, NextState::Pending(Menu::None)),
+            "Expected NextState<Menu>::None, got {next_menu:?}"
+        );
+    }
+
+    #[test]
+    fn q_quits_to_main_menu() {
+        let mut app = crate::testing::create_base_test_app_no_input();
+        crate::testing::init_input_resources(&mut app);
+        app.add_systems(Update, super::handle_pause_input);
+        crate::testing::transition_to_ingame(&mut app);
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyQ);
+        app.update();
+
+        let next_state = app.world().resource::<NextState<GameState>>();
+        assert!(
+            matches!(*next_state, NextState::Pending(GameState::MainMenu)),
+            "Expected NextState<GameState>::MainMenu, got {next_state:?}"
+        );
+    }
+}

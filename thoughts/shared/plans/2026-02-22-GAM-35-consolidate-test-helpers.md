@@ -176,8 +176,8 @@ pub fn spawn_test_target(world: &mut World, team: Team, x: f32, y: f32) -> Entit
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (no compile errors, no clippy warnings)
-- [ ] `make test` passes (no test regressions)
+- [x] `make check` passes (no compile errors, no clippy warnings)
+- [x] `make test` passes (no test regressions)
 
 #### Manual Verification:
 - [ ] Review `testing.rs` — helpers are clear, well-documented, and follow existing style
@@ -374,10 +374,10 @@ crate::testing::init_economy_resources(&mut app);
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes — same test count, no regressions
-- [ ] No timer `set_elapsed` calls remain outside `testing.rs` (except wrapped calls to `nearly_expire_timer`)
-- [ ] No `init_resource::<Assets<Mesh>>()` or `init_resource::<Assets<ColorMaterial>>()` calls remain outside `testing.rs`
+- [x] `make check` passes
+- [x] `make test` passes — same test count, no regressions
+- [x] No timer `set_elapsed` calls remain outside `testing.rs` (except wrapped calls to `nearly_expire_timer`)
+- [x] No `init_resource::<Assets<Mesh>>()` or `init_resource::<Assets<ColorMaterial>>()` calls remain outside `testing.rs`
 
 #### Manual Verification:
 - [ ] Spot-check 3 migrated modules to verify helpers are used correctly
@@ -553,9 +553,9 @@ Note: `Text::new("Gold: 999")` display format must match what `update_gold_displ
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes — test count increased by at least 4 new tests
-- [ ] All new tests pass individually: `cargo test --lib screens::in_game::tests`, `cargo test --lib menus::main_menu::tests`, `cargo test --lib menus::pause::tests`, `cargo test --lib gameplay::economy::ui::tests`
+- [x] `make check` passes
+- [x] `make test` passes — test count increased by 5 (193 → 198)
+- [x] All new tests pass individually: `cargo test --lib screens::in_game::tests`, `cargo test --lib menus::main_menu::tests`, `cargo test --lib menus::pause::tests`, `cargo test --lib gameplay::economy::ui::tests`
 
 #### Manual Verification:
 - [ ] Review new tests — they exercise the system logic correctly

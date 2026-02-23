@@ -100,7 +100,9 @@ pub(super) fn unit_movement(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gameplay::units::{UNIT_RADIUS, UnitType, unit_stats};
+    use crate::gameplay::Team;
+    use crate::gameplay::units::UnitType;
+    use crate::gameplay::units::unit_stats;
 
     fn create_movement_test_app() -> App {
         let mut app = App::new();
@@ -111,34 +113,15 @@ mod tests {
     }
 
     fn spawn_unit_at(world: &mut World, x: f32, speed: f32, target: Option<Entity>) -> Entity {
-        let stats = unit_stats(UnitType::Soldier);
+        let id = crate::testing::spawn_test_unit(world, Team::Player, x, 100.0);
         world
-            .spawn((
-                Unit,
-                CurrentTarget(target),
-                Movement { speed },
-                CombatStats {
-                    damage: stats.damage,
-                    attack_speed: stats.attack_speed,
-                    range: stats.attack_range,
-                },
-                Transform::from_xyz(x, 100.0, 0.0),
-                GlobalTransform::from(Transform::from_xyz(x, 100.0, 0.0)),
-                Collider::circle(UNIT_RADIUS),
-                LinearVelocity::ZERO,
-                NavPath::default(),
-            ))
-            .id()
+            .entity_mut(id)
+            .insert((Movement { speed }, CurrentTarget(target)));
+        id
     }
 
     fn spawn_target_at(world: &mut World, x: f32) -> Entity {
-        world
-            .spawn((
-                Transform::from_xyz(x, 100.0, 0.0),
-                GlobalTransform::from(Transform::from_xyz(x, 100.0, 0.0)),
-                Collider::circle(5.0),
-            ))
-            .id()
+        crate::testing::spawn_test_target(world, Team::Player, x, 100.0)
     }
 
     #[test]

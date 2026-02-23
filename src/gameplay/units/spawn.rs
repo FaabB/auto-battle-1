@@ -191,13 +191,11 @@ mod integration_tests {
     use super::*;
     use crate::gameplay::{Health, Target, Team};
     use crate::testing::{assert_entity_count, transition_to_ingame};
-    use std::time::Duration;
 
     /// Create a test app with the spawn plugin active.
     fn create_spawn_test_app() -> App {
         let mut app = crate::testing::create_base_test_app();
-        app.init_resource::<Assets<Mesh>>();
-        app.init_resource::<Assets<ColorMaterial>>();
+        crate::testing::init_asset_resources(&mut app);
 
         // Register unit assets setup + spawn plugin
         app.add_systems(OnEnter(GameState::InGame), super::super::setup_unit_assets);
@@ -230,19 +228,17 @@ mod integration_tests {
 
     /// Set elapsed to 1 nanosecond before the timer's duration so any positive
     /// wall-clock delta triggers `just_finished()`.
-    fn nearly_expire_timer(app: &mut App) {
-        let duration = app.world().resource::<EnemySpawnTimer>().timer.duration();
-        app.world_mut()
-            .resource_mut::<EnemySpawnTimer>()
-            .timer
-            .set_elapsed(duration - Duration::from_nanos(1));
+    fn nearly_expire_spawn_timer(app: &mut App) {
+        crate::testing::nearly_expire_timer(
+            &mut app.world_mut().resource_mut::<EnemySpawnTimer>().timer,
+        );
     }
 
     #[test]
     fn enemy_spawns_after_initial_delay() {
         let mut app = create_spawn_test_app();
 
-        nearly_expire_timer(&mut app);
+        nearly_expire_spawn_timer(&mut app);
         app.update();
         assert_entity_count::<(With<Unit>, With<Team>)>(&mut app, 1);
     }
@@ -251,7 +247,7 @@ mod integration_tests {
     fn spawned_enemy_has_correct_team() {
         let mut app = create_spawn_test_app();
 
-        nearly_expire_timer(&mut app);
+        nearly_expire_spawn_timer(&mut app);
         app.update();
 
         let mut query = app.world_mut().query_filtered::<&Team, With<Unit>>();
@@ -263,7 +259,7 @@ mod integration_tests {
     fn spawned_enemy_has_all_components() {
         let mut app = create_spawn_test_app();
 
-        nearly_expire_timer(&mut app);
+        nearly_expire_spawn_timer(&mut app);
         app.update();
 
         assert_entity_count::<(With<Unit>, With<UnitType>)>(&mut app, 1);
@@ -283,7 +279,7 @@ mod integration_tests {
         let mut app = create_spawn_test_app();
 
         // Trigger initial spawn
-        nearly_expire_timer(&mut app);
+        nearly_expire_spawn_timer(&mut app);
         app.update();
 
         // After first spawn, timer should have START_INTERVAL duration
@@ -300,12 +296,12 @@ mod integration_tests {
         let mut app = create_spawn_test_app();
 
         // Trigger first spawn
-        nearly_expire_timer(&mut app);
+        nearly_expire_spawn_timer(&mut app);
         app.update();
         assert_entity_count::<(With<Unit>, With<Team>)>(&mut app, 1);
 
         // Nearly expire next timer (now START_INTERVAL duration)
-        nearly_expire_timer(&mut app);
+        nearly_expire_spawn_timer(&mut app);
         app.update();
         assert_entity_count::<(With<Unit>, With<Team>)>(&mut app, 2);
     }
@@ -314,7 +310,7 @@ mod integration_tests {
     fn enemy_spawns_near_fortress() {
         let mut app = create_spawn_test_app();
 
-        nearly_expire_timer(&mut app);
+        nearly_expire_spawn_timer(&mut app);
         app.update();
 
         let mut query = app.world_mut().query_filtered::<&Transform, With<Unit>>();
@@ -342,7 +338,7 @@ mod integration_tests {
         app.world_mut().despawn(fortress);
 
         // Nearly expire timer and update — system should be skipped
-        nearly_expire_timer(&mut app);
+        nearly_expire_spawn_timer(&mut app);
         app.update();
 
         assert_entity_count::<(With<Unit>, With<Team>)>(&mut app, 0);

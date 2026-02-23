@@ -211,8 +211,7 @@ mod tests {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
-    use crate::gameplay::units::{UNIT_RADIUS, Unit, UnitType, unit_stats};
-    use crate::gameplay::{CombatStats, CurrentTarget, Movement, Team};
+    use crate::gameplay::{CurrentTarget, Team};
     use crate::testing::assert_entity_count;
     use pretty_assertions::assert_eq;
     use std::time::Duration;
@@ -244,43 +243,24 @@ mod integration_tests {
     }
 
     /// Spawn a unit with attack capability at the given position.
-    /// Uses a very short timer (0.001s) with elapsed set to 0.999ms so any positive
-    /// wall-clock delta triggers it (MinimalPlugins uses real wall-clock delta, not advance_by).
+    /// Attack timer is nearly expired so any positive delta triggers it.
     fn spawn_attacker(world: &mut World, x: f32, target: Option<Entity>) -> Entity {
-        let stats = unit_stats(UnitType::Soldier);
-        let mut timer = Timer::from_seconds(0.001, TimerMode::Repeating);
-        timer.set_elapsed(Duration::from_nanos(999_000));
-        world
-            .spawn((
-                Unit,
-                Team::Player,
-                CurrentTarget(target),
-                CombatStats {
-                    damage: stats.damage,
-                    attack_speed: stats.attack_speed,
-                    range: stats.attack_range,
-                },
-                AttackTimer(timer),
-                Movement {
-                    speed: stats.move_speed,
-                },
-                Transform::from_xyz(x, 100.0, 0.0),
-                GlobalTransform::from(Transform::from_xyz(x, 100.0, 0.0)),
-                Collider::circle(UNIT_RADIUS),
-            ))
-            .id()
+        let id = crate::testing::spawn_test_unit(world, Team::Player, x, 100.0);
+        if let Some(t) = target {
+            world.entity_mut(id).insert(CurrentTarget(Some(t)));
+        }
+        // Nearly-expire the attack timer for immediate attack
+        crate::testing::nearly_expire_timer(
+            &mut world.entity_mut(id).get_mut::<AttackTimer>().unwrap().0,
+        );
+        id
     }
 
-    /// Spawn a target entity with Health, GlobalTransform, and Collider.
+    /// Spawn a target entity with Health at the given position.
     fn spawn_target(world: &mut World, x: f32, hp: f32) -> Entity {
-        world
-            .spawn((
-                Health::new(hp),
-                Transform::from_xyz(x, 100.0, 0.0),
-                GlobalTransform::from(Transform::from_xyz(x, 100.0, 0.0)),
-                Collider::circle(5.0),
-            ))
-            .id()
+        let id = crate::testing::spawn_test_target(world, Team::Enemy, x, 100.0);
+        world.entity_mut(id).insert(Health::new(hp));
+        id
     }
 
     // === Attack + Projectile Tests ===
@@ -348,29 +328,12 @@ mod integration_tests {
         let mut app = create_attack_test_app();
 
         let target = spawn_target(app.world_mut(), 114.0, 100.0);
-        let stats = unit_stats(UnitType::Soldier);
 
         // Spawn attacker with fresh timer (NOT nearly elapsed)
-        app.world_mut().spawn((
-            Unit,
-            Team::Player,
-            CurrentTarget(Some(target)),
-            CombatStats {
-                damage: stats.damage,
-                attack_speed: stats.attack_speed,
-                range: stats.attack_range,
-            },
-            AttackTimer(Timer::from_seconds(
-                1.0 / stats.attack_speed,
-                TimerMode::Repeating,
-            )),
-            Movement {
-                speed: stats.move_speed,
-            },
-            Transform::from_xyz(100.0, 100.0, 0.0),
-            GlobalTransform::from(Transform::from_xyz(100.0, 100.0, 0.0)),
-            Collider::circle(UNIT_RADIUS),
-        ));
+        let attacker = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        app.world_mut()
+            .entity_mut(attacker)
+            .insert(CurrentTarget(Some(target)));
 
         // First few frames — timer hasn't fired yet
         advance_and_update(&mut app, Duration::from_millis(100));
@@ -527,7 +490,7 @@ mod integration_tests {
 
         // Spawn a "fortress-like" entity (no Unit marker)
         let mut timer = Timer::from_seconds(0.001, TimerMode::Repeating);
-        timer.set_elapsed(Duration::from_nanos(999_000));
+        crate::testing::nearly_expire_timer(&mut timer);
         let fortress = app
             .world_mut()
             .spawn((

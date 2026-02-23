@@ -62,7 +62,6 @@ pub(super) fn plugin(app: &mut App) {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-    use std::time::Duration;
 
     // === Farm Income Tests ===
 
@@ -78,7 +77,7 @@ mod tests {
     /// Create an income timer that will fire on the next tick with any positive delta.
     fn nearly_elapsed_income_timer() -> IncomeTimer {
         let mut timer = Timer::from_seconds(0.001, TimerMode::Repeating);
-        timer.set_elapsed(Duration::from_nanos(999_000));
+        crate::testing::nearly_expire_timer(&mut timer);
         IncomeTimer(timer)
     }
 

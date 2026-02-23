@@ -48,3 +48,34 @@ pub(super) fn plugin(app: &mut App) {
             .run_if(gameplay_running),
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use bevy::prelude::*;
+
+    use super::GoldDisplay;
+    use crate::gameplay::economy::Gold;
+
+    #[test]
+    fn gold_display_updates_on_change() {
+        let mut app = crate::testing::create_test_app();
+        app.init_resource::<Gold>();
+        app.add_systems(Update, super::update_gold_display);
+
+        // Spawn a GoldDisplay entity
+        app.world_mut().spawn((Text::new("Gold: 0"), GoldDisplay));
+        app.update();
+
+        // Change gold
+        app.world_mut().resource_mut::<Gold>().0 = 999;
+        app.update();
+
+        // Verify text updated
+        let text = app
+            .world_mut()
+            .query_filtered::<&Text, With<GoldDisplay>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(**text, "Gold: 999");
+    }
+}

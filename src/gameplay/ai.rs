@@ -128,38 +128,7 @@ pub(super) fn plugin(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gameplay::units::{UNIT_RADIUS, Unit};
     use pretty_assertions::assert_eq;
-
-    /// Spawn a unit entity with Transform + GlobalTransform at the given position.
-    /// Includes `Movement` so the backtrack filter applies (matching real units).
-    fn spawn_unit(world: &mut World, team: Team, x: f32, y: f32) -> Entity {
-        world
-            .spawn((
-                Unit,
-                team,
-                Target,
-                CurrentTarget(None),
-                Movement { speed: 50.0 },
-                Transform::from_xyz(x, y, 0.0),
-                GlobalTransform::from(Transform::from_xyz(x, y, 0.0)),
-                Collider::circle(UNIT_RADIUS),
-            ))
-            .id()
-    }
-
-    /// Spawn a targetable entity (non-unit) at the given position.
-    fn spawn_target(world: &mut World, team: Team, x: f32, y: f32) -> Entity {
-        world
-            .spawn((
-                team,
-                Target,
-                Transform::from_xyz(x, y, 0.0),
-                GlobalTransform::from(Transform::from_xyz(x, y, 0.0)),
-                Collider::circle(5.0),
-            ))
-            .id()
-    }
 
     fn create_ai_test_app() -> App {
         let mut app = App::new();
@@ -181,19 +150,18 @@ mod tests {
         };
         let mut timer = app.world_mut().resource_mut::<RetargetTimer>();
         timer.current_slot = prev_slot;
-        let duration = timer.timer.duration();
-        timer
-            .timer
-            .set_elapsed(duration - std::time::Duration::from_nanos(1));
+        crate::testing::nearly_expire_timer(&mut timer.timer);
     }
 
     #[test]
     fn unit_targets_nearest_enemy() {
         let mut app = create_ai_test_app();
 
-        let player = spawn_unit(app.world_mut(), Team::Player, 100.0, 100.0);
-        let _far_enemy = spawn_unit(app.world_mut(), Team::Enemy, 500.0, 100.0);
-        let near_enemy = spawn_unit(app.world_mut(), Team::Enemy, 200.0, 100.0);
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        let _far_enemy =
+            crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 500.0, 100.0);
+        let near_enemy =
+            crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 200.0, 100.0);
 
         app.update();
 
@@ -205,8 +173,9 @@ mod tests {
     fn unit_targets_fortress_when_no_enemies() {
         let mut app = create_ai_test_app();
 
-        let player = spawn_unit(app.world_mut(), Team::Player, 100.0, 100.0);
-        let fortress = spawn_target(app.world_mut(), Team::Enemy, 5000.0, 320.0);
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        let fortress =
+            crate::testing::spawn_test_target(app.world_mut(), Team::Enemy, 5000.0, 320.0);
 
         app.update();
 
@@ -218,9 +187,9 @@ mod tests {
     fn unit_retargets_when_target_despawned() {
         let mut app = create_ai_test_app();
 
-        let player = spawn_unit(app.world_mut(), Team::Player, 100.0, 100.0);
-        let enemy1 = spawn_unit(app.world_mut(), Team::Enemy, 300.0, 100.0);
-        let enemy2 = spawn_unit(app.world_mut(), Team::Enemy, 500.0, 100.0);
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        let enemy1 = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 300.0, 100.0);
+        let enemy2 = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 500.0, 100.0);
 
         // First update: targets nearest (enemy1)
         app.update();
@@ -240,8 +209,8 @@ mod tests {
     fn unit_switches_to_closer_target_on_retarget() {
         let mut app = create_ai_test_app();
 
-        let player = spawn_unit(app.world_mut(), Team::Player, 100.0, 100.0);
-        let enemy_far = spawn_unit(app.world_mut(), Team::Enemy, 300.0, 100.0);
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        let enemy_far = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 300.0, 100.0);
 
         // First update gives a target (no target yet → evaluates immediately)
         app.update();
@@ -249,7 +218,8 @@ mod tests {
         assert_eq!(ct.0, Some(enemy_far));
 
         // Spawn a closer enemy
-        let enemy_near = spawn_unit(app.world_mut(), Team::Enemy, 150.0, 100.0);
+        let enemy_near =
+            crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 150.0, 100.0);
 
         // Set timer to fire on the player's slot next update
         set_retarget_for_entity(&mut app, player);
@@ -266,8 +236,9 @@ mod tests {
         let mut app = create_ai_test_app();
 
         // Player unit at x=500, enemy far behind at x=100 (400px behind > 128px limit)
-        let player = spawn_unit(app.world_mut(), Team::Player, 500.0, 100.0);
-        let _behind_enemy = spawn_unit(app.world_mut(), Team::Enemy, 100.0, 100.0);
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 500.0, 100.0);
+        let _behind_enemy =
+            crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 100.0, 100.0);
 
         app.update();
 
@@ -281,8 +252,9 @@ mod tests {
         let mut app = create_ai_test_app();
 
         // Enemy unit should target a player building
-        let enemy = spawn_unit(app.world_mut(), Team::Enemy, 500.0, 100.0);
-        let building = spawn_target(app.world_mut(), Team::Player, 300.0, 100.0);
+        let enemy = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 500.0, 100.0);
+        let building =
+            crate::testing::spawn_test_target(app.world_mut(), Team::Player, 300.0, 100.0);
 
         app.update();
 
@@ -308,8 +280,10 @@ mod tests {
             .id();
 
         // Spawn two enemy targets
-        let near_enemy = spawn_target(app.world_mut(), Team::Enemy, 200.0, 320.0);
-        let _far_enemy = spawn_target(app.world_mut(), Team::Enemy, 500.0, 320.0);
+        let near_enemy =
+            crate::testing::spawn_test_target(app.world_mut(), Team::Enemy, 200.0, 320.0);
+        let _far_enemy =
+            crate::testing::spawn_test_target(app.world_mut(), Team::Enemy, 500.0, 320.0);
 
         app.update();
 
@@ -334,7 +308,8 @@ mod tests {
             ))
             .id();
 
-        let behind_enemy = spawn_target(app.world_mut(), Team::Enemy, 100.0, 320.0);
+        let behind_enemy =
+            crate::testing::spawn_test_target(app.world_mut(), Team::Enemy, 100.0, 320.0);
 
         app.update();
 

@@ -173,12 +173,8 @@ mod integration_tests {
     /// Helper: app with battlefield + building + units plugins, transitioned to `InGame`.
     fn create_building_test_app() -> App {
         let mut app = crate::testing::create_base_test_app();
-        // Units plugin needs asset infrastructure for UnitAssets (mesh + material).
-        app.init_resource::<Assets<Mesh>>();
-        app.init_resource::<Assets<ColorMaterial>>();
-        // Building placement requires Gold and Shop resources.
-        app.init_resource::<crate::gameplay::economy::Gold>();
-        app.init_resource::<crate::gameplay::economy::shop::Shop>();
+        crate::testing::init_asset_resources(&mut app);
+        crate::testing::init_economy_resources(&mut app);
         app.add_plugins(crate::gameplay::battlefield::plugin);
         app.add_plugins(crate::gameplay::units::plugin);
         app.add_plugins(super::super::plugin);
@@ -235,14 +231,12 @@ mod integration_tests {
         use crate::gameplay::economy::shop::Shop;
 
         let mut app = crate::testing::create_base_test_app_no_input();
-        app.init_resource::<ButtonInput<KeyCode>>()
-            .init_resource::<ButtonInput<MouseButton>>();
+        crate::testing::init_input_resources(&mut app);
         app.add_plugins(crate::gameplay::battlefield::plugin);
         app.register_type::<Building>()
             .register_type::<Occupied>()
-            .init_resource::<HoveredCell>()
-            .init_resource::<crate::gameplay::economy::Gold>()
-            .init_resource::<Shop>();
+            .init_resource::<HoveredCell>();
+        crate::testing::init_economy_resources(&mut app);
         app.add_systems(
             Update,
             handle_building_placement.run_if(in_state(GameState::InGame).and(in_state(Menu::None))),
