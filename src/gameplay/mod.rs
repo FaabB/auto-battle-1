@@ -22,6 +22,7 @@ pub mod building;
 pub mod combat;
 pub mod economy;
 pub mod endgame_detection;
+mod hud;
 pub mod units;
 
 use bevy::prelude::*;
@@ -79,13 +80,21 @@ pub struct CombatStats {
     pub range: f32,
 }
 
+/// Virtual time when the current game started.
+/// Used to compute elapsed game time for the HUD.
+#[derive(Resource, Debug, Default, Reflect)]
+#[reflect(Resource)]
+pub struct GameStartTime(pub f32);
+
 pub fn plugin(app: &mut App) {
     app.register_type::<Team>()
         .register_type::<Health>()
         .register_type::<Target>()
         .register_type::<CurrentTarget>()
         .register_type::<Movement>()
-        .register_type::<CombatStats>();
+        .register_type::<CombatStats>()
+        .register_type::<GameStartTime>()
+        .init_resource::<GameStartTime>();
 
     app.add_plugins((
         ai::plugin,
@@ -94,6 +103,7 @@ pub fn plugin(app: &mut App) {
         combat::plugin,
         economy::plugin,
         endgame_detection::plugin,
+        hud::plugin,
         units::plugin,
     ));
 }

@@ -20,16 +20,7 @@ use crate::third_party::{CollisionLayer, NavObstacle};
 use crate::{Z_BACKGROUND, Z_FORTRESS, Z_GRID, Z_ZONE};
 use vleue_navigator::prelude::*;
 
-/// Color for individual grid cells in the build zone.
-const GRID_CELL_COLOR: Color = Color::srgb(0.3, 0.3, 0.4);
-
-// === Zone Colors ===
-
-const PLAYER_FORT_COLOR: Color = Color::srgb(0.2, 0.3, 0.8);
-const ENEMY_FORT_COLOR: Color = Color::srgb(0.8, 0.2, 0.2);
-const BUILD_ZONE_COLOR: Color = Color::srgb(0.25, 0.25, 0.35);
-const COMBAT_ZONE_COLOR: Color = Color::srgb(0.15, 0.15, 0.2);
-const BACKGROUND_COLOR: Color = Color::srgb(0.1, 0.1, 0.12);
+use crate::theme::palette;
 
 /// Spawns all battlefield entities: zone sprites with markers, and build slot grid.
 #[allow(clippy::too_many_lines)]
@@ -44,7 +35,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
         Name::new("Battlefield Background"),
         BattlefieldBackground,
         Sprite::from_color(
-            BACKGROUND_COLOR,
+            palette::BACKGROUND,
             Vec2::new(BATTLEFIELD_WIDTH + 128.0, BATTLEFIELD_HEIGHT + 128.0),
         ),
         Transform::from_xyz(
@@ -60,7 +51,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
     // Player fortress zone backdrop (full-height, behind the fortress entity)
     commands.spawn((
         Name::new("Player Fortress Zone"),
-        Sprite::from_color(COMBAT_ZONE_COLOR, fortress_zone_size),
+        Sprite::from_color(palette::COMBAT_ZONE, fortress_zone_size),
         Transform::from_xyz(
             zone_center_x(PLAYER_FORT_START_COL, FORTRESS_COLS),
             battlefield_center_y(),
@@ -92,7 +83,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
                 TimerMode::Repeating,
             )),
             CurrentTarget(None),
-            Sprite::from_color(PLAYER_FORT_COLOR, fortress_size),
+            Sprite::from_color(palette::PLAYER_FORTRESS, fortress_size),
             Transform::from_xyz(
                 zone_center_x(PLAYER_FORT_START_COL, FORTRESS_COLS),
                 battlefield_center_y(),
@@ -115,7 +106,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
         Name::new("Build Zone"),
         BuildZone,
         Sprite::from_color(
-            BUILD_ZONE_COLOR,
+            palette::BUILD_ZONE,
             Vec2::new(f32::from(BUILD_ZONE_COLS) * CELL_SIZE, BATTLEFIELD_HEIGHT),
         ),
         Transform::from_xyz(
@@ -131,7 +122,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
         Name::new("Combat Zone"),
         CombatZone,
         Sprite::from_color(
-            COMBAT_ZONE_COLOR,
+            palette::COMBAT_ZONE,
             Vec2::new(f32::from(COMBAT_ZONE_COLS) * CELL_SIZE, BATTLEFIELD_HEIGHT),
         ),
         Transform::from_xyz(
@@ -145,7 +136,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
     // Enemy fortress zone backdrop (full-height, behind the fortress entity)
     commands.spawn((
         Name::new("Enemy Fortress Zone"),
-        Sprite::from_color(COMBAT_ZONE_COLOR, fortress_zone_size),
+        Sprite::from_color(palette::COMBAT_ZONE, fortress_zone_size),
         Transform::from_xyz(
             zone_center_x(ENEMY_FORT_START_COL, FORTRESS_COLS),
             battlefield_center_y(),
@@ -177,7 +168,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
                 TimerMode::Repeating,
             )),
             CurrentTarget(None),
-            Sprite::from_color(ENEMY_FORT_COLOR, fortress_size),
+            Sprite::from_color(palette::ENEMY_FORTRESS, fortress_size),
             Transform::from_xyz(
                 zone_center_x(ENEMY_FORT_START_COL, FORTRESS_COLS),
                 battlefield_center_y(),
@@ -202,7 +193,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
                 .spawn((
                     Name::new(format!("Build Slot ({col}, {row})")),
                     BuildSlot { row, col },
-                    Sprite::from_color(GRID_CELL_COLOR, Vec2::splat(CELL_SIZE - 2.0)),
+                    Sprite::from_color(palette::GRID_CELL, Vec2::splat(CELL_SIZE - 2.0)),
                     Transform::from_xyz(
                         col_to_world_x(BUILD_ZONE_START_COL + col),
                         row_to_world_y(row),

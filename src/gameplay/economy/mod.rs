@@ -2,8 +2,8 @@
 
 pub mod income;
 pub mod shop;
-mod shop_ui;
-mod ui;
+pub mod shop_ui;
+pub mod ui;
 
 use bevy::prelude::*;
 
@@ -145,7 +145,7 @@ mod integration_tests {
         app.add_plugins(crate::gameplay::plugin);
         transition_to_ingame(&mut app);
 
-        // The gold HUD is a Text entity with DespawnOnExit<GameState>
-        assert_entity_count::<(With<Text>, With<DespawnOnExit<GameState>>)>(&mut app, 1);
+        // The gold HUD is a Text entity with GoldDisplay marker
+        assert_entity_count::<(With<Text>, With<ui::GoldDisplay>)>(&mut app, 1);
     }
 }

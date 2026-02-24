@@ -350,9 +350,9 @@ pub fn plugin(app: &mut bevy::prelude::App) {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (clippy + type checking)
-- [ ] `make test` passes (existing tests still work after color constant renames)
-- [ ] `make build` succeeds
+- [x] `make check` passes (clippy + type checking)
+- [x] `make test` passes (existing tests still work after color constant renames)
+- [x] `make build` succeeds
 
 #### Manual Verification:
 - [ ] No visible regressions (colors unchanged despite being moved to palette)
@@ -444,9 +444,9 @@ Loading screen is kept as a skeleton for future asset loading. No changes needed
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
-- [ ] `make build` succeeds
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] `make build` succeeds
 
 #### Manual Verification:
 - [ ] Main menu shows centered bordered panel with title and two buttons
@@ -566,9 +566,9 @@ Runs in `GameSet::Ui` with `gameplay_running`.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
-- [ ] `make build` succeeds
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] `make build` succeeds
 
 #### Manual Verification:
 - [ ] Bottom bar spans full screen width, pinned to bottom
@@ -706,9 +706,9 @@ Remove `handle_endgame_input` keyboard system.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
-- [ ] `make build` succeeds
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] `make build` succeeds
 
 #### Manual Verification:
 - [ ] Pause overlay appears over gameplay with semi-transparent background
@@ -865,9 +865,9 @@ ProductionBarConfig {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
-- [ ] `make build` succeeds
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] `make build` succeeds
 
 #### Manual Verification:
 - [ ] W/S and Up/Down arrow keys attempt vertical panning (no visible effect at default zoom — expected)
@@ -914,9 +914,9 @@ Update all existing tests and add new tests for button interactions, timer displ
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes with all new and updated tests
-- [ ] Coverage maintains or increases toward 90% target
+- [x] `make check` passes
+- [x] `make test` passes with all new and updated tests (208 total, +12 new)
+- [x] Coverage maintains or increases toward 90% target
 
 #### Manual Verification:
 - [ ] Full end-to-end playthrough: main menu → start → play → pause → resume → win/lose → restart/exit

@@ -16,8 +16,7 @@ const PROJECTILE_SPEED: f32 = 200.0;
 /// Projectile visual radius (pixels).
 const PROJECTILE_RADIUS: f32 = 2.0;
 
-/// Projectile color (yellow).
-const PROJECTILE_COLOR: Color = Color::srgb(1.0, 1.0, 0.3);
+use crate::theme::palette;
 
 // === Components ===
 
@@ -95,7 +94,7 @@ fn attack(
                 },
                 *team,
                 Hitbox,
-                Sprite::from_color(PROJECTILE_COLOR, Vec2::splat(PROJECTILE_RADIUS * 2.0)),
+                Sprite::from_color(palette::PROJECTILE, Vec2::splat(PROJECTILE_RADIUS * 2.0)),
                 Transform::from_xyz(
                     attacker_pos.translation().x,
                     attacker_pos.translation().y,

@@ -5,8 +5,8 @@ use bevy::prelude::*;
 
 use super::{
     BUILDING_HEALTH_BAR_HEIGHT, BUILDING_HEALTH_BAR_WIDTH, BUILDING_HEALTH_BAR_Y_OFFSET,
-    BUILDING_SPRITE_SIZE, Building, CELL_SIZE, GRID_CURSOR_COLOR, GridCursor, HoveredCell,
-    Occupied, ProductionTimer, building_color, building_hp, building_stats, world_to_build_grid,
+    BUILDING_SPRITE_SIZE, Building, CELL_SIZE, GridCursor, HoveredCell, Occupied, ProductionTimer,
+    building_color, building_hp, building_stats, world_to_build_grid,
 };
 use crate::gameplay::battlefield::{
     BUILD_ZONE_START_COL, GridIndex, col_to_world_x, row_to_world_y,
@@ -23,7 +23,10 @@ pub(super) fn spawn_grid_cursor(mut commands: Commands) {
     commands.spawn((
         Name::new("Grid Cursor"),
         GridCursor,
-        Sprite::from_color(GRID_CURSOR_COLOR, Vec2::splat(CELL_SIZE - 2.0)),
+        Sprite::from_color(
+            crate::theme::palette::GRID_CURSOR,
+            Vec2::splat(CELL_SIZE - 2.0),
+        ),
         Transform::from_xyz(0.0, 0.0, Z_GRID_CURSOR),
         Visibility::Hidden,
         DespawnOnExit(GameState::InGame),
@@ -40,9 +43,12 @@ pub(super) fn update_grid_cursor(
     let (cursor_transform, cursor_visibility) = &mut *cursor;
     let (camera, camera_global) = *camera;
 
-    // Try to convert screen cursor → world position → grid cell
+    // Try to convert screen cursor → world position → grid cell.
+    // Ignore cursor positions over the bottom bar area.
+    let bar_threshold = window.height() - crate::gameplay::hud::bottom_bar::BOTTOM_BAR_HEIGHT;
     let grid_cell = window
         .cursor_position()
+        .filter(|pos| pos.y < bar_threshold)
         .and_then(|screen_pos| camera.viewport_to_world_2d(camera_global, screen_pos).ok())
         .and_then(world_to_build_grid);
 
@@ -149,10 +155,14 @@ pub(super) fn handle_building_placement(
 
     // Data-driven timer insertion — no per-type match needed
     if let Some(interval) = stats.production_interval {
-        entity_commands.insert(ProductionTimer(Timer::from_seconds(
-            interval,
-            TimerMode::Repeating,
-        )));
+        entity_commands.insert((
+            super::production::ProductionBarConfig {
+                width: BUILDING_HEALTH_BAR_WIDTH,
+                height: BUILDING_HEALTH_BAR_HEIGHT,
+                y_offset: -BUILDING_HEALTH_BAR_Y_OFFSET,
+            },
+            ProductionTimer(Timer::from_seconds(interval, TimerMode::Repeating)),
+        ));
     }
     if let Some(interval) = stats.income_interval {
         entity_commands.insert(crate::gameplay::economy::income::IncomeTimer(

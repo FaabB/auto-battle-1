@@ -7,9 +7,7 @@ use crate::{GameSet, gameplay_running};
 
 // === Constants ===
 
-/// Health bar colors.
-const HEALTH_BAR_BG_COLOR: Color = Color::srgb(0.8, 0.1, 0.1);
-const HEALTH_BAR_FILL_COLOR: Color = Color::srgb(0.1, 0.9, 0.1);
+use crate::theme::palette;
 
 /// Default health bar width for units (pixels).
 pub const UNIT_HEALTH_BAR_WIDTH: f32 = 10.0;
@@ -56,7 +54,10 @@ fn spawn_health_bars(
         // Red background (full width, always visible)
         parent.spawn((
             Name::new("Health Bar BG"),
-            Sprite::from_color(HEALTH_BAR_BG_COLOR, Vec2::new(config.width, config.height)),
+            Sprite::from_color(
+                palette::HEALTH_BAR_BG,
+                Vec2::new(config.width, config.height),
+            ),
             Transform::from_xyz(0.0, config.y_offset, 1.0),
             HealthBarBackground,
         ));
@@ -64,7 +65,7 @@ fn spawn_health_bars(
         parent.spawn((
             Name::new("Health Bar Fill"),
             Sprite::from_color(
-                HEALTH_BAR_FILL_COLOR,
+                palette::HEALTH_BAR_FILL,
                 Vec2::new(config.width, config.height),
             ),
             Transform::from_xyz(0.0, config.y_offset, 1.1),

@@ -12,8 +12,7 @@ use crate::{GameSet, gameplay_running};
 
 // === Constants ===
 
-/// Color for the grid cursor hover highlight.
-const GRID_CURSOR_COLOR: Color = Color::srgba(1.0, 1.0, 1.0, 0.2);
+use crate::theme::palette;
 
 /// Building sprite size (slightly smaller than cell to show grid outline).
 const BUILDING_SPRITE_SIZE: f32 = 40.0;
@@ -86,7 +85,7 @@ pub const fn building_stats(building_type: BuildingType) -> BuildingStats {
         BuildingType::Barracks => BuildingStats {
             hp: 300.0,
             cost: 100,
-            color: Color::srgb(0.15, 0.2, 0.6),
+            color: palette::BARRACKS,
             produced_unit: Some(UnitType::Soldier),
             production_interval: Some(3.0),
             income_interval: None,
@@ -94,7 +93,7 @@ pub const fn building_stats(building_type: BuildingType) -> BuildingStats {
         BuildingType::Farm => BuildingStats {
             hp: 150.0,
             cost: 50,
-            color: Color::srgb(0.2, 0.6, 0.1),
+            color: palette::FARM,
             produced_unit: None,
             production_interval: None,
             income_interval: Some(1.0),
@@ -200,9 +199,13 @@ pub(super) fn plugin(app: &mut App) {
         .register_type::<GridCursor>()
         .register_type::<HoveredCell>()
         .register_type::<ProductionTimer>()
+        .register_type::<production::ProductionBarBackground>()
+        .register_type::<production::ProductionBarFill>()
+        .register_type::<production::ProductionBarConfig>()
         .init_resource::<HoveredCell>();
 
     app.add_observer(clear_build_slot_on_building_removed);
+    app.add_observer(production::spawn_production_bars);
 
     // Strip Building markers before DespawnOnExit to prevent observer warnings.
     app.add_systems(OnExit(GameState::InGame), strip_buildings_before_despawn);
@@ -225,6 +228,12 @@ pub(super) fn plugin(app: &mut App) {
         Update,
         production::tick_production_and_spawn_units
             .in_set(GameSet::Production)
+            .run_if(gameplay_running),
+    )
+    .add_systems(
+        Update,
+        production::update_production_bars
+            .in_set(GameSet::Ui)
             .run_if(gameplay_running),
     );
 }

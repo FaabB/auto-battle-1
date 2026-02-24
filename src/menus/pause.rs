@@ -1,61 +1,62 @@
-//! Pause menu UI: overlay, pause text, and input handling (unpause / quit).
+//! Pause menu UI: bordered panel with "Continue" and "Exit Game" buttons.
 
 use bevy::prelude::*;
 
 use super::Menu;
 use crate::screens::GameState;
+use crate::theme::{palette, widget};
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Menu::Pause), spawn_pause_menu);
-    app.add_systems(Update, handle_pause_input.run_if(in_state(Menu::Pause)));
 }
 
 fn spawn_pause_menu(mut commands: Commands) {
-    // Semi-transparent overlay
-    commands.spawn((crate::theme::widget::overlay(), DespawnOnExit(Menu::Pause)));
-
-    // Pause text
     commands.spawn((
-        crate::theme::widget::header("PAUSED"),
-        Node {
-            position_type: PositionType::Absolute,
-            left: Val::Percent(50.0),
-            top: Val::Percent(40.0),
-            ..default()
-        },
+        widget::ui_root("Pause Menu"),
+        BackgroundColor(palette::OVERLAY_BACKGROUND),
+        GlobalZIndex(1),
         DespawnOnExit(Menu::Pause),
+        children![
+            // Bordered panel
+            (
+                Name::new("Pause Panel"),
+                Node {
+                    width: Val::Px(500.0),
+                    min_height: Val::Px(400.0),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::SpaceBetween,
+                    padding: UiRect::all(Val::Px(40.0)),
+                    border: UiRect::all(Val::Px(2.0)),
+                    ..default()
+                },
+                BackgroundColor(palette::PANEL_BACKGROUND),
+                BorderColor::all(palette::PANEL_BORDER),
+                children![
+                    // Title
+                    (
+                        Text::new("Auto Battle"),
+                        TextFont::from_font_size(palette::FONT_SIZE_TITLE),
+                        TextColor(palette::HEADER_TEXT),
+                    ),
+                    // Continue button
+                    widget::button(
+                        "Continue",
+                        |_: On<Pointer<Click>>, mut next_menu: ResMut<NextState<Menu>>| {
+                            next_menu.set(Menu::None);
+                        },
+                    ),
+                    // Exit Game button
+                    widget::button(
+                        "Exit Game",
+                        |_: On<Pointer<Click>>, mut next_game: ResMut<NextState<GameState>>| {
+                            next_game.set(GameState::MainMenu);
+                        },
+                    ),
+                ],
+            ),
+        ],
     ));
-
-    // Resume prompt (24px — smaller than default label)
-    commands.spawn((
-        Text::new("Press ESC to Resume | Q to Quit"),
-        TextFont {
-            font_size: 24.0,
-            ..default()
-        },
-        TextColor(crate::theme::palette::BODY_TEXT),
-        Node {
-            position_type: PositionType::Absolute,
-            left: Val::Percent(50.0),
-            top: Val::Percent(55.0),
-            ..default()
-        },
-        DespawnOnExit(Menu::Pause),
-    ));
-}
-
-fn handle_pause_input(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut next_menu: ResMut<NextState<Menu>>,
-    mut next_game_state: ResMut<NextState<GameState>>,
-) {
-    if keyboard.just_pressed(KeyCode::Escape) {
-        next_menu.set(Menu::None);
-    }
-    if keyboard.just_pressed(KeyCode::KeyQ) {
-        next_game_state.set(GameState::MainMenu);
-        // Menu::Main will be set by the MainMenu screen's OnEnter system.
-    }
 }
 
 #[cfg(test)]
@@ -64,42 +65,33 @@ mod tests {
 
     use crate::menus::Menu;
     use crate::screens::GameState;
+    use crate::testing::assert_entity_count;
 
     #[test]
-    fn escape_unpauses() {
-        let mut app = crate::testing::create_base_test_app_no_input();
-        crate::testing::init_input_resources(&mut app);
-        app.add_systems(Update, super::handle_pause_input);
-        crate::testing::transition_to_ingame(&mut app);
+    fn pause_menu_spawns_panel_and_buttons() {
+        use bevy::state::app::StatesPlugin;
 
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_plugins(StatesPlugin);
+        app.init_state::<GameState>();
+        app.init_state::<Menu>();
+        app.add_plugins(super::plugin);
+
+        // Transition to InGame then Pause
         app.world_mut()
-            .resource_mut::<ButtonInput<KeyCode>>()
-            .press(KeyCode::Escape);
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::InGame);
         app.update();
-
-        let next_menu = app.world().resource::<NextState<Menu>>();
-        assert!(
-            matches!(*next_menu, NextState::Pending(Menu::None)),
-            "Expected NextState<Menu>::None, got {next_menu:?}"
-        );
-    }
-
-    #[test]
-    fn q_quits_to_main_menu() {
-        let mut app = crate::testing::create_base_test_app_no_input();
-        crate::testing::init_input_resources(&mut app);
-        app.add_systems(Update, super::handle_pause_input);
-        crate::testing::transition_to_ingame(&mut app);
-
         app.world_mut()
-            .resource_mut::<ButtonInput<KeyCode>>()
-            .press(KeyCode::KeyQ);
+            .resource_mut::<NextState<Menu>>()
+            .set(Menu::Pause);
         app.update();
+        app.update(); // Apply deferred
 
-        let next_state = app.world().resource::<NextState<GameState>>();
-        assert!(
-            matches!(*next_state, NextState::Pending(GameState::MainMenu)),
-            "Expected NextState<GameState>::MainMenu, got {next_state:?}"
-        );
+        // Title + 2 button labels
+        assert_entity_count::<With<Text>>(&mut app, 3);
+        // Continue + Exit Game
+        assert_entity_count::<With<Button>>(&mut app, 2);
     }
 }
