@@ -221,11 +221,11 @@ mod tests {
 ### Success Criteria
 
 #### Automated Verification
-- [ ] `cargo test --lib gameplay::units::avoidance::orca` — all pure math tests pass
-- [ ] `make check` — no clippy warnings
+- [x] `cargo test --lib gameplay::units::avoidance::orca` — all pure math tests pass
+- [x] `make check` — no clippy warnings
 
 #### Manual Verification
-- [ ] None (pure math, no visual output yet)
+- [x] None (pure math, no visual output yet)
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause here for manual confirmation before proceeding to Phase 2.
 
@@ -399,11 +399,11 @@ mod tests {
 ### Success Criteria
 
 #### Automated Verification
-- [ ] `cargo test --lib gameplay::units::avoidance` — all tests pass
-- [ ] `make check` — no warnings
+- [x] `cargo test --lib gameplay::units::avoidance` — all tests pass
+- [x] `make check` — no warnings
 
 #### Manual Verification
-- [ ] None (no visual output yet)
+- [x] None (no visual output yet)
 
 **Implementation Note**: After completing this phase, pause for confirmation before Phase 3.
 
@@ -860,10 +860,10 @@ mod integration_tests {
 ### Success Criteria
 
 #### Automated Verification
-- [ ] `make check` — no clippy warnings
-- [ ] `make test` — all tests pass (existing + new)
-- [ ] Existing movement tests pass with `PreferredVelocity` checks
-- [ ] New avoidance integration tests pass
+- [x] `make check` — no clippy warnings (pre-existing battlefield float_cmp only)
+- [x] `make test` — all 228 tests pass (existing + new)
+- [x] Existing movement tests pass with `PreferredVelocity` checks
+- [x] New avoidance integration tests pass (4 tests)
 
 #### Manual Verification
 - [ ] Run `cargo run`, place barracks, observe spawned units
@@ -939,8 +939,8 @@ When preferred (green) and actual (cyan) arrows diverge, ORCA is actively steeri
 ### Success Criteria
 
 #### Automated Verification
-- [ ] `make check` — no warnings
-- [ ] `make test` — all tests pass
+- [x] `make check` — no warnings
+- [x] `make test` — all 228 tests pass
 
 #### Manual Verification
 - [ ] Press F3 in-game to see debug overlay

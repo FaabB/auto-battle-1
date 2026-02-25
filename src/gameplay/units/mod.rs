@@ -1,5 +1,6 @@
 //! Unit components, constants, and shared rendering assets.
 
+pub mod avoidance;
 mod movement;
 pub mod pathfinding;
 pub mod spawn;
@@ -8,6 +9,8 @@ use avian2d::prelude::*;
 use bevy::prelude::*;
 use vleue_navigator::prelude::NavMesh;
 
+use self::avoidance::spatial_hash::SpatialHash;
+use self::avoidance::{AvoidanceAgent, AvoidanceConfig, PreferredVelocity};
 use crate::gameplay::combat::{
     AttackTimer, HealthBarConfig, UNIT_HEALTH_BAR_HEIGHT, UNIT_HEALTH_BAR_WIDTH,
     UNIT_HEALTH_BAR_Y_OFFSET,
@@ -134,6 +137,8 @@ pub fn spawn_unit(
             ),
             LockedAxes::ROTATION_LOCKED,
             LinearVelocity::ZERO,
+            PreferredVelocity::default(),
+            AvoidanceAgent::default(),
         ))
         .id()
 }
@@ -199,9 +204,16 @@ fn setup_unit_assets(
 pub(super) fn plugin(app: &mut App) {
     app.register_type::<Unit>()
         .register_type::<UnitType>()
+        .register_type::<PreferredVelocity>()
+        .register_type::<AvoidanceAgent>()
+        .register_type::<AvoidanceConfig>()
         .register_type::<pathfinding::NavPath>()
         .register_type::<pathfinding::PathRefreshTimer>()
-        .init_resource::<pathfinding::PathRefreshTimer>();
+        .init_resource::<pathfinding::PathRefreshTimer>()
+        .init_resource::<AvoidanceConfig>();
+
+    let config = AvoidanceConfig::default();
+    app.insert_resource(SpatialHash::new(config.neighbor_distance));
 
     app.add_systems(OnEnter(GameState::InGame), setup_unit_assets);
 
@@ -213,7 +225,13 @@ pub(super) fn plugin(app: &mut App) {
             pathfinding::compute_paths
                 .in_set(GameSet::Ai)
                 .after(crate::gameplay::ai::find_target),
-            movement::unit_movement.in_set(GameSet::Movement),
+            (
+                movement::unit_movement,
+                avoidance::rebuild_spatial_hash,
+                avoidance::compute_avoidance,
+            )
+                .chain_ignore_deferred()
+                .in_set(GameSet::Movement),
         )
             .run_if(gameplay_running),
     );

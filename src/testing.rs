@@ -10,6 +10,7 @@ use bevy::state::state::FreelyMutableState;
 use bevy::window::WindowPlugin;
 
 use crate::gameplay::combat::AttackTimer;
+use crate::gameplay::units::avoidance::{AvoidanceAgent, PreferredVelocity};
 use crate::gameplay::units::pathfinding::NavPath;
 use crate::gameplay::units::{UNIT_RADIUS, Unit, UnitType, unit_stats};
 use crate::gameplay::{CombatStats, CurrentTarget, Health, Movement, Target, Team};
@@ -175,7 +176,11 @@ pub fn spawn_test_unit(world: &mut World, team: Team, x: f32, y: f32) -> Entity 
             Transform::from_xyz(x, y, 0.0),
             GlobalTransform::from(Transform::from_xyz(x, y, 0.0)),
             Collider::circle(UNIT_RADIUS),
+        ))
+        .insert((
             LinearVelocity::ZERO,
+            PreferredVelocity::default(),
+            AvoidanceAgent::default(),
             NavPath::default(),
         ))
         .id()

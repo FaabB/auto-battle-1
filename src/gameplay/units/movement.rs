@@ -1,8 +1,9 @@
 //! Unit movement toward current target, following `NavPath` waypoints around obstacles.
 
-use avian2d::prelude::*;
+use avian2d::prelude::Collider;
 use bevy::prelude::*;
 
+use super::avoidance::PreferredVelocity;
 use super::pathfinding::NavPath;
 use super::{CombatStats, CurrentTarget, Movement, Unit};
 use crate::third_party::surface_distance;
@@ -11,7 +12,7 @@ use crate::third_party::surface_distance;
 /// is within this distance of a waypoint, advance to the next one.
 const WAYPOINT_REACHED_DISTANCE: f32 = 8.0;
 
-/// Sets unit `LinearVelocity` toward their current waypoint or target.
+/// Sets unit `PreferredVelocity` toward their current waypoint or target.
 ///
 /// If the unit has a `NavPath` with remaining waypoints, steers toward
 /// the next waypoint. When close enough, advances to the next waypoint.
@@ -20,6 +21,9 @@ const WAYPOINT_REACHED_DISTANCE: f32 = 8.0;
 ///
 /// Always checks attack range against the actual target — if in range,
 /// stops regardless of remaining waypoints.
+///
+/// The downstream `compute_avoidance` system reads `PreferredVelocity`
+/// and writes the final `LinearVelocity`.
 ///
 /// Runs in `GameSet::Movement`.
 pub(super) fn unit_movement(
@@ -30,7 +34,7 @@ pub(super) fn unit_movement(
             &CombatStats,
             &GlobalTransform,
             &Collider,
-            &mut LinearVelocity,
+            &mut PreferredVelocity,
             &mut NavPath,
         ),
         With<Unit>,
@@ -43,16 +47,16 @@ pub(super) fn unit_movement(
         stats,
         global_transform,
         unit_collider,
-        mut velocity,
+        mut preferred,
         mut nav_path,
     ) in &mut units
     {
         let Some(target_entity) = current_target.0 else {
-            velocity.0 = Vec2::ZERO;
+            preferred.0 = Vec2::ZERO;
             continue;
         };
         let Ok((target_pos, target_collider)) = targets.get(target_entity) else {
-            velocity.0 = Vec2::ZERO;
+            preferred.0 = Vec2::ZERO;
             continue;
         };
 
@@ -63,7 +67,7 @@ pub(super) fn unit_movement(
 
         // Already within attack range — stop
         if distance_to_target <= stats.range {
-            velocity.0 = Vec2::ZERO;
+            preferred.0 = Vec2::ZERO;
             continue;
         }
 
@@ -88,12 +92,12 @@ pub(super) fn unit_movement(
         let diff = steer_toward - current_xy;
         let dist = diff.length();
         if dist < f32::EPSILON {
-            velocity.0 = Vec2::ZERO;
+            preferred.0 = Vec2::ZERO;
             continue;
         }
 
         let direction = diff / dist;
-        velocity.0 = direction * movement.speed;
+        preferred.0 = direction * movement.speed;
     }
 }
 
@@ -134,12 +138,12 @@ mod tests {
 
         app.update();
 
-        let velocity = app.world().get::<LinearVelocity>(unit).unwrap();
+        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
         // Velocity should point right (positive x) toward target
         assert!(
-            velocity.x > 0.0,
+            velocity.0.x > 0.0,
             "Velocity x should be positive toward target, got {}",
-            velocity.x
+            velocity.0.x
         );
         // Magnitude should be approximately move_speed
         let speed = velocity.0.length();
@@ -167,7 +171,7 @@ mod tests {
 
         app.update();
 
-        let velocity = app.world().get::<LinearVelocity>(unit).unwrap();
+        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
         assert!(
             velocity.0.length() < f32::EPSILON,
             "Unit within range should have zero velocity, got {:?}",
@@ -184,7 +188,7 @@ mod tests {
 
         app.update();
 
-        let velocity = app.world().get::<LinearVelocity>(unit).unwrap();
+        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
         assert!(
             velocity.0.length() < f32::EPSILON,
             "Unit with no target should have zero velocity, got {:?}",
@@ -204,7 +208,7 @@ mod tests {
         app.world_mut().despawn(target);
         app.update();
 
-        let velocity = app.world().get::<LinearVelocity>(unit).unwrap();
+        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
         assert!(
             velocity.0.length() < f32::EPSILON,
             "Unit with despawned target should have zero velocity, got {:?}",
@@ -234,7 +238,7 @@ mod tests {
 
         app.update();
 
-        let velocity = app.world().get::<LinearVelocity>(unit).unwrap();
+        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
         let speed = velocity.0.length();
         assert!(
             (speed - 50.0).abs() < 0.1,
@@ -266,17 +270,17 @@ mod tests {
 
         app.update();
 
-        let velocity = app.world().get::<LinearVelocity>(unit).unwrap();
+        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
         // Should head toward first waypoint (100, 300) = upward from (100, 100)
         assert!(
-            velocity.y > 0.0,
+            velocity.0.y > 0.0,
             "Unit should move upward toward first waypoint, got vy={}",
-            velocity.y
+            velocity.0.y
         );
         assert!(
-            velocity.x.abs() < 0.1,
+            velocity.0.x.abs() < 0.1,
             "Unit should not move horizontally toward first waypoint, got vx={}",
-            velocity.x
+            velocity.0.x
         );
     }
 
@@ -318,11 +322,11 @@ mod tests {
 
         app.update();
 
-        let velocity = app.world().get::<LinearVelocity>(unit).unwrap();
+        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
         assert!(
-            velocity.x > 0.0,
+            velocity.0.x > 0.0,
             "Unit with no path should move directly toward target, got vx={}",
-            velocity.x
+            velocity.0.x
         );
     }
 
@@ -349,7 +353,7 @@ mod tests {
 
         app.update();
 
-        let velocity = app.world().get::<LinearVelocity>(unit).unwrap();
+        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
         assert!(
             velocity.0.length() < f32::EPSILON,
             "Unit in attack range should stop even with waypoints, got {:?}",

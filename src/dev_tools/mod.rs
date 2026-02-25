@@ -6,7 +6,10 @@
 use bevy::prelude::*;
 use vleue_navigator::prelude::NavMeshesDebug;
 
+use avian2d::prelude::LinearVelocity;
+
 use crate::gameplay::units::Unit;
+use crate::gameplay::units::avoidance::PreferredVelocity;
 use crate::gameplay::units::pathfinding::NavPath;
 
 /// Marker resource: when present, the world inspector is shown.
@@ -29,7 +32,7 @@ pub fn plugin(app: &mut App) {
     app.add_systems(Update, toggle_navmesh_debug);
     app.add_systems(
         Update,
-        debug_draw_unit_paths
+        (debug_draw_unit_paths, debug_draw_avoidance)
             .run_if(crate::gameplay_running.and(resource_exists::<NavMeshesDebug>)),
     );
 }
@@ -60,6 +63,27 @@ fn toggle_navmesh_debug(
             commands.remove_resource::<NavMeshesDebug>();
         } else {
             commands.insert_resource(NavMeshesDebug(Color::srgba(1.0, 0.0, 0.0, 0.15)));
+        }
+    }
+}
+
+/// Draw ORCA debug visualization: green = preferred velocity, cyan = actual (ORCA-adjusted).
+fn debug_draw_avoidance(
+    units: Query<(&GlobalTransform, &LinearVelocity, &PreferredVelocity), With<Unit>>,
+    mut gizmos: Gizmos,
+) {
+    let scale = 0.5; // Scale arrows to be visible but not overwhelming
+    for (transform, velocity, preferred) in &units {
+        let pos = transform.translation().xy();
+
+        // Green arrow: preferred velocity (where pathfinding wants to go)
+        if preferred.0.length_squared() > f32::EPSILON {
+            gizmos.arrow_2d(pos, pos + preferred.0 * scale, Color::srgb(0.0, 1.0, 0.0));
+        }
+
+        // Cyan arrow: actual velocity (ORCA-adjusted)
+        if velocity.0.length_squared() > f32::EPSILON {
+            gizmos.arrow_2d(pos, pos + velocity.0 * scale, Color::srgb(0.0, 1.0, 1.0));
         }
     }
 }
