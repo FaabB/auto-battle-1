@@ -67,6 +67,13 @@ impl NavPath {
         self.current_index < self.waypoints.len()
     }
 
+    /// Whether a non-empty path has been fully consumed (all waypoints visited).
+    /// Used to trigger immediate re-pathing when the unit hasn't reached its target yet.
+    #[must_use]
+    pub fn is_path_consumed(&self) -> bool {
+        !self.waypoints.is_empty() && self.current_index >= self.waypoints.len()
+    }
+
     /// Whether this path needs recomputation for the given target.
     #[must_use]
     pub fn needs_recompute(&self, target: Option<Entity>) -> bool {
@@ -104,8 +111,9 @@ pub(super) fn compute_paths(
     for (current_target, transform, mut nav_path) in &mut units {
         let target_changed = nav_path.needs_recompute(current_target.0);
 
-        // Skip recomputation if target hasn't changed and no periodic refresh
-        if !target_changed && !refresh_due {
+        // Recompute if: target changed, periodic refresh due, or path fully consumed
+        let path_consumed = nav_path.is_path_consumed();
+        if !target_changed && !refresh_due && !path_consumed {
             continue;
         }
 
@@ -125,7 +133,7 @@ pub(super) fn compute_paths(
         if let Some(path) = navmesh.path(from, to) {
             nav_path.set(path.path, current_target.0);
         } else {
-            // No valid path — clear waypoints, movement falls back to direct
+            // No valid path — store empty waypoints, unit stops until next refresh
             nav_path.set(Vec::new(), current_target.0);
         }
     }
@@ -191,5 +199,25 @@ mod tests {
         assert!(!path.needs_recompute(Some(entity_a))); // Same target
         assert!(path.needs_recompute(Some(entity_b))); // Different target
         assert!(path.needs_recompute(None)); // No target
+    }
+
+    #[test]
+    fn nav_path_is_path_consumed() {
+        let mut path = NavPath::default();
+
+        // Empty path is not "consumed" (was never set)
+        assert!(!path.is_path_consumed());
+
+        // Set a path with one waypoint
+        path.set(vec![Vec2::new(1.0, 2.0)], None);
+        assert!(!path.is_path_consumed()); // At index 0, not consumed
+
+        // Advance past the last waypoint
+        path.advance();
+        assert!(path.is_path_consumed()); // All consumed
+
+        // Clear resets
+        path.clear();
+        assert!(!path.is_path_consumed());
     }
 }

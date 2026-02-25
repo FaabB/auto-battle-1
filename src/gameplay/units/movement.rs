@@ -10,14 +10,14 @@ use crate::third_party::surface_distance;
 
 /// Distance threshold for reaching a waypoint — when the unit's center
 /// is within this distance of a waypoint, advance to the next one.
-const WAYPOINT_REACHED_DISTANCE: f32 = 8.0;
+const WAYPOINT_REACHED_DISTANCE: f32 = 4.0;
 
-/// Sets unit `PreferredVelocity` toward their current waypoint or target.
+/// Sets unit `PreferredVelocity` toward their current navmesh waypoint.
 ///
 /// If the unit has a `NavPath` with remaining waypoints, steers toward
 /// the next waypoint. When close enough, advances to the next waypoint.
-/// When all waypoints are consumed (or no path exists), steers directly
-/// toward the `CurrentTarget` (existing straight-line behavior).
+/// When all waypoints are consumed (or no path exists), stops the unit
+/// and waits for path recomputation — never steers directly at the target.
 ///
 /// Always checks attack range against the actual target — if in range,
 /// stops regardless of remaining waypoints.
@@ -71,22 +71,23 @@ pub(super) fn unit_movement(
             continue;
         }
 
-        // Determine steering target: next waypoint or direct to target
-        let steer_toward = nav_path.current_waypoint().map_or(target_xy, |waypoint| {
-            // Check if we've reached the current waypoint
+        // Determine steering target from navmesh waypoints — never steer direct to target
+        let Some(steer_toward) = nav_path.current_waypoint().and_then(|waypoint| {
             let dist_to_waypoint = current_xy.distance(waypoint);
             if dist_to_waypoint < WAYPOINT_REACHED_DISTANCE {
-                // Advance to next waypoint
                 if nav_path.advance() {
-                    nav_path.current_waypoint().unwrap_or(target_xy)
+                    nav_path.current_waypoint()
                 } else {
-                    // No more waypoints — steer directly to target
-                    target_xy
+                    None // All waypoints consumed — stop, re-path next frame
                 }
             } else {
-                waypoint
+                Some(waypoint)
             }
-        });
+        }) else {
+            // No waypoints available — stop and wait for path computation
+            preferred.0 = Vec2::ZERO;
+            continue;
+        };
 
         // Compute velocity toward steering target
         let diff = steer_toward - current_xy;
@@ -135,6 +136,10 @@ mod tests {
 
         let target = spawn_target_at(app.world_mut(), 500.0);
         let unit = spawn_unit_at(app.world_mut(), 100.0, stats.move_speed, Some(target));
+
+        // Give the unit a path toward the target
+        let mut nav_path = app.world_mut().get_mut::<NavPath>(unit).unwrap();
+        nav_path.set(vec![Vec2::new(500.0, 100.0)], Some(target));
 
         app.update();
 
@@ -236,6 +241,10 @@ mod tests {
         *app.world_mut().get_mut::<GlobalTransform>(unit).unwrap() =
             GlobalTransform::from(new_transform);
 
+        // Give the unit a path toward the target at a diagonal
+        let mut nav_path = app.world_mut().get_mut::<NavPath>(unit).unwrap();
+        nav_path.set(vec![Vec2::new(400.0, 200.0)], Some(target));
+
         app.update();
 
         let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
@@ -312,21 +321,45 @@ mod tests {
     }
 
     #[test]
-    fn unit_falls_back_to_direct_when_no_path() {
+    fn unit_stops_when_no_path() {
         let mut app = create_movement_test_app();
         let stats = unit_stats(UnitType::Soldier);
 
         let target = spawn_target_at(app.world_mut(), 500.0);
         let unit = spawn_unit_at(app.world_mut(), 100.0, stats.move_speed, Some(target));
-        // NavPath is default (empty) — should go direct to target
+        // NavPath is default (empty) — should stop, not steer direct
 
         app.update();
 
         let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
         assert!(
-            velocity.0.x > 0.0,
-            "Unit with no path should move directly toward target, got vx={}",
-            velocity.0.x
+            velocity.0.length() < f32::EPSILON,
+            "Unit with no path should stop, got {:?}",
+            velocity.0
+        );
+    }
+
+    #[test]
+    fn unit_stops_when_all_waypoints_consumed() {
+        let mut app = create_movement_test_app();
+        let stats = unit_stats(UnitType::Soldier);
+
+        // Target far away (not in attack range)
+        let target = spawn_target_at(app.world_mut(), 500.0);
+        let unit = spawn_unit_at(app.world_mut(), 100.0, stats.move_speed, Some(target));
+
+        // Set a single waypoint very close to the unit so it's consumed immediately
+        let mut nav_path = app.world_mut().get_mut::<NavPath>(unit).unwrap();
+        nav_path.set(vec![Vec2::new(101.0, 100.0)], Some(target));
+
+        app.update();
+
+        // Waypoint consumed, but not in attack range — unit should stop
+        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
+        assert!(
+            velocity.0.length() < f32::EPSILON,
+            "Unit should stop when all waypoints consumed, got {:?}",
+            velocity.0
         );
     }
 

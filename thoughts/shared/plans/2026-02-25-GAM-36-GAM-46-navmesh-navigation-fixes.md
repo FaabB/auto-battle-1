@@ -1,4 +1,4 @@
-# Navmesh Navigation Fixes (GAM-36 + GAM-46) Implementation Plan
+# Navmesh Navigation Fixes (GAM-36 + GAM-46) Implementation Plan — DONE
 
 ## Overview
 
@@ -62,8 +62,8 @@ const WAYPOINT_REACHED_DISTANCE: f32 = 4.0;
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes — existing test `unit_advances_to_next_waypoint` still passes (waypoint at (102, 100), unit at (100, 100), distance = 2px < 4px ✓)
+- [x] `make check` passes
+- [x] `make test` passes — existing test `unit_advances_to_next_waypoint` still passes (waypoint at (102, 100), unit at (100, 100), distance = 2px < 4px ✓)
 
 #### Manual Verification:
 - [ ] Place two adjacent barracks, spawn units — units round building corners without oscillation
@@ -267,11 +267,11 @@ fn nav_path_is_path_consumed() {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes (all existing tests + new tests)
-- [ ] New test `unit_stops_when_no_path` passes (replaces `unit_falls_back_to_direct_when_no_path`)
-- [ ] New test `unit_stops_when_all_waypoints_consumed` passes
-- [ ] New test `nav_path_is_path_consumed` passes
+- [x] `make check` passes
+- [x] `make test` passes (all existing tests + new tests)
+- [x] New test `unit_stops_when_no_path` passes (replaces `unit_falls_back_to_direct_when_no_path`)
+- [x] New test `unit_stops_when_all_waypoints_consumed` passes
+- [x] New test `nav_path_is_path_consumed` passes
 
 #### Manual Verification:
 - [ ] Unit near a building with no path: unit stops (zero velocity), does not steer into the building
