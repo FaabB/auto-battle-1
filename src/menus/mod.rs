@@ -10,6 +10,8 @@ mod pause;
 
 use bevy::prelude::*;
 
+use crate::screens::GameState;
+
 /// Menu overlay states. Orthogonal to `GameState`.
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[states(scoped_entities)]
@@ -36,6 +38,12 @@ pub fn plugin(app: &mut App) {
     // and all timer-based systems (production, attack, income, waves).
     app.add_systems(OnExit(Menu::None), pause_virtual_time);
     app.add_systems(OnEnter(Menu::None), unpause_virtual_time);
+
+    // Guarantee virtual time is unpaused when leaving InGame, regardless of
+    // which Menu variant is active. Without this, Menu::Pause → Menu::Main
+    // (and Victory/Defeat → Main) skip Menu::None, so `unpause_virtual_time`
+    // never fires and Time<Virtual> stays paused for the rest of the session.
+    app.add_systems(OnExit(GameState::InGame), unpause_virtual_time_on_game_exit);
 }
 
 fn pause_virtual_time(mut time: ResMut<Time<Virtual>>) {
@@ -43,6 +51,10 @@ fn pause_virtual_time(mut time: ResMut<Time<Virtual>>) {
 }
 
 fn unpause_virtual_time(mut time: ResMut<Time<Virtual>>) {
+    time.unpause();
+}
+
+fn unpause_virtual_time_on_game_exit(mut time: ResMut<Time<Virtual>>) {
     time.unpause();
 }
 
@@ -97,6 +109,88 @@ mod tests {
         assert!(
             !time.is_paused(),
             "Time<Virtual> should be unpaused when menu closes"
+        );
+    }
+
+    /// Create a test app with both GameState and Menu states, plus the
+    /// game-exit unpause system. Starts in GameState::InGame with Menu::Pause.
+    fn create_game_exit_test_app(menu: Menu) -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_plugins(bevy::state::app::StatesPlugin);
+        app.init_state::<GameState>();
+        app.init_state::<Menu>();
+        app.add_systems(OnExit(Menu::None), pause_virtual_time);
+        app.add_systems(OnEnter(Menu::None), unpause_virtual_time);
+        app.add_systems(OnExit(GameState::InGame), unpause_virtual_time_on_game_exit);
+        app.update();
+
+        // Enter InGame
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::InGame);
+        app.update();
+
+        // Open the specified menu overlay (pauses virtual time via OnExit(Menu::None))
+        app.world_mut().resource_mut::<NextState<Menu>>().set(menu);
+        app.update();
+
+        let time = app.world().resource::<Time<Virtual>>();
+        assert!(
+            time.is_paused(),
+            "Time<Virtual> should be paused when menu overlay is open"
+        );
+
+        app
+    }
+
+    #[test]
+    fn virtual_time_unpaused_after_ingame_to_main_menu_via_pause() {
+        let mut app = create_game_exit_test_app(Menu::Pause);
+
+        // Exit game: GameState → MainMenu (Menu goes Pause → stays Pause,
+        // never enters None — but OnExit(InGame) fires unpause)
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::MainMenu);
+        app.update();
+
+        let time = app.world().resource::<Time<Virtual>>();
+        assert!(
+            !time.is_paused(),
+            "Time<Virtual> should be unpaused after exiting InGame via pause menu"
+        );
+    }
+
+    #[test]
+    fn virtual_time_unpaused_after_ingame_to_main_menu_via_victory() {
+        let mut app = create_game_exit_test_app(Menu::Victory);
+
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::MainMenu);
+        app.update();
+
+        let time = app.world().resource::<Time<Virtual>>();
+        assert!(
+            !time.is_paused(),
+            "Time<Virtual> should be unpaused after exiting InGame via victory"
+        );
+    }
+
+    #[test]
+    fn virtual_time_unpaused_after_ingame_to_main_menu_via_defeat() {
+        let mut app = create_game_exit_test_app(Menu::Defeat);
+
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::MainMenu);
+        app.update();
+
+        let time = app.world().resource::<Time<Virtual>>();
+        assert!(
+            !time.is_paused(),
+            "Time<Virtual> should be unpaused after exiting InGame via defeat"
         );
     }
 }
