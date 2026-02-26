@@ -129,12 +129,12 @@ fn setup_unit_assets(
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (clippy + type checking)
-- [ ] `make test` passes (all existing tests)
+- [x] `make check` passes (clippy + type checking)
+- [x] `make test` passes (all existing tests)
 
 #### Manual Verification:
-- [ ] Start a game, let units fight, observe no negative health bars
-- [ ] Exit to main menu and start a new game — no crashes, grid works correctly
+- [x] Start a game, let units fight, observe no negative health bars
+- [x] Exit to main menu and start a new game — no crashes, grid works correctly
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause here for manual confirmation before proceeding to Phase 2.
 
@@ -327,12 +327,12 @@ app.add_systems(
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
+- [x] `make check` passes
+- [x] `make test` passes
 
 #### Manual Verification:
-- [ ] Game plays identically to before (no visual/behavioral changes)
-- [ ] Exit to main menu → start new game works smoothly
+- [x] Game plays identically to before (no visual/behavioral changes)
+- [x] Exit to main menu → start new game works smoothly
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause here for manual confirmation before proceeding to Phase 3.
 
@@ -415,12 +415,12 @@ fn grid_index_clear_removes_all_entries() {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
-- [ ] All new tests pass individually
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] All new tests pass individually
 
 #### Manual Verification:
-- [ ] None needed — all changes in this phase are test-only
+- [x] None needed — all changes in this phase are test-only
 
 ---
 

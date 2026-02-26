@@ -16,7 +16,7 @@ use crate::gameplay::combat::{AttackTimer, HealthBarConfig};
 use crate::gameplay::units::UNIT_RADIUS;
 use crate::gameplay::{CombatStats, CurrentTarget, Health, Target, Team};
 use crate::screens::GameState;
-use crate::third_party::{CollisionLayer, NavObstacle};
+use crate::third_party::{NavObstacle, solid_entity_layers};
 use crate::{Z_BACKGROUND, Z_FORTRESS, Z_GRID, Z_ZONE};
 use vleue_navigator::prelude::*;
 
@@ -25,6 +25,8 @@ use crate::theme::palette;
 /// Spawns all battlefield entities: zone sprites with markers, and build slot grid.
 #[allow(clippy::too_many_lines)]
 pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<GridIndex>) {
+    grid_index.clear(); // Reset stale entity refs from previous session
+
     let fortress_size = Vec2::new(
         f32::from(FORTRESS_COLS) * CELL_SIZE,
         f32::from(FORTRESS_ROWS) * CELL_SIZE,
@@ -95,10 +97,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
             NavObstacle,
             RigidBody::Static,
             Collider::rectangle(fortress_size.x, fortress_size.y),
-            CollisionLayers::new(
-                [CollisionLayer::Pushbox, CollisionLayer::Hurtbox],
-                [CollisionLayer::Pushbox, CollisionLayer::Hitbox],
-            ),
+            solid_entity_layers(),
         ));
 
     // Building zone (dark blue-gray)
@@ -180,10 +179,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
             NavObstacle,
             RigidBody::Static,
             Collider::rectangle(fortress_size.x, fortress_size.y),
-            CollisionLayers::new(
-                [CollisionLayer::Pushbox, CollisionLayer::Hurtbox],
-                [CollisionLayer::Pushbox, CollisionLayer::Hitbox],
-            ),
+            solid_entity_layers(),
         ));
 
     // Build slots: 10 rows × 6 cols — visible grid cells, indexed for O(1) lookup

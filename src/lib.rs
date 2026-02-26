@@ -33,6 +33,8 @@ pub(crate) const Z_GRID_CURSOR: f32 = 2.0;
 pub(crate) const Z_BUILDING: f32 = 3.0;
 /// Units (Ticket 3).
 pub(crate) const Z_UNIT: f32 = 4.0;
+/// Projectiles (above units).
+pub(crate) const Z_PROJECTILE: f32 = 4.5;
 
 // === Global System Ordering ===
 // Domain plugins register their Update systems in the appropriate set.
@@ -137,5 +139,6 @@ mod tests {
         assert!(Z_GRID < Z_GRID_CURSOR);
         assert!(Z_GRID_CURSOR < Z_BUILDING);
         assert!(Z_BUILDING < Z_UNIT);
+        assert!(Z_UNIT < Z_PROJECTILE);
     }
 }

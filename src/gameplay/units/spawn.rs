@@ -5,7 +5,7 @@ use vleue_navigator::prelude::*;
 
 use crate::gameplay::battlefield::EnemyFortress;
 use crate::screens::GameState;
-use crate::{GameSet, Z_UNIT, gameplay_running};
+use crate::{GameSet, gameplay_running};
 
 use crate::gameplay::Team;
 
@@ -107,7 +107,7 @@ fn tick_enemy_spawner(
         &mut commands,
         super::UnitType::Soldier,
         Team::Enemy,
-        spawn_xy.extend(Z_UNIT),
+        spawn_xy,
         &unit_assets,
     );
 

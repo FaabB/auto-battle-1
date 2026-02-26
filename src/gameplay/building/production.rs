@@ -4,7 +4,6 @@ use bevy::prelude::*;
 use vleue_navigator::prelude::*;
 
 use super::ProductionTimer;
-use crate::Z_UNIT;
 use crate::gameplay::building::building_stats;
 use crate::gameplay::units::{UnitAssets, random_navigable_spawn, spawn_unit};
 use crate::theme::palette;
@@ -116,7 +115,7 @@ pub(super) fn tick_production_and_spawn_units(
                     &mut commands,
                     unit_type,
                     crate::gameplay::Team::Player,
-                    spawn_xy.extend(Z_UNIT),
+                    spawn_xy,
                     &unit_assets,
                 );
             }

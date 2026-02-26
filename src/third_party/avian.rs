@@ -24,6 +24,18 @@ pub enum CollisionLayer {
     Hurtbox,
 }
 
+/// Collision layers for solid game entities (units, buildings, fortresses).
+///
+/// - Member of: Pushbox + Hurtbox (can be pushed and can be damaged)
+/// - Collides with: Pushbox + Hitbox (blocked by solids, hit by projectiles)
+#[must_use]
+pub fn solid_entity_layers() -> CollisionLayers {
+    CollisionLayers::new(
+        [CollisionLayer::Pushbox, CollisionLayer::Hurtbox],
+        [CollisionLayer::Pushbox, CollisionLayer::Hitbox],
+    )
+}
+
 // === Helpers ===
 
 /// Compute the minimum distance between two collider *surfaces*.
@@ -94,5 +106,15 @@ mod tests {
         // Circle at x=72, building half-width 30 → building edge at x=30.
         // Circle surface at x=72-12=60. Distance = 60-30 = 30.
         assert!((dist - 30.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn solid_entity_layers_is_pushbox_hurtbox() {
+        let layers = solid_entity_layers();
+        let expected = CollisionLayers::new(
+            [CollisionLayer::Pushbox, CollisionLayer::Hurtbox],
+            [CollisionLayer::Pushbox, CollisionLayer::Hitbox],
+        );
+        assert_eq!(layers, expected);
     }
 }

@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use crate::gameplay::{CombatStats, CurrentTarget, Health, Team};
 use crate::screens::GameState;
 use crate::third_party::{CollisionLayer, surface_distance};
-use crate::{GameSet, Z_UNIT, gameplay_running};
+use crate::{GameSet, Z_PROJECTILE, gameplay_running};
 
 // === Constants ===
 
@@ -98,7 +98,7 @@ fn attack(
                 Transform::from_xyz(
                     attacker_pos.translation().x,
                     attacker_pos.translation().y,
-                    Z_UNIT + 0.5,
+                    Z_PROJECTILE,
                 ),
                 DespawnOnExit(GameState::InGame),
                 // Physics: sensor hitbox for collision-based damage
@@ -169,7 +169,7 @@ fn handle_projectile_hits(
             if hit_team == proj_team {
                 continue;
             }
-            health.current -= projectile.damage;
+            health.current = (health.current - projectile.damage).max(0.0);
             commands.entity(entity).despawn();
             break; // One hit per projectile
         }
@@ -388,6 +388,20 @@ mod integration_tests {
 
         let health = app.world().get::<Health>(enemy).unwrap();
         assert_eq!(health.current, 75.0);
+    }
+
+    #[test]
+    fn projectile_hit_clamps_health_at_zero() {
+        let mut app = create_hit_test_app();
+
+        let enemy = app.world_mut().spawn((Team::Enemy, Health::new(10.0))).id();
+        // Damage exceeds HP — health should clamp to 0, not go negative
+        spawn_test_projectile(app.world_mut(), Team::Player, enemy, 50.0, &[enemy]);
+
+        app.update();
+
+        let health = app.world().get::<Health>(enemy).unwrap();
+        assert_eq!(health.current, 0.0); // Not -40.0
     }
 
     #[test]

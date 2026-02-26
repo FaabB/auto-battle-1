@@ -4,6 +4,7 @@ use avian2d::prelude::*;
 use bevy::prelude::*;
 
 use super::{CurrentTarget, Movement, Target, Team};
+use crate::screens::GameState;
 use crate::third_party::surface_distance;
 use crate::{GameSet, gameplay_running};
 
@@ -80,10 +81,7 @@ pub fn find_target(
         }
 
         let my_pos = transform.translation().xy();
-        let opposing_team = match team {
-            Team::Player => Team::Enemy,
-            Team::Enemy => Team::Player,
-        };
+        let opposing_team = team.opposing();
 
         // Find nearest enemy target (backtrack filter only for mobile entities)
         let mut nearest: Option<(Entity, f32)> = None;
@@ -116,9 +114,14 @@ pub fn find_target(
 
 // === Plugin ===
 
+fn reset_retarget_timer(mut commands: Commands) {
+    commands.insert_resource(RetargetTimer::default());
+}
+
 pub(super) fn plugin(app: &mut App) {
     app.init_resource::<RetargetTimer>();
     app.register_type::<RetargetTimer>();
+    app.add_systems(OnEnter(GameState::InGame), reset_retarget_timer);
     app.add_systems(
         Update,
         find_target.in_set(GameSet::Ai).run_if(gameplay_running),

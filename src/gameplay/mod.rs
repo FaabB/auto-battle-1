@@ -37,6 +37,17 @@ pub enum Team {
     Enemy,
 }
 
+impl Team {
+    /// Returns the opposing team.
+    #[must_use]
+    pub const fn opposing(self) -> Self {
+        match self {
+            Self::Player => Self::Enemy,
+            Self::Enemy => Self::Player,
+        }
+    }
+}
+
 /// Hit points for any damageable entity (units, buildings, fortresses).
 #[derive(Component, Debug, Clone, Reflect)]
 #[reflect(Component)]

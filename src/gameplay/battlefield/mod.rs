@@ -134,6 +134,11 @@ pub struct GridIndex {
 }
 
 impl GridIndex {
+    /// Remove all entries (used on state re-entry before repopulating).
+    pub fn clear(&mut self) {
+        self.slots.clear();
+    }
+
     /// Insert a slot entity at the given grid coordinates.
     pub fn insert(&mut self, col: u16, row: u16, entity: Entity) {
         self.slots.insert((col, row), entity);
@@ -255,6 +260,16 @@ mod tests {
     #[test]
     fn battlefield_center_y_is_half_height() {
         assert_eq!(battlefield_center_y(), BATTLEFIELD_HEIGHT / 2.0);
+    }
+
+    #[test]
+    fn grid_index_clear_removes_all_entries() {
+        let mut index = GridIndex::default();
+        index.insert(0, 0, Entity::from_bits(1));
+        index.insert(1, 1, Entity::from_bits(2));
+        index.clear();
+        assert_eq!(index.get(0, 0), None);
+        assert_eq!(index.get(1, 1), None);
     }
 
     #[test]

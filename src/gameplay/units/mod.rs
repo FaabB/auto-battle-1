@@ -17,7 +17,7 @@ use crate::gameplay::combat::{
 };
 use crate::gameplay::{CombatStats, CurrentTarget, Health, Movement, Target, Team};
 use crate::screens::GameState;
-use crate::third_party::CollisionLayer;
+use crate::third_party::solid_entity_layers;
 use crate::{GameSet, Z_UNIT, gameplay_running};
 
 // === Constants ===
@@ -87,7 +87,7 @@ pub fn spawn_unit(
     commands: &mut Commands,
     unit_type: UnitType,
     team: Team,
-    position: Vec3,
+    position: Vec2,
     assets: &UnitAssets,
 ) -> Entity {
     let stats = unit_stats(unit_type);
@@ -131,10 +131,7 @@ pub fn spawn_unit(
             pathfinding::NavPath::default(),
             RigidBody::Dynamic,
             Collider::circle(UNIT_RADIUS),
-            CollisionLayers::new(
-                [CollisionLayer::Pushbox, CollisionLayer::Hurtbox],
-                [CollisionLayer::Pushbox, CollisionLayer::Hitbox],
-            ),
+            solid_entity_layers(),
             LockedAxes::ROTATION_LOCKED,
             LinearVelocity::ZERO,
             PreferredVelocity::default(),
@@ -191,12 +188,20 @@ fn setup_unit_assets(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    existing: Option<Res<UnitAssets>>,
 ) {
+    if existing.is_some() {
+        return; // Already created — don't leak handles
+    }
     commands.insert_resource(UnitAssets {
         mesh: meshes.add(Circle::new(UNIT_RADIUS)),
         player_material: materials.add(palette::PLAYER_UNIT),
         enemy_material: materials.add(palette::ENEMY_UNIT),
     });
+}
+
+fn reset_path_refresh_timer(mut commands: Commands) {
+    commands.insert_resource(pathfinding::PathRefreshTimer::default());
 }
 
 // === Plugin ===
@@ -215,7 +220,10 @@ pub(super) fn plugin(app: &mut App) {
     let config = AvoidanceConfig::default();
     app.insert_resource(SpatialHash::new(config.neighbor_distance));
 
-    app.add_systems(OnEnter(GameState::InGame), setup_unit_assets);
+    app.add_systems(
+        OnEnter(GameState::InGame),
+        (setup_unit_assets, reset_path_refresh_timer),
+    );
 
     spawn::plugin(app);
 
@@ -253,6 +261,13 @@ mod tests {
     fn team_variants_are_distinct() {
         use crate::gameplay::Team;
         assert_ne!(Team::Player, Team::Enemy);
+    }
+
+    #[test]
+    fn team_opposing_returns_other_team() {
+        use crate::gameplay::Team;
+        assert_eq!(Team::Player.opposing(), Team::Enemy);
+        assert_eq!(Team::Enemy.opposing(), Team::Player);
     }
 
     #[test]
