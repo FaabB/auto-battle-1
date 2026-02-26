@@ -77,7 +77,7 @@ fn spawn_health_bars(
 /// Updates health bar fill width based on current/max HP.
 /// Runs in `GameSet::Ui`.
 fn update_health_bars(
-    health_query: Query<(&Health, &Children, &HealthBarConfig)>,
+    health_query: Query<(&Health, &Children, &HealthBarConfig), Changed<Health>>,
     mut bar_query: Query<&mut Transform, With<HealthBarFill>>,
 ) {
     for (health, children, config) in &health_query {
