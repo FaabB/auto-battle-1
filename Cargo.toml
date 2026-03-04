@@ -17,6 +17,7 @@ bevy-inspector-egui = { version = "0.36", optional = true }
 
 [dev-dependencies]
 pretty_assertions = "1.4"
+polyanya = "0.16"
 
 [lints.rust]
 unsafe_code = "forbid"

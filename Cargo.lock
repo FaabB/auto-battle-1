@@ -341,6 +341,7 @@ dependencies = [
  "avian2d",
  "bevy",
  "bevy-inspector-egui",
+ "polyanya",
  "pretty_assertions",
  "rand 0.9.2",
  "vleue_navigator",

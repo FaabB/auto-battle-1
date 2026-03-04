@@ -10,6 +10,13 @@ use crate::gameplay::CurrentTarget;
 /// Picks up navmesh changes from building placement/destruction.
 const PATH_REFRESH_INTERVAL_SECS: f32 = 0.5;
 
+/// Step size in pixels when searching for a navigable point near an off-mesh target.
+const SNAP_STEP_SIZE: f32 = 8.0;
+
+/// Maximum search distance = `SNAP_STEP_SIZE` * `SNAP_MAX_STEPS` = 160px.
+/// Covers the largest obstacle (fortress: 64px half-width + 6px `agent_radius` = 70px).
+const SNAP_MAX_STEPS: u32 = 20;
+
 /// Timer controlling periodic path refresh for all units.
 /// Exposed as a resource so tests can manipulate it.
 #[derive(Resource, Debug, Reflect)]
@@ -81,6 +88,35 @@ impl NavPath {
     }
 }
 
+/// Find the nearest navigable point to `target` by walking toward `from`.
+///
+/// Returns `target` unchanged if it's already on the mesh.
+/// When the target is inside a carved obstacle (e.g., a fortress or building with
+/// `NavObstacle`), steps along the direction from `target` toward `from` until
+/// an on-mesh point is found.
+///
+/// Returns `None` if no navigable point is found within the search distance.
+fn snap_to_mesh(navmesh: &NavMesh, target: Vec2, from: Vec2) -> Option<Vec2> {
+    if navmesh.is_in_mesh(target) {
+        return Some(target);
+    }
+
+    let dir = (from - target).normalize_or_zero();
+    if dir == Vec2::ZERO {
+        return None;
+    }
+
+    #[allow(clippy::cast_precision_loss)] // step is at most 20
+    for step in 1..=SNAP_MAX_STEPS {
+        let candidate = target + dir * (SNAP_STEP_SIZE * step as f32);
+        if navmesh.is_in_mesh(candidate) {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
 /// Computes navmesh paths for units whose target changed or whose path needs refreshing.
 /// Runs in `GameSet::Ai` after `find_target`.
 pub(super) fn compute_paths(
@@ -130,7 +166,13 @@ pub(super) fn compute_paths(
         let from = transform.translation().xy();
         let to = target_transform.translation().xy();
 
-        if let Some(path) = navmesh.path(from, to) {
+        // Snap off-mesh destinations to nearest navigable point. Targets like
+        // fortresses and buildings are NavObstacles — their centers are carved
+        // out of the navmesh. Walking toward the unit finds the obstacle's
+        // nearest mesh edge on the correct approach side.
+        let destination = snap_to_mesh(navmesh, to, from).unwrap_or(to);
+
+        if let Some(path) = navmesh.path(from, destination) {
             nav_path.set(path.path, current_target.0);
         } else {
             // No valid path — store empty waypoints, unit stops until next refresh
@@ -142,6 +184,23 @@ pub(super) fn compute_paths(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use polyanya::Trimesh;
+
+    /// Build a rectangular navmesh covering (0,0) to (200,200) using two triangles.
+    fn build_test_navmesh() -> NavMesh {
+        let mesh: polyanya::Mesh = Trimesh {
+            vertices: vec![
+                Vec2::new(0.0, 0.0),
+                Vec2::new(200.0, 0.0),
+                Vec2::new(200.0, 200.0),
+                Vec2::new(0.0, 200.0),
+            ],
+            triangles: vec![[0, 1, 2], [0, 2, 3]],
+        }
+        .try_into()
+        .expect("valid trimesh");
+        NavMesh::from_polyanya_mesh(mesh)
+    }
 
     #[test]
     fn nav_path_default_is_empty() {
@@ -219,5 +278,56 @@ mod tests {
         // Clear resets
         path.clear();
         assert!(!path.is_path_consumed());
+    }
+
+    #[test]
+    fn snap_to_mesh_returns_target_when_on_mesh() {
+        let navmesh = build_test_navmesh();
+        let target = Vec2::new(100.0, 100.0);
+        let from = Vec2::new(150.0, 100.0);
+
+        let result = snap_to_mesh(&navmesh, target, from);
+        assert_eq!(result, Some(target));
+    }
+
+    #[test]
+    fn snap_to_mesh_finds_nearest_navigable_point() {
+        let navmesh = build_test_navmesh();
+        // Target off-mesh to the left, unit inside the mesh
+        let target = Vec2::new(-50.0, 100.0);
+        let from = Vec2::new(150.0, 100.0);
+
+        let result = snap_to_mesh(&navmesh, target, from);
+        assert!(result.is_some(), "Should find an on-mesh point");
+        let snapped = result.unwrap();
+        assert!(
+            navmesh.is_in_mesh(snapped),
+            "Snapped point should be on mesh"
+        );
+        assert!(
+            snapped.x > target.x,
+            "Snapped point should be closer to mesh than target"
+        );
+    }
+
+    #[test]
+    fn snap_to_mesh_returns_none_when_unreachable() {
+        let navmesh = build_test_navmesh();
+        // Both points far off-mesh, beyond search distance
+        let target = Vec2::new(-500.0, 100.0);
+        let from = Vec2::new(-400.0, 100.0);
+
+        let result = snap_to_mesh(&navmesh, target, from);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn snap_to_mesh_returns_none_for_coincident_points() {
+        let navmesh = build_test_navmesh();
+        // from == target produces zero direction
+        let point = Vec2::new(-50.0, 100.0);
+
+        let result = snap_to_mesh(&navmesh, point, point);
+        assert!(result.is_none());
     }
 }
