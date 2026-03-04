@@ -351,7 +351,7 @@ Remove the "Button pattern (future)" subsection (lines 297–314) since buttons 
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (no code changes, should be trivial)
+- [x] `make check` passes (no code changes, should be trivial)
 
 #### Manual Verification:
 - [ ] Module tree: every entry in the tree corresponds to a real file
@@ -662,7 +662,7 @@ This pattern is used for both F3 (navmesh debug) and F4 (world inspector). The `
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
+- [x] `make check` passes
 
 #### Manual Verification:
 - [ ] All 11 new sections are present and formatted consistently
@@ -702,8 +702,8 @@ Re-read the entire ARCHITECTURE.md and cross-check every claim against the actua
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes (no code changes, should be unchanged)
+- [x] `make check` passes
+- [x] `make test` passes (237 unit + 2 integration tests)
 
 #### Manual Verification:
 - [ ] Every module tree entry maps to a real file

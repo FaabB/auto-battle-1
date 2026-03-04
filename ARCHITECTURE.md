@@ -64,24 +64,25 @@ src/
 │   ├── main_menu.rs     # MainMenu → opens Menu::Main
 │   └── in_game.rs       # InGame → ESC opens Menu::Pause
 ├── menus/               # Menu overlay state and UI
-│   ├── mod.rs           # Menu enum (None, Main, Pause, Victory, Defeat)
+│   ├── mod.rs           # Menu enum (None, Main, Pause, Victory, Defeat) + virtual time pause
 │   ├── main_menu.rs     # Main menu UI and input
 │   ├── pause.rs         # Pause menu UI and input
 │   └── endgame.rs       # Victory/Defeat overlay UI and input
 ├── gameplay/            # Cross-cutting components + compositor for domain plugins
-│   ├── mod.rs           # Team, Health, Target components + composes sub-plugins
-│   ├── endgame.rs       # Victory/defeat detection (fortress health checks)
+│   ├── mod.rs           # Team, Health, Target, CurrentTarget, Movement, CombatStats + entity archetype docs
+│   ├── ai.rs            # Staggered target finding and retargeting (RetargetTimer)
+│   ├── endgame_detection.rs  # Victory/defeat detection (fortress health checks)
 │   ├── battlefield/     # Grid layout, zones, camera panning, rendering
-│   │   ├── mod.rs       # Components, constants, GridIndex, plugin
+│   │   ├── mod.rs       # Grid constants, fortress markers, BattlefieldSetup set, GridIndex
 │   │   ├── camera.rs    # Camera setup and panning
-│   │   └── renderer.rs  # Battlefield sprite spawning
+│   │   └── renderer.rs  # Zone backdrops, fortress/grid/navmesh spawning
 │   ├── building/        # Placement systems, grid cursor, building components
-│   │   ├── mod.rs       # Components (Building, Occupied, GridCursor), plugin
-│   │   ├── placement.rs # Cursor tracking and placement systems
+│   │   ├── mod.rs       # Building, BuildingType, BuildingStats, building_stats(), observer
+│   │   ├── placement.rs # Grid cursor tracking and click-to-place
 │   │   └── production.rs# Barracks unit spawning on timer
 │   ├── combat/          # Attack, death, health bars
-│   │   ├── mod.rs       # Compositor + re-exports (AttackTimer, DeathCheck, HealthBarConfig)
-│   │   ├── attack.rs    # Projectile spawning and damage
+│   │   ├── mod.rs       # Compositor + re-exports (AttackTimer, Hitbox, DeathCheck, HealthBarConfig)
+│   │   ├── attack.rs    # Projectile spawning, movement, and hit detection
 │   │   ├── death.rs     # DeathCheck SystemSet + despawn dead entities
 │   │   └── health_bar.rs# Health bar spawning and updates
 │   ├── economy/         # Gold, shop, income, UI
@@ -90,18 +91,30 @@ src/
 │   │   ├── shop.rs      # Shop logic (cards, reroll, selection)
 │   │   ├── shop_ui.rs   # Shop panel UI (card buttons, reroll button)
 │   │   └── ui.rs        # Gold HUD display
+│   ├── hud/             # In-game HUD elements
+│   │   ├── mod.rs       # HUD plugin compositor
+│   │   ├── bottom_bar.rs# Bottom UI bar layout
+│   │   └── elapsed_time.rs # Game timer display
 │   └── units/           # Unit components, AI, movement, spawning
-│       ├── mod.rs          # Unit, CombatStats, Movement, CurrentTarget + plugin
-│       ├── ai.rs           # Target finding and retargeting
-│       ├── movement.rs     # Unit movement toward targets (follows NavPath waypoints)
-│       ├── pathfinding.rs  # NavPath component and navmesh path computation
-│       └── spawn.rs        # Enemy spawning with ramping difficulty
+│       ├── mod.rs       # Unit, UnitType, UnitStats, unit_stats(), UnitAssets, spawn_unit()
+│       ├── spawn.rs     # Enemy spawning with ramping difficulty
+│       ├── movement.rs  # Unit movement toward targets (preferred velocity)
+│       ├── pathfinding.rs # NavPath component and navmesh path computation
+│       └── avoidance/   # ORCA local avoidance
+│           ├── mod.rs   # PreferredVelocity, AvoidanceAgent, AvoidanceConfig
+│           ├── orca.rs  # ORCA velocity obstacle algorithm
+│           └── spatial_hash.rs # Spatial hash for neighbor lookup
 ├── theme/               # Shared color palette and UI widget constructors
-│   ├── mod.rs           # Plugin (empty for now, ready for interaction.rs)
-│   ├── palette.rs       # Color constants
-│   └── widget.rs        # Reusable widget constructors (header, label, overlay)
+│   ├── mod.rs           # Theme plugin compositor
+│   ├── palette.rs       # Color constants + font size tokens
+│   ├── interaction.rs   # Button hover/press feedback using observers
+│   └── widget.rs        # Reusable widget constructors (header, label, overlay, button)
+├── third_party/         # Third-party plugin isolation
+│   ├── mod.rs           # Compositor + re-exports (CollisionLayer, NavObstacle, surface_distance)
+│   ├── avian.rs         # Avian2d physics: CollisionLayer, solid_entity_layers(), surface_distance()
+│   └── vleue_navigator.rs # vleue_navigator: NavObstacle, navmesh updater, cleanup on exit
 └── dev_tools/           # Debug-only tools (feature-gated on `dev`)
-    └── mod.rs           # Navmesh debug overlay (F3), unit path gizmos
+    └── mod.rs           # World inspector (F4), navmesh debug overlay (F3), avoidance gizmos
 ```
 
 ### When to create a subdirectory
@@ -118,7 +131,7 @@ From foxtrot's pattern:
 `main.rs` is the **composition root** -- the only place plugins are assembled into the app.
 
 ```rust
-fn main() -> AppExit {
+fn main() {
     App::new()
         .add_plugins(
             DefaultPlugins
@@ -126,7 +139,7 @@ fn main() -> AppExit {
                 .set(ImagePlugin::default_nearest()),
         )
         .add_plugins(auto_battle::plugin)
-        .run()
+        .run();
 }
 ```
 
@@ -165,11 +178,20 @@ The codebase uses two independent state machines:
 | State | Defined in | Purpose | Variants |
 |-------|-----------|---------|----------|
 | `GameState` | `screens/mod.rs` | Which screen is active | `Loading`, `MainMenu`, `InGame` |
-| `Menu` | `menus/mod.rs` | Which menu overlay is shown | `None`, `Main`, `Pause` |
+| `Menu` | `menus/mod.rs` | Which menu overlay is shown | `None`, `Main`, `Pause`, `Victory`, `Defeat` |
 
 Both use `#[states(scoped_entities)]` for automatic entity cleanup via `DespawnOnExit`.
 
 This is the same pattern used by foxtrot and bevy_new_2d: a `Screen` state for which screen is active, and a `Menu` state for overlay menus. The two are orthogonal -- `Menu::Pause` appears while `GameState::InGame` is active, and `Menu::Main` appears while `GameState::MainMenu` is active.
+
+### Pause mechanism (dual-layer)
+
+Pausing uses two complementary mechanisms:
+
+1. **`run_if` gate**: `gameplay_running()` checks `in_state(GameState::InGame).and(in_state(Menu::None))`. When any menu is open, gameplay systems simply don't run.
+2. **Virtual time pause**: `OnExit(Menu::None)` calls `time.pause()`, `OnEnter(Menu::None)` calls `time.unpause()`. This freezes `Time<Virtual>` so physics, timers, and animations also stop.
+
+Both layers are needed — `run_if` prevents system execution, virtual time prevents third-party plugins (physics, navmesh) from advancing.
 
 ### Importing states
 
@@ -264,13 +286,51 @@ Register with `app.register_type::<T>()` alongside components.
 
 ---
 
+## Data-Driven Stats Lookup
+
+Game entity stats use `const fn` match expressions instead of trait implementations:
+
+```rust
+// gameplay/building/mod.rs:83
+pub const fn building_stats(building_type: BuildingType) -> BuildingStats {
+    match building_type {
+        BuildingType::Barracks => BuildingStats { hp: 300.0, cost: 100, ... },
+        BuildingType::Farm => BuildingStats { hp: 150.0, cost: 50, ... },
+    }
+}
+```
+
+Same pattern in `gameplay/units/mod.rs:72` with `unit_stats()`. Benefits:
+- **Compile-time evaluation** — stats are constants, no runtime overhead
+- **Exhaustive matching** — adding a new variant forces updating all stat lookups
+- **Single source of truth** — one function per entity category, no inheritance
+
+Convenience delegates (e.g., `building_hp()`, `building_color()`) call through to the main stats function.
+
+---
+
+## Entity Archetypes
+
+Each entity type has a canonical component bundle documented in `gameplay/mod.rs` and a single spawn function:
+
+| Entity | Spawn Location | Key Components |
+|--------|---------------|----------------|
+| Unit | `units/mod.rs:spawn_unit()` | `Unit`, `UnitType`, `Team`, `Target`, `CurrentTarget`, `Health`, `CombatStats`, `Movement`, `AttackTimer`, `Mesh2d`, `RigidBody::Dynamic`, `Collider`, `PreferredVelocity`, `AvoidanceAgent`, `NavPath` |
+| Building | `building/placement.rs` | `Building`, `BuildingType`, `Team`, `Target`, `Health`, `ProductionTimer`/`IncomeTimer`, `RigidBody::Static`, `Collider`, `NavObstacle` |
+| Fortress | `battlefield/renderer.rs` | `PlayerFortress`/`EnemyFortress`, `Team`, `Target`, `CurrentTarget`, `Health`, `CombatStats`, `AttackTimer`, `RigidBody::Static`, `Collider`, `NavObstacle` |
+| Projectile | `combat/attack.rs` | `Projectile`, `Team`, `Hitbox`, `Sensor`, `RigidBody::Kinematic`, `Collider`, `CollidingEntities` |
+
+The doc comment at `gameplay/mod.rs:3-17` serves as the canonical archetype reference.
+
+---
+
 ## Theme System
 
 Shared UI styling lives in `src/theme/`:
 
-- `theme/palette.rs` -- color constants (`HEADER_TEXT`, `BODY_TEXT`, `OVERLAY_BACKGROUND`)
-- `theme/widget.rs` -- reusable widget constructors (`header()`, `label()`, `overlay()`)
-- (future) `theme/interaction.rs` -- button hover/press behavior using observers
+- `theme/palette.rs` -- color constants + font size tokens
+- `theme/interaction.rs` -- button hover/press feedback using observers
+- `theme/widget.rs` -- reusable widget constructors (header, label, overlay, button)
 
 Both foxtrot and bevy_new_2d have identical `theme/` structures with `palette.rs`, `widget.rs`, and `interaction.rs`.
 
@@ -292,25 +352,6 @@ commands.spawn((
     widget::header("Auto Battle"),
     TextFont { font_size: 72.0, ..default() },  // Override default 64px
 ));
-```
-
-### Button pattern (future)
-
-When we add buttons, follow the foxtrot/bevy_new_2d pattern:
-
-```rust
-// In theme/widget.rs
-pub fn button<E, B, M, I>(text: impl Into<String>, action: I) -> impl Bundle
-where
-    E: EntityEvent,
-    B: Bundle,
-    I: IntoObserverSystem<E, B, M>,
-{ ... }
-
-// Usage in menus:
-widget::button("Continue", |_: On<Pointer<Click>>, mut next_menu: ResMut<NextState<Menu>>| {
-    next_menu.set(Menu::None);
-})
 ```
 
 ---
@@ -347,6 +388,22 @@ Sets are chained in `lib.rs::plugin` so ordering is guaranteed across all plugin
 The `run_if(in_state(Menu::None))` condition acts as the pause gate. When any menu is open, gameplay systems don't run.
 
 Both foxtrot and bevy_new_2d use a similar pattern -- foxtrot has `PausableSystems` as a dedicated `SystemSet`, bevy_new_2d uses `Pause(bool)` state. Our approach with `Menu::None` check is equivalent and simpler since we already have the `Menu` state.
+
+### `chain()` vs `chain_ignore_deferred()`
+
+In Bevy 0.18, `.chain()` auto-inserts `ApplyDeferred` between chained systems. Use `.chain_ignore_deferred()` when you **don't** want deferred commands to flush between systems.
+
+| Method | Behavior | When to use |
+|--------|----------|-------------|
+| `.chain()` | Inserts `ApplyDeferred` between each pair | Systems that spawn entities needed by later systems in the chain |
+| `.chain_ignore_deferred()` | Pure ordering, no flush | Systems that share queries but shouldn't see each other's spawns yet |
+
+**Examples in this codebase:**
+
+- `.chain()` in `battlefield/mod.rs:205` — `spawn_battlefield` then `setup_camera_for_battlefield` (camera needs battlefield entities)
+- `.chain_ignore_deferred()` in `combat/attack.rs:192` — `attack` → `move_projectiles` → `handle_projectile_hits` (newly spawned projectiles shouldn't move until next frame)
+- `.chain_ignore_deferred()` in `building/mod.rs:223` — `update_grid_cursor` → `handle_building_placement` (cursor position read, not entity spawns)
+- `.chain_ignore_deferred()` in `units/mod.rs:241` — `unit_movement` → `rebuild_spatial_hash` → `compute_avoidance` (avoidance pipeline, no intermediate spawns)
 
 ---
 
@@ -438,6 +495,59 @@ Bevy has two lifecycle reaction mechanisms:
 
 We use observers (not hooks) for all lifecycle reactions.
 
+### Observer safety during state transitions
+
+When `DespawnOnExit` batch-despawns entities, `On<Remove, T>` observers fire for each component removal. If the observer queries other entities (e.g., grid slots), those entities may already be despawned.
+
+**Pattern: strip markers before batch despawn**
+
+```rust
+// building/mod.rs:184 — OnExit system strips Building markers first
+fn strip_buildings_before_despawn(
+    mut commands: Commands,
+    buildings: Query<Entity, With<Building>>,
+) {
+    for entity in &buildings {
+        commands.entity(entity).remove::<Building>();
+    }
+}
+```
+
+This fires the `On<Remove, Building>` observer while slot entities still exist. Same pattern in `third_party/vleue_navigator.rs` for `NavObstacle` cleanup.
+
+**Always guard observer queries** with `Query::get()`:
+
+```rust
+fn clear_build_slot_on_building_removed(
+    remove: On<Remove, Building>,
+    buildings: Query<&Building>,
+    // ...
+) {
+    let Ok(building) = buildings.get(remove.entity) else { return };
+    // Safe: building data still accessible during Remove
+}
+```
+
+### Cross-plugin `OnEnter` ordering
+
+When multiple plugins register `OnEnter(GameState::InGame)` systems, use `SystemSet` markers to control ordering:
+
+```rust
+// battlefield/mod.rs:184 — defines a set
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BattlefieldSetup;
+
+// building/mod.rs — orders after it
+app.add_systems(
+    OnEnter(GameState::InGame),
+    spawn_grid_cursor.after(BattlefieldSetup),
+);
+```
+
+Same pattern with `DeathCheck` in `combat/death.rs:10` — other systems can order `.before(DeathCheck)` instead of referencing private system functions.
+
+**Rule**: if another plugin needs to order relative to your `OnEnter`/`Update` system, export a `SystemSet` marker instead of making the system `pub`.
+
 ---
 
 ## Dev Tools
@@ -447,41 +557,68 @@ The `src/dev_tools/` module is feature-gated on `dev`:
 ```toml
 [features]
 default = ["dev"]
-dev = ["bevy/dynamic_linking", "vleue_navigator/debug-with-gizmos"]
+dev = ["bevy/dynamic_linking", "vleue_navigator/debug-with-gizmos", "dep:bevy-inspector-egui"]
 ```
 
 - `cargo run` includes dev tools (default features)
 - `cargo run --release --no-default-features` excludes them
 
-Debug spawners, inspector overlays, state logging, and other development-only tools belong here. Both foxtrot and bevy_new_2d gate dev tools the same way, with foxtrot additionally enabling `bevy_dev_tools`, `bevy_ui_debug`, and `bevy-inspector-egui` under the `dev` feature.
+Debug spawners, inspector overlays, state logging, and other development-only tools belong here. Both foxtrot and bevy_new_2d gate dev tools the same way.
 
 ### Debug keybindings
 
 | Key | Action | Details |
 |-----|--------|---------|
-| F3 | Toggle navmesh debug overlay | Shows red navmesh triangulation + yellow unit path lines. Off by default. |
+| F3 | Toggle navmesh debug overlay | Shows red navmesh triangulation + yellow unit path lines + green/cyan avoidance vectors. Off by default. |
+| F4 | Toggle world inspector | Shows bevy-inspector-egui entity/component browser. Off by default. |
+
+### Debug toggle pattern
+
+Debug overlays use a marker resource whose presence/absence controls visibility:
+
+```rust
+// 1. Define marker resource
+#[derive(Resource)]
+struct ShowWorldInspector;
+
+// 2. Toggle system: insert/remove on keypress (dev_tools/mod.rs:41)
+fn toggle_world_inspector(
+    mut commands: Commands,
+    input: Res<ButtonInput<KeyCode>>,
+    existing: Option<Res<ShowWorldInspector>>,
+) {
+    if input.just_pressed(KeyCode::F4) {
+        if existing.is_some() {
+            commands.remove_resource::<ShowWorldInspector>();
+        } else {
+            commands.insert_resource(ShowWorldInspector);
+        }
+    }
+}
+
+// 3. Gate the overlay system on resource existence
+app.add_systems(Update, render_inspector.run_if(resource_exists::<ShowWorldInspector>));
+```
+
+This pattern is used for both F3 (navmesh debug) and F4 (world inspector). The `run_if(resource_exists::<T>)` condition means the gated systems have zero cost when the toggle is off.
 
 ---
 
 ## Third-Party Plugin Isolation
 
-When adding non-trivial third-party crates (physics, UI framework, etc.), create `src/third_party/` with one file per crate:
+Non-trivial third-party crates are wrapped in `src/third_party/` with one file per crate. The compositor re-exports the types that domain plugins need:
 
 ```rust
 // third_party/mod.rs
-pub(super) fn plugin(app: &mut App) {
-    app.add_plugins((avian3d::plugin, bevy_enhanced_input::plugin));
-}
+pub use self::vleue_navigator::NavObstacle;
+pub use avian::{CollisionLayer, solid_entity_layers, surface_distance};
 
-// third_party/avian3d.rs
 pub(super) fn plugin(app: &mut App) {
-    app.add_plugins(PhysicsPlugins::default());
+    app.add_plugins((avian::plugin, vleue_navigator::plugin));
 }
-
-pub enum CollisionLayer { Default, Character, Prop }
 ```
 
-Foxtrot uses this pattern with 10+ third-party crates. Not needed yet for auto-battle-1 (no complex third-party deps beyond Bevy itself). Create when needed.
+Foxtrot uses the same pattern with 10+ third-party crates. Domain plugins import via `use crate::third_party::{CollisionLayer, NavObstacle, surface_distance};` — never from the third-party crate directly.
 
 ### Collision Layer System
 
@@ -513,6 +650,40 @@ Game systems use `surface_distance(&collider1, pos1, &collider2, pos2)` for rang
 - **Tier 1** (primary): `MinimalPlugins` with `Collider` components on test entities. `surface_distance()` is a pure geometric function — no physics pipeline needed. `CollidingEntities` manually populated for hitbox tests.
 - **Tier 2** (smoke): Integration tests with `PhysicsPlugins` to validate collision layer wiring. Used sparingly — avian2d's `FixedUpdate` pipeline is unreliable under `MinimalPlugins` (see GAM-29).
 
+### vleue_navigator Integration (`third_party/vleue_navigator.rs`)
+
+Wraps the `vleue_navigator` crate for navmesh pathfinding.
+
+#### `NavObstacle` marker component
+
+Static obstacles (buildings, fortresses) that should carve holes in the navmesh:
+
+```rust
+use crate::third_party::NavObstacle;
+
+commands.spawn((
+    Name::new("Player Fortress"),
+    PlayerFortress,
+    NavObstacle,  // Tells navmesh updater to carve around this entity
+    RigidBody::Static,
+    Collider::rectangle(w, h),
+    // ...
+));
+```
+
+The `NavmeshUpdaterPlugin<Collider, NavObstacle>` automatically rebuilds the navmesh when `NavObstacle` entities are added or removed.
+
+#### Cleanup on state exit
+
+`NavObstacle` components must be stripped **before** `DespawnOnExit` batch-despawns entities, otherwise late navmesh rebuild tasks cause hangs on exit:
+
+```rust
+// In vleue_navigator.rs plugin:
+app.add_systems(OnExit(GameState::InGame), strip_nav_obstacles_before_despawn);
+```
+
+This is the same pattern used by `Building` observer cleanup (see Observer Safety section).
+
 ---
 
 ## Testing Patterns
@@ -522,11 +693,19 @@ Game systems use `surface_distance(&collider1, pos1, &collider2, pos2)` for rang
 | Helper | Description |
 |--------|-------------|
 | `create_test_app()` | Bare `MinimalPlugins` app |
+| `create_test_app_with_state::<S>()` | `MinimalPlugins` + one generic state |
 | `create_base_test_app()` | States + InputPlugin + WindowPlugin + Camera2d |
 | `create_base_test_app_no_input()` | States + WindowPlugin + Camera2d (no InputPlugin) |
 | `transition_to_ingame(app)` | Sets `GameState::InGame` and runs two updates |
 | `count_entities::<F>(app)` | Count entities matching a query filter |
 | `assert_entity_count::<F>(app, n)` | Assert exactly N entities match a filter |
+| `tick_multiple(app, count)` | Run `app.update()` N times |
+| `nearly_expire_timer(timer)` | Set elapsed to `duration - 1ns` for guaranteed `just_finished()` |
+| `init_asset_resources(app)` | Init `Assets<Mesh>` + `Assets<ColorMaterial>` |
+| `init_economy_resources(app)` | Init `Gold` + `Shop` resources |
+| `init_input_resources(app)` | Init `ButtonInput<KeyCode>` + `ButtonInput<MouseButton>` |
+| `spawn_test_unit(world, team, x, y)` | Spawn full Soldier archetype with all components |
+| `spawn_test_target(world, team, x, y)` | Spawn minimal targetable entity (Team + Target + Collider) |
 
 ### When to use which base app
 
@@ -560,6 +739,54 @@ Two `app.update()` calls are needed (inside `transition_to_ingame`): first trigg
 
 90% test coverage across the codebase. Every ticket should include tests that maintain or increase coverage.
 
+### Per-domain test app factories
+
+Each domain module defines a local `create_*_test_app()` inside its `#[cfg(test)]` block:
+
+```rust
+// gameplay/ai.rs — minimal app for AI tests
+fn create_ai_test_app() -> App {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
+    app.init_resource::<RetargetTimer>();
+    app.add_systems(Update, find_target);
+    app
+}
+
+// gameplay/battlefield/mod.rs — full state-based app
+fn create_battlefield_test_app() -> App {
+    let mut app = crate::testing::create_base_test_app();
+    app.add_plugins(plugin);
+    crate::testing::transition_to_ingame(&mut app);
+    app
+}
+```
+
+**Convention**: use the shared `testing.rs` helpers as building blocks, then add only the specific plugin/systems under test. Register only what's needed — avoid loading unrelated plugins that might overwrite test data.
+
+### Test module organization
+
+Tests live **inline** in the same file as production code, using `#[cfg(test)]`:
+
+```rust
+// At bottom of domain_module.rs:
+#[cfg(test)]
+mod tests {
+    use super::*;
+    // Pure function tests — no App, no Bevy systems
+}
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    // App-based tests using create_*_test_app()
+}
+```
+
+Split into `mod tests` (pure/unit) and `mod integration_tests` (App-based) when both kinds exist. Named test modules (e.g., `mod observer_tests`) are fine when testing a specific subsystem.
+
+The top-level `tests/` directory is reserved for full-stack integration tests that use `auto_battle::plugin` directly (e.g., state transition tests in `tests/integration/state_transitions.rs`).
+
 ---
 
 ## Naming Conventions
@@ -577,6 +804,67 @@ Two `app.update()` calls are needed (inside `transition_to_ingame`): first trigg
 | Observer (Remove) | verb phrase describing action | `fn clear_build_slot(remove: On<Remove, Building>)` |
 | Module doc comments | `//!` at top of file | `//! Battlefield grid layout and rendering.` |
 
+### `Name::new()` convention
+
+All spawned entities include a `Name` component for inspector visibility:
+
+| Pattern | When | Example |
+|---------|------|---------|
+| Static string | Singletons, unique entities | `Name::new("Player Fortress")` |
+| `format!()` | Multiple instances | `Name::new(format!("{team:?} {}", unit_type.display_name()))` |
+| Coordinate-based | Grid entities | `Name::new(format!("Build Slot ({col}, {row}"))` |
+
+This makes the F4 world inspector useful for debugging. Always add `Name` when spawning entities, even data-only ones.
+
+---
+
+## System Parameter Patterns
+
+### `Single<>` vs `Query<>`
+
+`Single<D, F>` is for exactly-one-entity queries. If 0 or >1 entities match, the system is **silently skipped** (no panic).
+
+| Use `Single<>` when | Use `Query<>` when |
+|---------------------|-------------------|
+| Exactly one entity expected (camera, window, fortress) | Zero or many entities (units, buildings, projectiles) |
+| System should no-op if entity is missing | System must handle empty/multiple results explicitly |
+
+**`Single` as graceful degradation** (`units/spawn.rs:83`):
+
+```rust
+fn tick_enemy_spawner(
+    enemy_fortress: Single<&Transform, With<EnemyFortress>>,
+    // If fortress is destroyed (despawned), system silently stops running
+    // → no more enemy spawns. No explicit "is fortress alive?" check needed.
+) { ... }
+```
+
+### `Option<Res<T>>`
+
+Use `Option<Res<T>>` when a resource may not exist yet or is conditionally inserted:
+
+```rust
+// units/mod.rs:191 — prevent handle leaks on state re-entry
+fn setup_unit_assets(
+    existing: Option<Res<UnitAssets>>,
+    // ...
+) {
+    if existing.is_some() { return; }
+    // Create assets only on first entry
+}
+
+// dev_tools/mod.rs:41 — toggle resource presence
+fn toggle_world_inspector(
+    existing: Option<Res<ShowWorldInspector>>,
+    // ...
+) {
+    if existing.is_some() { commands.remove_resource::<ShowWorldInspector>(); }
+    else { commands.insert_resource(ShowWorldInspector); }
+}
+```
+
+Also used for third-party resources that load asynchronously (`Option<Res<Assets<NavMesh>>>` in `units/spawn.rs`).
+
 ---
 
 ## Z-Layer Ordering
@@ -586,12 +874,13 @@ Defined in `lib.rs`, used across domain plugins:
 | Constant | Value | Purpose |
 |----------|-------|---------|
 | `Z_BACKGROUND` | -1.0 | Background fill |
-| `Z_ZONE` | 0.0 | Fortress and zone sprites |
+| `Z_ZONE` | 0.0 | Fortress and zone backdrop sprites |
+| `Z_FORTRESS` | 0.5 | Fortress entities (above zone backdrops) |
 | `Z_GRID` | 1.0 | Build zone grid cells |
 | `Z_GRID_CURSOR` | 2.0 | Hover highlight |
 | `Z_BUILDING` | 3.0 | Placed buildings |
-| `Z_UNIT` | 4.0 | Units (future) |
-| `Z_HEALTH_BAR` | 5.0 | Health bars (future) |
+| `Z_UNIT` | 4.0 | Units |
+| `Z_PROJECTILE` | 4.5 | Projectiles (above units) |
 
 ---
 
@@ -599,23 +888,40 @@ Defined in `lib.rs`, used across domain plugins:
 
 ### Dependencies
 
-Use `default-features = false` with explicit feature selection for Bevy to improve compile times:
+Use `default-features = false` with explicit feature selection to improve compile times:
 
 ```toml
 bevy = { version = "0.18", default-features = false, features = ["2d"] }
+avian2d = { version = "0.5", default-features = false, features = ["2d", "parry-f32", "debug-plugin", "parallel"] }
+vleue_navigator = { version = "0.15", default-features = false, features = ["avian2d"] }
+rand = "0.9"
+bevy-inspector-egui = { version = "0.36", optional = true }  # gated on `dev` feature
 ```
 
 ### Lints
 
 ```toml
+[lints.rust]
+unsafe_code = "forbid"
+
 [lints.clippy]
-too_many_arguments = "allow"   # Systems have many params (DI)
-type_complexity = "allow"       # Query types are complex
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+needless_pass_by_value = "allow"  # Bevy systems take ownership
+too_many_arguments = "allow"      # Bevy queries can have many params
+type_complexity = "allow"         # Bevy queries can be complex
 ```
 
-Both foxtrot and bevy_new_2d allow these two lints. Our project additionally enables `pedantic` and `nursery` groups and forbids `unsafe_code`.
+### Features
 
-### Dev profiles
+```toml
+[features]
+default = ["dev"]
+dev = ["bevy/dynamic_linking", "vleue_navigator/debug-with-gizmos", "dep:bevy-inspector-egui"]
+```
+
+### Build Profiles
 
 ```toml
 [profile.dev]
@@ -623,6 +929,10 @@ opt-level = 1
 
 [profile.dev.package."*"]
 opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
 ```
 
 Standard Bevy recommendation: slight optimization for game code, full optimization for dependencies. Both reference projects use identical settings.
