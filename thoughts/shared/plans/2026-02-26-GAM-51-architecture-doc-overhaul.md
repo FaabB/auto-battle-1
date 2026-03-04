@@ -354,13 +354,13 @@ Remove the "Button pattern (future)" subsection (lines 297–314) since buttons 
 - [x] `make check` passes (no code changes, should be trivial)
 
 #### Manual Verification:
-- [ ] Module tree: every entry in the tree corresponds to a real file
-- [ ] Module tree: every real file under `src/` appears in the tree
-- [ ] Z-layer table matches constants in `lib.rs`
-- [ ] Menu table matches `Menu` enum in `menus/mod.rs`
-- [ ] Testing helpers table matches all `pub fn` in `testing.rs`
-- [ ] Cargo.toml section matches actual `Cargo.toml`
-- [ ] F3/F4 keybindings match `dev_tools/mod.rs`
+- [x] Module tree: every entry in the tree corresponds to a real file
+- [x] Module tree: every real file under `src/` appears in the tree
+- [x] Z-layer table matches constants in `lib.rs`
+- [x] Menu table matches `Menu` enum in `menus/mod.rs`
+- [x] Testing helpers table matches all `pub fn` in `testing.rs`
+- [x] Cargo.toml section matches actual `Cargo.toml`
+- [x] F3/F4 keybindings match `dev_tools/mod.rs`
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause here for manual confirmation from the human that the manual testing was successful before proceeding to the next phase.
 
@@ -665,10 +665,10 @@ This pattern is used for both F3 (navmesh debug) and F4 (world inspector). The `
 - [x] `make check` passes
 
 #### Manual Verification:
-- [ ] All 11 new sections are present and formatted consistently
-- [ ] Code examples in new sections compile conceptually (match actual codebase patterns)
-- [ ] File:line references are accurate
-- [ ] No duplicate coverage with existing sections
+- [x] All 11 new sections are present and formatted consistently
+- [x] Code examples in new sections compile conceptually (match actual codebase patterns)
+- [x] File:line references are accurate
+- [x] No duplicate coverage with existing sections
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause here for manual confirmation from the human that the manual testing was successful before proceeding to the next phase.
 
@@ -706,11 +706,11 @@ Re-read the entire ARCHITECTURE.md and cross-check every claim against the actua
 - [x] `make test` passes (237 unit + 2 integration tests)
 
 #### Manual Verification:
-- [ ] Every module tree entry maps to a real file
-- [ ] Every code example matches actual codebase patterns
-- [ ] Document reads coherently top-to-bottom
-- [ ] No contradictions between sections
-- [ ] No stale references to old file names or removed features
+- [x] Every module tree entry maps to a real file
+- [x] Every code example matches actual codebase patterns
+- [x] Document reads coherently top-to-bottom
+- [x] No contradictions between sections
+- [x] No stale references to old file names or removed features
 
 ---
 
