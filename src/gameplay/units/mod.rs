@@ -9,12 +9,12 @@ use avian2d::prelude::*;
 use bevy::prelude::*;
 use vleue_navigator::prelude::NavMesh;
 
-use self::avoidance::spatial_hash::SpatialHash;
-use self::avoidance::{AvoidanceAgent, AvoidanceConfig, PreferredVelocity};
+use self::avoidance::{AvoidanceAgent, AvoidanceConfig, AvoidanceSpatialHash, PreferredVelocity};
 use crate::gameplay::combat::{
     AttackTimer, HealthBarConfig, UNIT_HEALTH_BAR_HEIGHT, UNIT_HEALTH_BAR_WIDTH,
     UNIT_HEALTH_BAR_Y_OFFSET,
 };
+use crate::gameplay::spatial_hash::SpatialHash;
 use crate::gameplay::{CombatStats, CurrentTarget, Health, Movement, Target, Team};
 use crate::screens::GameState;
 use crate::third_party::solid_entity_layers;
@@ -218,7 +218,9 @@ pub(super) fn plugin(app: &mut App) {
         .init_resource::<AvoidanceConfig>();
 
     let config = AvoidanceConfig::default();
-    app.insert_resource(SpatialHash::new(config.neighbor_distance));
+    app.insert_resource(AvoidanceSpatialHash(SpatialHash::new(
+        config.neighbor_distance,
+    )));
 
     app.add_systems(
         OnEnter(GameState::InGame),

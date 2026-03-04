@@ -147,8 +147,8 @@ impl std::ops::DerefMut for AvoidanceSpatialHash {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (no compile errors, no clippy warnings)
-- [ ] `make test` passes (all existing tests, including avoidance tests)
+- [x] `make check` passes (no compile errors, no clippy warnings)
+- [x] `make test` passes (all existing tests, including avoidance tests)
 
 #### Manual Verification:
 - [ ] Game runs normally — ORCA avoidance behavior unchanged
@@ -252,8 +252,8 @@ fn create_ai_test_app() -> App {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes (all existing tests — find_target still uses brute force, grid is just built alongside)
+- [x] `make check` passes
+- [x] `make test` passes (all existing tests — find_target still uses brute force, grid is just built alongside)
 
 #### Manual Verification:
 - [ ] Game runs normally — targeting behavior unchanged
@@ -493,8 +493,8 @@ fn search_radius(
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes — **all 8 existing ai.rs tests pass unchanged**
+- [x] `make check` passes
+- [x] `make test` passes — **all 8 existing ai.rs tests pass unchanged**
 
 #### Manual Verification:
 - [ ] Game runs normally — units still target the nearest enemy
@@ -562,9 +562,9 @@ fn no_targets_gives_none() {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes — all existing + new tests green
-- [ ] New tests specifically exercise: far-distance targeting, nearby preference, empty grid
+- [x] `make check` passes
+- [x] `make test` passes — all existing + new tests green
+- [x] New tests specifically exercise: far-distance targeting, nearby preference, empty grid
 
 ---
 

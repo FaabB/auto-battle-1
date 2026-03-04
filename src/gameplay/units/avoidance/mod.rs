@@ -1,7 +1,6 @@
 //! ORCA local avoidance for unit-to-unit collision prevention.
 
 pub mod orca;
-pub mod spatial_hash;
 
 use std::collections::HashMap;
 
@@ -9,8 +8,8 @@ use avian2d::prelude::*;
 use bevy::prelude::*;
 
 use self::orca::AgentSnapshot;
-use self::spatial_hash::SpatialHash;
 use super::{Movement, UNIT_RADIUS, Unit};
+use crate::gameplay::spatial_hash::SpatialHash;
 
 // === Constants ===
 
@@ -76,11 +75,29 @@ impl Default for AvoidanceConfig {
     }
 }
 
+/// Spatial hash for ORCA avoidance neighbor lookups.
+/// Populated with `With<Unit>` entities each frame.
+#[derive(Resource, Debug)]
+pub struct AvoidanceSpatialHash(pub SpatialHash);
+
+impl std::ops::Deref for AvoidanceSpatialHash {
+    type Target = SpatialHash;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for AvoidanceSpatialHash {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 // === Systems ===
 
 /// Rebuild the spatial hash with all unit positions. Runs every frame.
 pub fn rebuild_spatial_hash(
-    mut hash: ResMut<SpatialHash>,
+    mut hash: ResMut<AvoidanceSpatialHash>,
     agents: Query<(Entity, &GlobalTransform), With<Unit>>,
 ) {
     hash.clear();
@@ -96,7 +113,7 @@ pub fn rebuild_spatial_hash(
 /// Writes the ORCA result to `LinearVelocity`.
 pub fn compute_avoidance(
     config: Res<AvoidanceConfig>,
-    hash: Res<SpatialHash>,
+    hash: Res<AvoidanceSpatialHash>,
     mut agents: Query<
         (
             Entity,
@@ -198,9 +215,9 @@ mod integration_tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
         app.init_resource::<AvoidanceConfig>();
-        app.insert_resource(SpatialHash::new(
+        app.insert_resource(AvoidanceSpatialHash(SpatialHash::new(
             AvoidanceConfig::default().neighbor_distance,
-        ));
+        )));
         app.add_systems(
             Update,
             (rebuild_spatial_hash, compute_avoidance).chain_ignore_deferred(),
