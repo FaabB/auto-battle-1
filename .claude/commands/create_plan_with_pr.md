@@ -330,7 +330,15 @@ After structure approval:
 
 After the plan is approved (worktree and branch already exist from the setup step):
 
+**IMPORTANT — No AI Attribution:**
+- **NEVER add co-author information or Claude attribution** to commits or PRs
+- Commits should be authored solely by the user
+- Do not include any "Generated with Claude" or "Co-Authored-By" lines
+- Write commit messages and PR descriptions as if the user wrote them
+
 1. **Commit the plan file and push**:
+   - Use `git add` with specific files (never use `-A` or `.`)
+   - Write clear, imperative commit messages focused on *why*, not just *what*
    ```
    git add thoughts/shared/plans/<plan-file>
    git commit -m "Add implementation plan for <description> (<TICKET-ID>)"
@@ -341,6 +349,7 @@ After the plan is approved (worktree and branch already exist from the setup ste
    Use `gh pr create --draft` with:
    - Title: the plan title or ticket title
    - Body: a summary of the plan phases + link to the plan file
+   - Do NOT mention AI, Claude, or automation in the PR title or body
 
    Format:
    ```
