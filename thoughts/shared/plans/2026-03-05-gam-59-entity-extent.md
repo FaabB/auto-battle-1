@@ -286,7 +286,10 @@ Add `EntityExtent::Rect(BUILDING_SPRITE_SIZE / 2.0, BUILDING_SPRITE_SIZE / 2.0)`
 The `fortress_targets_nearest_enemy` and `static_entity_has_no_backtrack_limit` tests manually spawn fortress-like entities with `Collider::rectangle(128.0, 128.0)`. Add `EntityExtent::Rect(64.0, 64.0)` to these spawns.
 
 #### 6. Test fortress spawn in `attack.rs` tests
-The `fortress_can_attack_in_range` test spawns a fortress-like entity with `Collider::rectangle(128.0, 128.0)`. Add `EntityExtent::Rect(64.0, 64.0)`.
+The `fortress_can_attack_in_range` test (line 510-520) spawns a fortress-like attacker entity with `Collider::rectangle(128.0, 128.0)`. Add `EntityExtent::Rect(64.0, 64.0)`. This entity has `TargetingState` and is queried by the `attack` system (which will query `&EntityExtent` after migration).
+
+#### 7. `death.rs` test spawns — NO CHANGES NEEDED
+`spawn_mortal_target` (line 67-77) and inline `(Team::Enemy, Target)` (line 107) have `Target` but no `Collider`. The death system doesn't query `EntityExtent`, so these are fine as-is.
 
 ### Success Criteria
 
@@ -309,9 +312,13 @@ Replace `surface_distance()` calls with `extent_distance()` in all three consume
 #### 1. `gameplay/ai.rs` — Migrate `find_target` + `search_radius`
 
 **Query changes**:
-- `seekers` query: Replace `&Collider` with `&EntityExtent`
-- `all_targets` query: Replace `&Collider` with `&EntityExtent`
-- `find_nearest_target` and `search_radius` signatures: Replace `&Collider` params with `&EntityExtent`
+- `seekers` query (line 104): Replace `&Collider` with `&EntityExtent`
+- `all_targets` query (line 108): Replace `&Collider` with `&EntityExtent`
+- `find_nearest_target` signature (line 163): Replace `seeker_collider: &Collider` with `seeker_extent: &EntityExtent`
+- `find_nearest_target` signature (line 167): Replace `&Collider` in `all_targets` query type with `&EntityExtent`
+- `search_radius` signature (line 206): Replace `seeker_collider: &Collider` with `seeker_extent: &EntityExtent`
+- `search_radius` signature (line 210): Replace `&Collider` in `all_targets` query type with `&EntityExtent`
+- `valid_candidates` type (line 215): Change `Vec<(Entity, Vec2, &Collider, f32)>` to `Vec<(Entity, Vec2, &EntityExtent, f32)>`
 
 **Logic change** in `search_radius()`:
 ```rust
