@@ -9,5 +9,10 @@
       "Bash(scripts/spec_metadata.sh)",
       "Bash(bash scripts/spec_metadata.sh)"
     ]
-  }
+  },
+  "allowedTools": [
+    "Read(./**)",
+    "Grep(./**)",
+    "Glob(./**)"
+  ]
 }
