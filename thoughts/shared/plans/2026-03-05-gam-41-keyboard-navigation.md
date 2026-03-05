@@ -246,11 +246,11 @@ pub const BUTTON_FOCUS_OUTLINE: Color = Color::WHITE;
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes — no compiler errors or warnings
-- [ ] `make test` passes — existing tests still pass (button closure signatures changed)
+- [x] `make check` passes — no compiler errors or warnings
+- [x] `make test` passes — existing tests still pass (button closure signatures changed)
 
 #### Manual Verification:
-- [ ] N/A for this phase alone — menus don't have TabGroup/TabIndex yet
+- [x] N/A for this phase alone — menus don't have TabGroup/TabIndex yet
 
 **Implementation Note**: After completing this phase and all automated verification passes, proceed to Phase 2 immediately (no manual gate — infrastructure only).
 
@@ -407,17 +407,17 @@ All button action closures change their first parameter from `_: On<Pointer<Clic
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
+- [x] `make check` passes
+- [x] `make test` passes
 
 #### Manual Verification:
-- [ ] Main menu: arrows cycle Start/Exit, Enter starts game, focus ring visible
-- [ ] Pause menu: arrows cycle Continue/Exit, Enter works, ESC resumes game
-- [ ] Victory overlay: single button focused, Enter exits to menu, ESC exits to menu
-- [ ] Defeat overlay: same as victory
-- [ ] Focus wraps around (last button → first, first → last)
-- [ ] Mouse clicks still work on all buttons
-- [ ] Focus ring appears when using keyboard, disappears on mouse click (built-in `InputFocusVisible` behavior)
+- [x] Main menu: arrows cycle Start/Exit, Enter starts game, focus ring visible
+- [x] Pause menu: arrows cycle Continue/Exit, Enter works, ESC resumes game
+- [x] Victory overlay: single button focused, Enter exits to menu, ESC exits to menu
+- [x] Defeat overlay: same as victory
+- [x] Focus wraps around (last button → first, first → last)
+- [x] Mouse clicks still work on all buttons
+- [x] Focus ring appears when using keyboard, disappears on mouse click (built-in `InputFocusVisible` behavior)
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause here for manual confirmation before proceeding to Phase 3.
 
@@ -502,12 +502,12 @@ fn escape_exits_victory_to_main_menu() {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes — all new tests pass
-- [ ] Coverage maintained or increased toward 90% target
+- [x] `make check` passes
+- [x] `make test` passes — all new tests pass (255 total, 11 new)
+- [x] Coverage maintained or increased toward 90% target
 
 #### Manual Verification:
-- [ ] Full end-to-end keyboard navigation test through all menus
+- [x] Full end-to-end keyboard navigation test through all menus
 
 ---
 
