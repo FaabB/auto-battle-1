@@ -2,7 +2,7 @@
 
 **Date**: 2026-03-05
 **Ticket**: [GAM-57](https://linear.app/tayhu-games/issue/GAM-57/add-targetingstate-death-observer)
-**Status**: Draft
+**Status**: Done (2026-03-05)
 **Blocked by**: Nothing
 **Blocks**: GAM-58 (Migrate consumers to TargetingState, remove CurrentTarget)
 

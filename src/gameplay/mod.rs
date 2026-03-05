@@ -76,6 +76,33 @@ pub struct Target;
 #[reflect(Component)]
 pub struct CurrentTarget(pub Option<Entity>);
 
+/// State machine for targeting behavior.
+/// Coexists with `CurrentTarget` during migration (GAM-57/58).
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Reflect)]
+#[reflect(Component)]
+pub enum TargetingState {
+    /// Following flow field toward assigned goal. No spatial queries.
+    Moving,
+    /// Looking for targets. Default state for static entities (fortresses).
+    Seeking,
+    /// Locked onto a target. Movement system steers directly toward it.
+    Engaging(Entity),
+    /// In attack range, firing. Velocity = 0.
+    Attacking(Entity),
+}
+
+/// Leash that pulls a unit back to Seeking if it moves too far from origin.
+#[derive(Component, Debug, Clone, Copy, Reflect)]
+#[reflect(Component)]
+pub struct EngagementLeash {
+    pub origin: Vec2,
+    pub max_distance: f32,
+}
+
+/// Default leash distance in pixels (3 cells).
+#[allow(dead_code)]
+pub const LEASH_DISTANCE: f32 = 192.0;
+
 /// Movement speed for any mobile entity.
 #[derive(Component, Debug, Clone, Reflect)]
 #[reflect(Component)]
@@ -103,6 +130,8 @@ pub fn plugin(app: &mut App) {
         .register_type::<Health>()
         .register_type::<Target>()
         .register_type::<CurrentTarget>()
+        .register_type::<TargetingState>()
+        .register_type::<EngagementLeash>()
         .register_type::<Movement>()
         .register_type::<CombatStats>()
         .register_type::<GameStartTime>()

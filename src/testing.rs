@@ -13,7 +13,7 @@ use crate::gameplay::combat::AttackTimer;
 use crate::gameplay::units::avoidance::{AvoidanceAgent, PreferredVelocity};
 use crate::gameplay::units::pathfinding::NavPath;
 use crate::gameplay::units::{UNIT_RADIUS, Unit, UnitType, unit_stats};
-use crate::gameplay::{CombatStats, CurrentTarget, Health, Movement, Target, Team};
+use crate::gameplay::{CombatStats, CurrentTarget, Health, Movement, Target, TargetingState, Team};
 
 /// Creates a minimal app for testing with essential plugins.
 pub fn create_test_app() -> App {
@@ -160,6 +160,7 @@ pub fn spawn_test_unit(world: &mut World, team: Team, x: f32, y: f32) -> Entity 
             team,
             Target,
             CurrentTarget(None),
+            TargetingState::Seeking,
             Health::new(stats.hp),
             CombatStats {
                 damage: stats.damage,
