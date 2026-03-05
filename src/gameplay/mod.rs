@@ -23,6 +23,7 @@ pub mod combat;
 pub mod economy;
 pub mod endgame_detection;
 mod hud;
+pub mod spatial_hash;
 pub mod units;
 
 use bevy::prelude::*;

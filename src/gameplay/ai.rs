@@ -3,6 +3,8 @@
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
+use super::battlefield::CELL_SIZE;
+use super::spatial_hash::SpatialHash;
 use super::{CurrentTarget, Movement, Target, Team};
 use crate::screens::GameState;
 use crate::third_party::surface_distance;
@@ -11,6 +13,19 @@ use crate::{GameSet, gameplay_running};
 /// Maximum distance (pixels) a mobile entity will backtrack to chase a target behind it.
 /// 2 cells = 128 pixels.
 const BACKTRACK_DISTANCE: f32 = 2.0 * super::battlefield::CELL_SIZE;
+
+/// Initial search radius for nearby targets. 8 cells = 512px.
+/// Covers most practical targeting scenarios (units near enemies).
+const INITIAL_SEARCH_RADIUS: f32 = 8.0 * CELL_SIZE;
+
+/// Maximum half-extent of any entity collider (fortress = 128px, half = 64px).
+/// Entities whose center is just outside the search radius may still have
+/// their surface within range, so we pad the query by this amount.
+const MAX_ENTITY_HALF_EXTENT: f32 = 64.0;
+
+/// Diagonal of the full battlefield — used as fallback search radius.
+/// Guarantees finding all targets regardless of position.
+const BATTLEFIELD_DIAGONAL: f32 = 5300.0; // > sqrt(5248^2 + 640^2) ≈ 5287
 
 /// Number of stagger slots. Entities are distributed across slots by their index.
 /// Each timer tick evaluates one slot's worth of entities, spreading the load.
@@ -41,6 +56,36 @@ impl Default for RetargetTimer {
     }
 }
 
+/// Spatial hash for target lookups. Populated with all `With<Target>` entities
+/// each frame. Queried by `find_target` to find nearby candidates.
+#[derive(Resource, Debug)]
+pub struct TargetSpatialHash(SpatialHash);
+
+impl std::ops::Deref for TargetSpatialHash {
+    type Target = SpatialHash;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for TargetSpatialHash {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+/// Rebuild the target spatial hash with all targetable entities.
+/// Runs every frame before `find_target`.
+fn rebuild_target_grid(
+    mut grid: ResMut<TargetSpatialHash>,
+    targets: Query<(Entity, &GlobalTransform), With<Target>>,
+) {
+    grid.clear();
+    for (entity, transform) in &targets {
+        grid.insert(entity, transform.translation().xy());
+    }
+}
+
 /// Finds the nearest valid target for each entity with `CurrentTarget`. Runs in `GameSet::Ai`.
 ///
 /// Works for both units (with `Movement`) and static entities like fortresses (no `Movement`).
@@ -51,6 +96,7 @@ impl Default for RetargetTimer {
 pub fn find_target(
     time: Res<Time>,
     mut retarget_timer: ResMut<RetargetTimer>,
+    grid: Res<TargetSpatialHash>,
     mut seekers: Query<(
         Entity,
         &Team,
@@ -83,33 +129,153 @@ pub fn find_target(
         let my_pos = transform.translation().xy();
         let opposing_team = team.opposing();
 
-        // Find nearest enemy target (backtrack filter only for mobile entities)
-        let mut nearest: Option<(Entity, f32)> = None;
-        for (candidate, candidate_team, candidate_pos, candidate_collider) in &all_targets {
-            if candidate == entity || *candidate_team != opposing_team {
+        // Two-pass spatial search: nearby first, full battlefield fallback
+        let nearest = find_nearest_target(
+            &grid,
+            entity,
+            my_pos,
+            seeker_collider,
+            opposing_team,
+            movement.is_some(),
+            *team,
+            &all_targets,
+        );
+
+        current_target.0 = nearest;
+    }
+}
+
+/// Search the spatial grid for the nearest valid target.
+///
+/// Two-pass strategy:
+/// 1. Search within `INITIAL_SEARCH_RADIUS` (catches most cases)
+/// 2. If nothing found, search the full battlefield
+///
+/// Within each pass, uses center-distance as a cheap pre-filter before
+/// calling `surface_distance` (GJK) on close candidates.
+#[allow(clippy::too_many_arguments)]
+fn find_nearest_target(
+    grid: &TargetSpatialHash,
+    seeker_entity: Entity,
+    seeker_pos: Vec2,
+    seeker_collider: &Collider,
+    opposing_team: Team,
+    is_mobile: bool,
+    seeker_team: Team,
+    all_targets: &Query<(Entity, &Team, &GlobalTransform, &Collider), With<Target>>,
+) -> Option<Entity> {
+    // First pass: nearby targets
+    let result = search_radius(
+        grid,
+        INITIAL_SEARCH_RADIUS + MAX_ENTITY_HALF_EXTENT,
+        seeker_entity,
+        seeker_pos,
+        seeker_collider,
+        opposing_team,
+        is_mobile,
+        seeker_team,
+        all_targets,
+    );
+
+    if result.is_some() {
+        return result;
+    }
+
+    // Fallback: full battlefield
+    search_radius(
+        grid,
+        BATTLEFIELD_DIAGONAL,
+        seeker_entity,
+        seeker_pos,
+        seeker_collider,
+        opposing_team,
+        is_mobile,
+        seeker_team,
+        all_targets,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn search_radius(
+    grid: &TargetSpatialHash,
+    radius: f32,
+    seeker_entity: Entity,
+    seeker_pos: Vec2,
+    seeker_collider: &Collider,
+    opposing_team: Team,
+    is_mobile: bool,
+    seeker_team: Team,
+    all_targets: &Query<(Entity, &Team, &GlobalTransform, &Collider), With<Target>>,
+) -> Option<Entity> {
+    let candidates = grid.query_neighbors(seeker_pos, radius);
+
+    // Phase 1: Filter and compute center distances (cheap)
+    let mut valid_candidates: Vec<(Entity, Vec2, &Collider, f32)> = Vec::new();
+    for candidate_entity in candidates {
+        let Ok((cand_entity, cand_team, cand_transform, cand_collider)) =
+            all_targets.get(candidate_entity)
+        else {
+            continue;
+        };
+
+        if cand_entity == seeker_entity || *cand_team != opposing_team {
+            continue;
+        }
+
+        let cand_pos = cand_transform.translation().xy();
+
+        // Backtrack filter (mobile entities only)
+        if is_mobile {
+            let behind = match seeker_team {
+                Team::Player => seeker_pos.x - cand_pos.x,
+                Team::Enemy => cand_pos.x - seeker_pos.x,
+            };
+            if behind > BACKTRACK_DISTANCE {
                 continue;
-            }
-            let candidate_xy = candidate_pos.translation().xy();
-
-            // Backtrack filter: only applies to moving entities (units)
-            if movement.is_some() {
-                let behind = match team {
-                    Team::Player => my_pos.x - candidate_xy.x,
-                    Team::Enemy => candidate_xy.x - my_pos.x,
-                };
-                if behind > BACKTRACK_DISTANCE {
-                    continue;
-                }
-            }
-
-            let dist = surface_distance(seeker_collider, my_pos, candidate_collider, candidate_xy);
-            if nearest.is_none_or(|(_, d)| dist < d) {
-                nearest = Some((candidate, dist));
             }
         }
 
-        current_target.0 = nearest.map(|(e, _)| e);
+        let center_dist = seeker_pos.distance(cand_pos);
+        valid_candidates.push((cand_entity, cand_pos, cand_collider, center_dist));
     }
+
+    if valid_candidates.is_empty() {
+        return None;
+    }
+
+    // Phase 2: Find nearest by surface distance
+    // Use center-distance to skip GJK for obviously-distant candidates.
+    let min_center_dist = valid_candidates
+        .iter()
+        .map(|(_, _, _, d)| *d)
+        .fold(f32::MAX, f32::min);
+
+    // Only compute surface_distance for candidates whose center is close
+    // enough that they could beat the current best surface distance.
+    // Cutoff: min_center_dist + 2 * MAX_ENTITY_HALF_EXTENT covers the
+    // worst case where both entities have maximum collider extent.
+    let center_cutoff = 2.0f32.mul_add(MAX_ENTITY_HALF_EXTENT, min_center_dist);
+
+    let mut nearest: Option<(Entity, f32)> = None;
+    for (cand_entity, cand_pos, cand_collider, center_dist) in &valid_candidates {
+        if *center_dist > center_cutoff {
+            if let Some((_, best_surf)) = nearest {
+                // Tighten cutoff as we find better candidates
+                if *center_dist > 2.0f32.mul_add(MAX_ENTITY_HALF_EXTENT, best_surf) {
+                    continue;
+                }
+            } else {
+                continue;
+            }
+        }
+
+        let surf_dist = surface_distance(seeker_collider, seeker_pos, cand_collider, *cand_pos);
+        if nearest.is_none_or(|(_, d)| surf_dist < d) {
+            nearest = Some((*cand_entity, surf_dist));
+        }
+    }
+
+    nearest.map(|(e, _)| e)
 }
 
 // === Plugin ===
@@ -120,11 +286,15 @@ fn reset_retarget_timer(mut commands: Commands) {
 
 pub(super) fn plugin(app: &mut App) {
     app.init_resource::<RetargetTimer>();
+    app.insert_resource(TargetSpatialHash(SpatialHash::new(CELL_SIZE)));
     app.register_type::<RetargetTimer>();
     app.add_systems(OnEnter(GameState::InGame), reset_retarget_timer);
     app.add_systems(
         Update,
-        find_target.in_set(GameSet::Ai).run_if(gameplay_running),
+        (rebuild_target_grid, find_target)
+            .chain_ignore_deferred()
+            .in_set(GameSet::Ai)
+            .run_if(gameplay_running),
     );
 }
 
@@ -137,7 +307,13 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
         app.init_resource::<RetargetTimer>();
-        app.add_systems(Update, find_target);
+        app.insert_resource(TargetSpatialHash(SpatialHash::new(
+            crate::gameplay::battlefield::CELL_SIZE,
+        )));
+        app.add_systems(
+            Update,
+            (rebuild_target_grid, find_target).chain_ignore_deferred(),
+        );
         app
     }
 
@@ -319,5 +495,42 @@ mod tests {
         // Static entity (no Movement) should target regardless of direction
         let ct = app.world().get::<CurrentTarget>(fortress).unwrap();
         assert_eq!(ct.0, Some(behind_enemy));
+    }
+
+    #[test]
+    fn targets_enemy_across_large_distance() {
+        // Tests the fallback search (enemy far away, beyond initial radius)
+        let mut app = create_ai_test_app();
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        let far_enemy =
+            crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 4000.0, 100.0);
+        app.update();
+        let ct = app.world().get::<CurrentTarget>(player).unwrap();
+        assert_eq!(ct.0, Some(far_enemy));
+    }
+
+    #[test]
+    fn prefers_nearby_over_distant() {
+        // Nearby enemy should be chosen even with a distant enemy in the grid
+        let mut app = create_ai_test_app();
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        let _far = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 3000.0, 100.0);
+        let near = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 200.0, 100.0);
+        app.update();
+        let ct = app.world().get::<CurrentTarget>(player).unwrap();
+        assert_eq!(ct.0, Some(near));
+    }
+
+    #[test]
+    fn no_targets_gives_none() {
+        // Seeker with no enemies at all
+        let mut app = create_ai_test_app();
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        // Only spawn friendly targets
+        let _friendly =
+            crate::testing::spawn_test_target(app.world_mut(), Team::Player, 200.0, 100.0);
+        app.update();
+        let ct = app.world().get::<CurrentTarget>(player).unwrap();
+        assert_eq!(ct.0, None);
     }
 }

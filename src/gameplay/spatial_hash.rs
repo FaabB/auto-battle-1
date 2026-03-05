@@ -3,8 +3,12 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-/// Spatial hash for O(1) neighbor lookups. Rebuilt every frame.
-#[derive(Resource, Debug)]
+/// Spatial hash for O(1) neighbor lookups.
+///
+/// Buckets entities into grid cells by position. Designed to be rebuilt
+/// every frame (call `clear()` then `insert()` for each entity).
+/// Consumers wrap this in a newtype `Resource` (e.g., `TargetSpatialHash`).
+#[derive(Debug)]
 pub struct SpatialHash {
     cell_size: f32,
     cells: HashMap<(i32, i32), Vec<Entity>>,
