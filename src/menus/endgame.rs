@@ -4,7 +4,8 @@ use bevy::prelude::*;
 
 use super::Menu;
 use crate::screens::GameState;
-use crate::theme::{palette, widget};
+use crate::theme::palette;
+use crate::theme::widget::{self, Activate};
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Menu::Victory), spawn_victory_screen);
@@ -52,6 +53,7 @@ fn spawn_endgame_overlay(commands: &mut Commands, title: &str, title_color: Colo
                 },
                 BackgroundColor(palette::PANEL_BACKGROUND),
                 BorderColor::all(palette::PANEL_BORDER),
+                bevy::input_focus::tab_navigation::TabGroup::new(0),
                 children![
                     // Title with color accent (green for victory, red for defeat)
                     (
@@ -62,7 +64,9 @@ fn spawn_endgame_overlay(commands: &mut Commands, title: &str, title_color: Colo
                     // Exit to Menu button
                     widget::button(
                         "Exit to Menu",
-                        |_: On<Pointer<Click>>, mut next_game: ResMut<NextState<GameState>>| {
+                        0,
+                        true,
+                        |_: On<Activate>, mut next_game: ResMut<NextState<GameState>>| {
                             next_game.set(GameState::MainMenu);
                         },
                     ),

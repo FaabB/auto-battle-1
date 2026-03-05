@@ -4,7 +4,8 @@ use bevy::prelude::*;
 
 use super::Menu;
 use crate::screens::GameState;
-use crate::theme::{palette, widget};
+use crate::theme::palette;
+use crate::theme::widget::{self, Activate};
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Menu::Pause), spawn_pause_menu);
@@ -32,6 +33,7 @@ fn spawn_pause_menu(mut commands: Commands) {
                 },
                 BackgroundColor(palette::PANEL_BACKGROUND),
                 BorderColor::all(palette::PANEL_BORDER),
+                bevy::input_focus::tab_navigation::TabGroup::new(0),
                 children![
                     // Title
                     (
@@ -42,14 +44,18 @@ fn spawn_pause_menu(mut commands: Commands) {
                     // Continue button
                     widget::button(
                         "Continue",
-                        |_: On<Pointer<Click>>, mut next_menu: ResMut<NextState<Menu>>| {
+                        0,
+                        true,
+                        |_: On<Activate>, mut next_menu: ResMut<NextState<Menu>>| {
                             next_menu.set(Menu::None);
                         },
                     ),
                     // Exit Game button
                     widget::button(
                         "Exit Game",
-                        |_: On<Pointer<Click>>, mut next_game: ResMut<NextState<GameState>>| {
+                        1,
+                        false,
+                        |_: On<Activate>, mut next_game: ResMut<NextState<GameState>>| {
                             next_game.set(GameState::MainMenu);
                         },
                     ),

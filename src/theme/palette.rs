@@ -34,6 +34,7 @@ pub const PANEL_BORDER: Color = Color::srgba(0.5, 0.5, 0.6, 0.8);
 pub const BUTTON_BACKGROUND: Color = Color::srgb(0.275, 0.4, 0.75);
 pub const BUTTON_HOVERED_BACKGROUND: Color = Color::srgb(0.384, 0.6, 0.82);
 pub const BUTTON_PRESSED_BACKGROUND: Color = Color::srgb(0.239, 0.286, 0.6);
+pub const BUTTON_FOCUS_OUTLINE: Color = Color::WHITE;
 
 // === Bottom Bar ===
 
