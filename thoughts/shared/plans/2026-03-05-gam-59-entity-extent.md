@@ -2,42 +2,46 @@
 
 ## Overview
 
-Add `EntityExtent` component to all targetable entities and replace GJK-based `surface_distance()` calls with `EntityExtent::surface_distance_from()` in the AI, movement, and attack systems. This decouples combat range checks from the physics engine, preparing for physics removal in Ticket 5.
+Add `EntityExtent` component to all targetable entities and replace GJK-based `surface_distance()` calls with a simple geometric `extent_distance()` free function. This decouples combat range checks from the physics engine, preparing for physics removal in Ticket 5.
 
 ## Current State Analysis
 
 Three systems call `surface_distance()` (from `third_party/avian.rs`), which delegates to avian2d's GJK contact query:
 
-1. **`gameplay/ai.rs:274`** — `search_radius()` computes surface distance between seeker and candidate targets to find the nearest one
-2. **`gameplay/units/movement.rs:65-66`** — `unit_movement()` checks if unit is within attack range of target
-3. **`gameplay/combat/attack.rs:78-83`** — `attack()` checks if attacker is within range of target
+| System | File | Line | What it does |
+|--------|------|------|-------------|
+| `search_radius()` | `gameplay/ai.rs` | 274 | Finds nearest target by surface distance |
+| `unit_movement()` | `gameplay/units/movement.rs` | 65 | Checks if unit is within attack range |
+| `attack()` | `gameplay/combat/attack.rs` | 78 | Checks if attacker is within firing range |
 
 All three query `&Collider` on both the seeker/attacker and the target entity. The `Collider` component is also used by avian2d physics (pushbox/hurtbox layers), so it must remain until Ticket 5.
 
 ### Entity Extent Values
 
-| Entity | Current Collider | EntityExtent |
-|--------|-----------------|--------------|
-| Unit | `Collider::circle(6.0)` | `Circle(6.0)` — `UNIT_RADIUS` |
-| Fortress | `Collider::rectangle(128.0, 128.0)` | `Rect(64.0, 64.0)` — half-extents |
-| Building | `Collider::rectangle(40.0, 40.0)` | `Rect(20.0, 20.0)` — `BUILDING_SPRITE_SIZE / 2.0` |
-| Test target | `Collider::circle(5.0)` | `Circle(5.0)` |
+| Entity | Current Collider | EntityExtent | Source |
+|--------|-----------------|--------------|--------|
+| Unit | `Collider::circle(6.0)` | `Circle(6.0)` | `UNIT_RADIUS` |
+| Fortress | `Collider::rectangle(128.0, 128.0)` | `Rect(64.0, 64.0)` | `FORTRESS_COLS * CELL_SIZE / 2` |
+| Building | `Collider::rectangle(40.0, 40.0)` | `Rect(20.0, 20.0)` | `BUILDING_SPRITE_SIZE / 2` |
+| Test target | `Collider::circle(5.0)` | `Circle(5.0)` | Hardcoded in `spawn_test_target` |
+
+Note: `Collider::rectangle` takes **full** width/height. `EntityExtent::Rect` takes **half** extents.
 
 ### Key Discoveries
 
-- `surface_distance()` at `third_party/avian.rs:50` wraps `contact_query::distance()` — returns signed distance, 0 for overlap
-- `Collider::rectangle(w, h)` takes **full** width/height. `EntityExtent::Rect(hw, hh)` takes **half** extents.
+- `surface_distance()` at `third_party/avian.rs:50` wraps `contact_query::distance()` — returns surface-to-surface distance, 0 for overlap
 - The `MAX_ENTITY_HALF_EXTENT` constant in `ai.rs:24` (64.0) is already correct for the new system
-- Test helpers `spawn_test_unit` and `spawn_test_target` in `testing.rs` need `EntityExtent` added
+- `handle_projectile_hits` uses `CollidingEntities` (physics), NOT `surface_distance` — untouched by this ticket
+- `death.rs` test spawns (`spawn_mortal_target`, inline `(Team::Enemy, Target)`) have no `Collider` and the death system doesn't query `EntityExtent` — no changes needed
 
 ## Desired End State
 
-- `EntityExtent` component on every entity that has a `Target` marker or a `TargetingState`
-- All three consumer systems (`search_radius`, `unit_movement`, `attack`) use `EntityExtent::surface_distance_from()` instead of GJK `surface_distance()`
-- No game system imports `surface_distance` from `third_party` (it stays in the file for now, removed in Ticket 5)
+- `EntityExtent` component on every entity that has `Collider` + (`Target` or `TargetingState`)
+- All three consumer systems use `extent_distance()` instead of GJK `surface_distance()`
+- No game system imports `surface_distance` from `third_party` (the wrapper stays in the file, removed in Ticket 5)
 - `Collider` still on all entities for physics — unchanged
 - All existing tests pass with equivalent behavior
-- New unit tests for `EntityExtent::surface_distance_from()` math
+- New unit tests for `surface_distance_from()` and `extent_distance()` math
 
 ## What We're NOT Doing
 
@@ -49,19 +53,21 @@ All three query `&Collider` on both the seeker/attacker and the target entity. T
 
 ## Implementation Approach
 
-Additive then migrate: add the component and math first, then swap each consumer system one at a time. Each phase leaves the game working.
+Additive then migrate: add the component and math first, then add to all spawn sites, then swap each consumer system. Each phase leaves the game working.
 
 ---
 
 ## Phase 1: EntityExtent Component + Math
 
 ### Overview
-Define the `EntityExtent` enum in `gameplay/mod.rs` with `surface_distance_from()`. Add unit tests for the math.
+
+Define `EntityExtent` enum and `extent_distance()` free function in `gameplay/mod.rs`. Add unit tests for the math.
 
 ### Changes Required
 
-#### 1. `gameplay/mod.rs` — Add EntityExtent
-**After** the `CombatStats` component definition, add:
+#### 1. `gameplay/mod.rs` — Add EntityExtent enum
+
+After the `CombatStats` component definition:
 
 ```rust
 /// Physical extent of a targetable entity, used for surface-distance range checks.
@@ -77,7 +83,7 @@ pub enum EntityExtent {
 
 impl EntityExtent {
     /// Minimum distance from `point` to the surface of this extent centered at `self_pos`.
-    /// Returns 0.0 if the point is inside.
+    /// Returns 0.0 if the point is inside or overlapping.
     #[must_use]
     pub fn surface_distance_from(&self, self_pos: Vec2, point: Vec2) -> f32 {
         match self {
@@ -93,137 +99,14 @@ impl EntityExtent {
 }
 ```
 
-Note: The `Circle` case clamps to 0.0 with `.max(0.0)` to match GJK behavior (returns 0 for overlap).
+#### 2. `gameplay/mod.rs` — Add `extent_distance()` free function
 
-#### 2. `gameplay/mod.rs` — Register type
-Add `EntityExtent` to the plugin's type registrations:
-
-```rust
-app.register_type::<EntityExtent>()
-```
-
-#### 3. Unit tests for `EntityExtent::surface_distance_from()`
-Add tests in `gameplay/mod.rs` (new `#[cfg(test)] mod tests` block, or extend the existing one if present):
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Circle tests
-    #[test]
-    fn circle_surface_distance_outside() {
-        let extent = EntityExtent::Circle(10.0);
-        let dist = extent.surface_distance_from(Vec2::ZERO, Vec2::new(25.0, 0.0));
-        assert!((dist - 15.0).abs() < 0.01);
-    }
-
-    #[test]
-    fn circle_surface_distance_inside() {
-        let extent = EntityExtent::Circle(10.0);
-        let dist = extent.surface_distance_from(Vec2::ZERO, Vec2::new(5.0, 0.0));
-        assert_eq!(dist, 0.0);
-    }
-
-    #[test]
-    fn circle_surface_distance_on_surface() {
-        let extent = EntityExtent::Circle(10.0);
-        let dist = extent.surface_distance_from(Vec2::ZERO, Vec2::new(10.0, 0.0));
-        assert!(dist < 0.01);
-    }
-
-    // Rect tests
-    #[test]
-    fn rect_surface_distance_outside_axis() {
-        let extent = EntityExtent::Rect(64.0, 64.0);
-        let dist = extent.surface_distance_from(Vec2::ZERO, Vec2::new(100.0, 0.0));
-        assert!((dist - 36.0).abs() < 0.01);
-    }
-
-    #[test]
-    fn rect_surface_distance_outside_corner() {
-        let extent = EntityExtent::Rect(64.0, 64.0);
-        let dist = extent.surface_distance_from(Vec2::ZERO, Vec2::new(67.0, 67.0));
-        // dx = 3, dy = 3 → sqrt(9+9) ≈ 4.24
-        assert!((dist - (3.0f32 * 2.0).sqrt()).abs() < 0.01);
-    }
-
-    #[test]
-    fn rect_surface_distance_inside() {
-        let extent = EntityExtent::Rect(64.0, 64.0);
-        let dist = extent.surface_distance_from(Vec2::ZERO, Vec2::new(30.0, 30.0));
-        assert_eq!(dist, 0.0);
-    }
-
-    // Cross-type: point distance from circle to rect (simulating unit → fortress)
-    #[test]
-    fn unit_to_fortress_distance() {
-        // Unit (circle r=6) at x=100, fortress (rect 64×64) at origin
-        // Unit surface at x=94, fortress surface at x=64 → gap = 30
-        let unit_extent = EntityExtent::Circle(6.0);
-        let fortress_extent = EntityExtent::Rect(64.0, 64.0);
-        let unit_pos = Vec2::new(100.0, 0.0);
-        let fortress_pos = Vec2::ZERO;
-
-        // Distance from fortress surface to unit center
-        let d_fortress = fortress_extent.surface_distance_from(fortress_pos, unit_pos);
-        // Distance from unit surface to fortress center (approx)
-        let d_unit = unit_extent.surface_distance_from(unit_pos, fortress_pos);
-
-        // For surface-to-surface: fortress reports 36, unit reports 94
-        // The correct surface-to-surface distance is 30 (gap between surfaces)
-        // We use: target.surface_distance_from(target_pos, seeker_pos) - seeker_radius
-        // OR: seeker.surface_distance_from(seeker_pos, closest_point_on_target)
-        // The ticket's approach: target.surface_distance_from(target_pos, attacker_pos)
-        // This gives distance from attacker CENTER to target SURFACE.
-        // For range checks, this is what we want: "how far is my center from the target surface?"
-        assert!((d_fortress - 36.0).abs() < 0.01);
-    }
-}
-```
-
-**Important design note**: The consumer systems use `target_extent.surface_distance_from(target_pos, seeker_pos)` — distance from **seeker center** to **target surface**. This differs from the current GJK which gives surface-to-surface distance between both colliders. The difference is the seeker's own radius (6px for units). This means `CombatStats.range` values may need a small adjustment, OR we compute the full surface-to-surface distance.
-
-### Design Decision: Surface Distance Calculation
-
-The current `surface_distance(c1, pos1, c2, pos2)` gives the distance between the **surfaces** of both colliders. The ticket's `EntityExtent::surface_distance_from()` gives distance from a **point** to the entity's surface.
-
-To replicate the current behavior exactly (surface-to-surface), we need:
-
-```rust
-// In consumer systems:
-let dist = target_extent.surface_distance_from(target_pos, seeker_pos)
-    - seeker_extent.surface_distance_from(seeker_pos, target_pos); // Nope, this double-counts
-```
-
-Actually, for two shapes, surface-to-surface distance = center-to-center - extent1 - extent2 (approximately). The simplest correct approach for mixed shapes:
-
-```rust
-/// Surface-to-surface distance between two extents.
-pub fn surface_distance_between(
-    a: &EntityExtent, a_pos: Vec2,
-    b: &EntityExtent, b_pos: Vec2,
-) -> f32 {
-    // Distance from a's surface to b's center, minus b's extent toward a
-    // This is exact for circle-circle and circle-axis-aligned-rect
-    let d_a_to_b_center = a.surface_distance_from(a_pos, b_pos);
-    // But for rect-rect corner cases, we need a different approach
-    // Simplest correct: closest point on A to B's center, then distance from that to B's surface
-    ...
-}
-```
-
-This gets complex. The ticket code in the Linear issue actually specifies the simpler approach. Let me re-read it...
-
-The ticket says:
-> Replace GJK `surface_distance` calls with `EntityExtent::surface_distance_from()`
-
-And shows the function returning distance from a point to the shape's surface. The consumer systems currently use `surface_distance(seeker_collider, seeker_pos, target_collider, target_pos)` (surface-to-surface between two shapes).
-
-To keep it simple and match the ticket spec, I'll add a **free function** that computes surface-to-surface distance between two `EntityExtent`s. For the shapes we have (circle-circle, circle-rect), this is straightforward:
+Drop-in replacement for `surface_distance()` with identical semantics (surface-to-surface distance between two shapes, 0.0 if overlapping). Handles all three shape pair combinations: circle-circle, circle-rect, rect-rect.
 
 ```rust
 /// Surface-to-surface distance between two extents. Returns 0.0 if overlapping.
+/// Drop-in replacement for `third_party::surface_distance()`.
+#[must_use]
 pub fn extent_distance(a: &EntityExtent, a_pos: Vec2, b: &EntityExtent, b_pos: Vec2) -> f32 {
     match (a, b) {
         (EntityExtent::Circle(r1), EntityExtent::Circle(r2)) => {
@@ -249,13 +132,28 @@ pub fn extent_distance(a: &EntityExtent, a_pos: Vec2, b: &EntityExtent, b_pos: V
 }
 ```
 
-This replaces `surface_distance()` as a drop-in with the same semantics.
+#### 3. `gameplay/mod.rs` — Register type
+
+```rust
+app.register_type::<EntityExtent>()
+```
+
+#### 4. Unit tests
+
+Tests for `surface_distance_from()` (point-to-surface) and `extent_distance()` (surface-to-surface):
+
+- **Circle**: outside, inside (returns 0), on surface (returns 0)
+- **Rect**: outside along axis, outside at corner (diagonal), inside (returns 0)
+- **extent_distance circle-circle**: separated, overlapping
+- **extent_distance circle-rect**: unit-to-fortress scenario, unit-to-building
+- **extent_distance rect-rect**: fortress-to-building, overlapping
+- **Parity**: compare `extent_distance()` against `surface_distance()` for representative shapes to confirm mathematical equivalence before migration
 
 ### Success Criteria
 
 #### Automated Verification:
 - [ ] `make check` passes
-- [ ] `make test` passes — new unit tests for `surface_distance_from()` and `extent_distance()`
+- [ ] `make test` passes — new unit tests for both functions
 
 #### Manual Verification:
 - [ ] None needed — pure data + math, no visual behavior
@@ -265,31 +163,39 @@ This replaces `surface_distance()` as a drop-in with the same semantics.
 ## Phase 2: Add EntityExtent to Spawn Sites + Test Helpers
 
 ### Overview
-Add `EntityExtent` to every entity that currently has `Collider` + `Target` (or `TargetingState`).
+
+Add `EntityExtent` to every entity that currently has `Collider` + (`Target` or `TargetingState`). Additive only — no behavior change.
 
 ### Changes Required
 
-#### 1. `gameplay/units/mod.rs` — `spawn_unit()`
-Add `EntityExtent::Circle(UNIT_RADIUS)` to the spawn bundle (alongside existing `Collider::circle(UNIT_RADIUS)`).
+#### 1. Production spawn sites
 
-#### 2. `gameplay/battlefield/renderer.rs` — Fortresses
-Add `EntityExtent::Rect(fortress_size.x / 2.0, fortress_size.y / 2.0)` to both Player and Enemy fortress spawns. This equals `EntityExtent::Rect(64.0, 64.0)`.
+| File | Entity | EntityExtent value |
+|------|--------|-------------------|
+| `gameplay/units/mod.rs:99` — `spawn_unit()` | Unit | `EntityExtent::Circle(UNIT_RADIUS)` |
+| `gameplay/battlefield/renderer.rs:66` | Player fortress | `EntityExtent::Rect(fortress_size.x / 2.0, fortress_size.y / 2.0)` |
+| `gameplay/battlefield/renderer.rs:148` | Enemy fortress | `EntityExtent::Rect(fortress_size.x / 2.0, fortress_size.y / 2.0)` |
+| `gameplay/building/placement.rs:125` | Building | `EntityExtent::Rect(BUILDING_SPRITE_SIZE / 2.0, BUILDING_SPRITE_SIZE / 2.0)` |
 
-#### 3. `gameplay/building/placement.rs` — Buildings
-Add `EntityExtent::Rect(BUILDING_SPRITE_SIZE / 2.0, BUILDING_SPRITE_SIZE / 2.0)` to the building spawn. This equals `EntityExtent::Rect(20.0, 20.0)`.
+#### 2. Test helpers
 
-#### 4. `testing.rs` — Test helpers
-- `spawn_test_unit()`: Add `EntityExtent::Circle(UNIT_RADIUS)`
-- `spawn_test_target()`: Add `EntityExtent::Circle(5.0)` (matches `Collider::circle(5.0)`)
+| File | Helper | EntityExtent value |
+|------|--------|-------------------|
+| `testing.rs:154` — `spawn_test_unit()` | Test unit | `EntityExtent::Circle(UNIT_RADIUS)` |
+| `testing.rs:194` — `spawn_test_target()` | Test target | `EntityExtent::Circle(5.0)` |
 
-#### 5. Test fortress spawns in `ai.rs` tests
-The `fortress_targets_nearest_enemy` and `static_entity_has_no_backtrack_limit` tests manually spawn fortress-like entities with `Collider::rectangle(128.0, 128.0)`. Add `EntityExtent::Rect(64.0, 64.0)` to these spawns.
+#### 3. Inline test entity spawns
 
-#### 6. Test fortress spawn in `attack.rs` tests
-The `fortress_can_attack_in_range` test (line 510-520) spawns a fortress-like attacker entity with `Collider::rectangle(128.0, 128.0)`. Add `EntityExtent::Rect(64.0, 64.0)`. This entity has `TargetingState` and is queried by the `attack` system (which will query `&EntityExtent` after migration).
+| File | Test | EntityExtent value |
+|------|------|-------------------|
+| `gameplay/ai.rs:453` | `fortress_targets_nearest_enemy` | `EntityExtent::Rect(64.0, 64.0)` |
+| `gameplay/ai.rs:482` | `static_entity_has_no_backtrack_limit` | `EntityExtent::Rect(64.0, 64.0)` |
+| `gameplay/combat/attack.rs:510` | `fortress_can_attack_in_range` | `EntityExtent::Rect(64.0, 64.0)` |
 
-#### 7. `death.rs` test spawns — NO CHANGES NEEDED
-`spawn_mortal_target` (line 67-77) and inline `(Team::Enemy, Target)` (line 107) have `Target` but no `Collider`. The death system doesn't query `EntityExtent`, so these are fine as-is.
+#### 4. NOT changed
+
+- `gameplay/combat/death.rs:67` — `spawn_mortal_target`: has `Target` but no `Collider`. Death system doesn't query `EntityExtent`.
+- `gameplay/combat/death.rs:107` — inline `(Team::Enemy, Target)`: same reason.
 
 ### Success Criteria
 
@@ -305,20 +211,28 @@ The `fortress_can_attack_in_range` test (line 510-520) spawns a fortress-like at
 ## Phase 3: Migrate Consumer Systems
 
 ### Overview
-Replace `surface_distance()` calls with `extent_distance()` in all three consumer systems: AI targeting, unit movement, and attack.
+
+Replace `&Collider` queries and `surface_distance()` calls with `&EntityExtent` queries and `extent_distance()` in all three consumer systems.
 
 ### Changes Required
 
-#### 1. `gameplay/ai.rs` — Migrate `find_target` + `search_radius`
+#### 1. `gameplay/ai.rs` — Migrate targeting
 
-**Query changes**:
-- `seekers` query (line 104): Replace `&Collider` with `&EntityExtent`
-- `all_targets` query (line 108): Replace `&Collider` with `&EntityExtent`
-- `find_nearest_target` signature (line 163): Replace `seeker_collider: &Collider` with `seeker_extent: &EntityExtent`
-- `find_nearest_target` signature (line 167): Replace `&Collider` in `all_targets` query type with `&EntityExtent`
-- `search_radius` signature (line 206): Replace `seeker_collider: &Collider` with `seeker_extent: &EntityExtent`
-- `search_radius` signature (line 210): Replace `&Collider` in `all_targets` query type with `&EntityExtent`
-- `valid_candidates` type (line 215): Change `Vec<(Entity, Vec2, &Collider, f32)>` to `Vec<(Entity, Vec2, &EntityExtent, f32)>`
+**Import changes**:
+- Remove `use avian2d::prelude::*;` (only used for `Collider` in queries)
+- Remove `use crate::third_party::surface_distance;`
+- Add `use super::extent_distance;`
+
+**Query changes** in `find_target()`:
+- Line 104: `&Collider` → `&EntityExtent` in `seekers` query
+- Line 108: `&Collider` → `&EntityExtent` in `all_targets` query
+
+**Helper function signature changes**:
+- `find_nearest_target()` (line 163): `seeker_collider: &Collider` → `seeker_extent: &EntityExtent`
+- `find_nearest_target()` (line 167): `&Collider` → `&EntityExtent` in `all_targets` query type
+- `search_radius()` (line 206): `seeker_collider: &Collider` → `seeker_extent: &EntityExtent`
+- `search_radius()` (line 210): `&Collider` → `&EntityExtent` in `all_targets` query type
+- `valid_candidates` type (line 215): `Vec<(Entity, Vec2, &Collider, f32)>` → `Vec<(Entity, Vec2, &EntityExtent, f32)>`
 
 **Logic change** in `search_radius()`:
 ```rust
@@ -329,15 +243,16 @@ let surf_dist = surface_distance(seeker_collider, seeker_pos, cand_collider, *ca
 let surf_dist = extent_distance(seeker_extent, seeker_pos, cand_extent, *cand_pos);
 ```
 
-**Import change**: Remove `use crate::third_party::surface_distance;`, add `use super::extent_distance;`
+#### 2. `gameplay/units/movement.rs` — Migrate movement range check
 
-Also remove `use avian2d::prelude::*;` (the only avian import was for `Collider`). If there's nothing else from avian used, this import is now dead.
+**Import changes**:
+- Remove `use avian2d::prelude::Collider;`
+- Remove `use crate::third_party::surface_distance;`
+- Add `use crate::gameplay::extent_distance;`
 
-#### 2. `gameplay/units/movement.rs` — Migrate `unit_movement`
-
-**Query changes**:
-- `units` query: Replace `&Collider` with `&EntityExtent`
-- `targets` query: Replace `(&GlobalTransform, &Collider)` with `(&GlobalTransform, &EntityExtent)`
+**Query changes** in `unit_movement()`:
+- Line 36: `&Collider` → `&EntityExtent` in `units` query
+- Line 42: `(&GlobalTransform, &Collider)` → `(&GlobalTransform, &EntityExtent)` in `targets` query
 
 **Logic change**:
 ```rust
@@ -350,44 +265,31 @@ let distance_to_target =
     extent_distance(unit_extent, current_xy, target_extent, target_xy);
 ```
 
-**Import change**: Remove `use avian2d::prelude::Collider;` and `use crate::third_party::surface_distance;`, add `use crate::gameplay::extent_distance;` (or `use super::super::extent_distance;`).
+#### 3. `gameplay/combat/attack.rs` — Migrate attack range check
 
-#### 3. `gameplay/combat/attack.rs` — Migrate `attack`
+**Import changes**:
+- Remove `surface_distance` from `use crate::third_party::{CollisionLayer, surface_distance};`
+- Add `use crate::gameplay::extent_distance;`
+- Keep `use avian2d::prelude::*;` — still needed for `RigidBody`, `Collider`, `Sensor`, `CollisionLayers`, `CollisionEventsEnabled`, `CollidingEntities` in projectile spawning and hit detection
 
-**Query changes**:
-- `attackers` query: Replace `&Collider` with `&EntityExtent`
-- `targets` query: Replace `(&GlobalTransform, &Collider)` with `(&GlobalTransform, &EntityExtent)`
+**Query changes** in `attack()`:
+- Line 57: `&Collider` → `&EntityExtent` in `attackers` query
+- Line 60: `(&GlobalTransform, &Collider)` → `(&GlobalTransform, &EntityExtent)` in `targets` query
 
 **Logic change**:
 ```rust
 // Before (line 78-83):
 let distance = surface_distance(
-    attacker_collider,
-    attacker_pos.translation().xy(),
-    target_collider,
-    target_pos.translation().xy(),
+    attacker_collider, attacker_pos.translation().xy(),
+    target_collider, target_pos.translation().xy(),
 );
 
 // After:
 let distance = extent_distance(
-    attacker_extent,
-    attacker_pos.translation().xy(),
-    target_extent,
-    target_pos.translation().xy(),
+    attacker_extent, attacker_pos.translation().xy(),
+    target_extent, target_pos.translation().xy(),
 );
 ```
-
-**Import change**: Remove `use crate::third_party::{CollisionLayer, surface_distance};`, change to `use crate::third_party::CollisionLayer;`, add `use crate::gameplay::extent_distance;`.
-
-Remove `use avian2d::prelude::*;` — check if anything else from avian is used (yes: `RigidBody`, `Collider`, `Sensor`, `CollisionLayers`, `CollisionEventsEnabled`, `CollidingEntities` are all used in the projectile spawn and hit detection). Keep the avian import.
-
-Actually, looking again at `attack.rs:3`, the `avian2d::prelude::*` is used for `RigidBody`, `Collider`, `Sensor`, `CollisionLayers`, `CollisionEventsEnabled`, `CollidingEntities` in the projectile spawn and `CollidingEntities` in hit detection. So `use avian2d::prelude::*` stays. Only `surface_distance` is removed from imports.
-
-#### 4. Update tests
-
-Most tests already spawn entities with `Collider` which worked because the systems queried `&Collider`. After migration, systems query `&EntityExtent`, so test entities need `EntityExtent`. Phase 2 already added `EntityExtent` to all test helpers and manual fortress spawns, so existing tests should work.
-
-**Verify**: No test manually creates entities with `Collider` but without `EntityExtent` that are then queried by the migrated systems. The Phase 2 changes should cover all cases.
 
 ### Success Criteria
 
@@ -396,42 +298,39 @@ Most tests already spawn entities with `Collider` which worked because the syste
 - [ ] `make test` passes — all existing tests produce equivalent results
 
 #### Manual Verification:
-- [ ] Play test: units still target and attack correctly
+- [ ] Units still target and attack correctly
 - [ ] Fortresses still fire at enemies in range
 - [ ] Buildings are targetable by enemy units
 
-**Implementation Note**: After completing this phase and all automated verification passes, pause here for manual confirmation from the human that the manual testing was successful before proceeding.
+**Implementation Note**: After completing this phase and all automated verification passes, pause for manual confirmation before considering the ticket done.
 
 ---
 
 ## Testing Strategy
 
 ### Unit Tests (Phase 1)
-- `EntityExtent::surface_distance_from()` — circle outside, inside, on surface
-- `EntityExtent::surface_distance_from()` — rect outside axis, outside corner, inside
-- `extent_distance()` — circle-circle, circle-rect, rect-rect, overlapping cases
-- Parity tests: verify `extent_distance()` matches `surface_distance()` for the same shapes/positions
+- `surface_distance_from()` — circle and rect variants, inside/outside/on-surface
+- `extent_distance()` — all three shape pairs (circle-circle, circle-rect, rect-rect), overlapping cases
+- Parity tests comparing `extent_distance()` against `surface_distance()` for representative configurations
 
 ### Integration Tests (Phase 2-3)
 - All existing AI, movement, and attack tests pass unchanged (same behavior, different implementation)
 - No new integration tests needed — the component is tested via existing system tests
 
-### Parity Validation
-Add temporary tests in Phase 1 that compare `extent_distance()` against `surface_distance()` for representative entity configurations. These confirm mathematical equivalence before migration. Can be removed after Phase 3 passes.
-
 ## Performance Considerations
 
 - `extent_distance()` is ~4-8 FLOPs per call vs GJK's ~10-20 iterations (each with several FLOPs)
-- At 40k units, the AI system calls this in `search_radius` for each candidate — the savings add up
+- At 40k units, the AI system calls this in `search_radius` for each candidate — savings compound
 - No allocations, no trait objects, pure arithmetic on `f32` values
 
 ## Verified API Patterns (Bevy 0.18)
 
-These were verified against the actual crate source and existing codebase:
+Verified against codebase patterns (matches `TargetingState` added in GAM-58):
 
-- `Component` derive + `Debug, Clone, Copy, Reflect` + `#[reflect(Component)]` for enum components — matches `TargetingState` pattern
-- `app.register_type::<EntityExtent>()` in plugin function — required for reflection
-- `impl` block on derived `Component` enum — allowed, used by `TargetingState::target_entity()`
+- Enum component derives: `Component, Debug, Clone, Copy, Reflect` + `#[reflect(Component)]`
+- Registration: `app.register_type::<EntityExtent>()` chained in `gameplay::plugin`
+- Import path: `use crate::gameplay::{EntityExtent, extent_distance};`
+- `impl` block on derived `Component` enum is allowed (used by `TargetingState::target_entity()`)
 
 ## References
 
