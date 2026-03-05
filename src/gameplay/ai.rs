@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use super::battlefield::CELL_SIZE;
 use super::spatial_hash::SpatialHash;
-use super::{CurrentTarget, Movement, Target, Team};
+use super::{CurrentTarget, Movement, Target, TargetingState, Team};
 use crate::screens::GameState;
 use crate::third_party::surface_distance;
 use crate::{GameSet, gameplay_running};
@@ -103,6 +103,7 @@ pub fn find_target(
         &GlobalTransform,
         &Collider,
         &mut CurrentTarget,
+        &mut TargetingState,
         Option<&Movement>,
     )>,
     all_targets: Query<(Entity, &Team, &GlobalTransform, &Collider), With<Target>>,
@@ -113,7 +114,16 @@ pub fn find_target(
         retarget_timer.current_slot = (retarget_timer.current_slot + 1) % RETARGET_SLOTS;
     }
 
-    for (entity, team, transform, seeker_collider, mut current_target, movement) in &mut seekers {
+    for (
+        entity,
+        team,
+        transform,
+        seeker_collider,
+        mut current_target,
+        mut targeting_state,
+        movement,
+    ) in &mut seekers
+    {
         let has_valid_target = current_target.0.is_some_and(|e| all_targets.get(e).is_ok());
 
         if has_valid_target {
@@ -142,6 +152,7 @@ pub fn find_target(
         );
 
         current_target.0 = nearest;
+        *targeting_state = nearest.map_or(TargetingState::Seeking, TargetingState::Engaging);
     }
 }
 
@@ -452,6 +463,7 @@ mod tests {
                 Team::Player,
                 Target,
                 CurrentTarget(None),
+                TargetingState::Seeking,
                 Transform::from_xyz(64.0, 320.0, 0.0),
                 GlobalTransform::from(Transform::from_xyz(64.0, 320.0, 0.0)),
                 Collider::rectangle(128.0, 128.0),
@@ -481,6 +493,7 @@ mod tests {
                 Team::Player,
                 Target,
                 CurrentTarget(None),
+                TargetingState::Seeking,
                 Transform::from_xyz(500.0, 320.0, 0.0),
                 GlobalTransform::from(Transform::from_xyz(500.0, 320.0, 0.0)),
                 Collider::rectangle(128.0, 128.0),
