@@ -38,6 +38,9 @@ temp/
 *.tmp
 
 
+# Claude Code
+.claude/worktrees/
+
 # Rust
 /target/
 
