@@ -148,14 +148,14 @@ impl TargetingState {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (no compiler errors, clippy clean)
-- [ ] `make test` passes (all ~40 affected tests)
-- [ ] `grep -r "CurrentTarget" src/` returns zero results
+- [x] `make check` passes (no compiler errors, clippy clean)
+- [x] `make test` passes (all ~40 affected tests)
+- [x] `grep -r "CurrentTarget" src/` returns zero results
 
 #### Manual Verification:
-- [ ] Game runs normally — units target, move, and attack as before
-- [ ] Fortresses acquire targets and fire projectiles
-- [ ] Units retarget when their target dies
+- [x] Game runs normally — units target, move, and attack as before
+- [x] Fortresses acquire targets and fire projectiles
+- [x] Units retarget when their target dies
 
 ---
 

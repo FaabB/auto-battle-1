@@ -14,7 +14,7 @@ use super::{
 };
 use crate::gameplay::combat::{AttackTimer, HealthBarConfig};
 use crate::gameplay::units::UNIT_RADIUS;
-use crate::gameplay::{CombatStats, CurrentTarget, Health, Target, TargetingState, Team};
+use crate::gameplay::{CombatStats, Health, Target, TargetingState, Team};
 use crate::screens::GameState;
 use crate::third_party::{NavObstacle, solid_entity_layers};
 use crate::{Z_BACKGROUND, Z_FORTRESS, Z_GRID, Z_ZONE};
@@ -84,7 +84,6 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
                 1.0 / FORTRESS_ATTACK_SPEED,
                 TimerMode::Repeating,
             )),
-            CurrentTarget(None),
             TargetingState::Seeking,
             Sprite::from_color(palette::PLAYER_FORTRESS, fortress_size),
             Transform::from_xyz(
@@ -167,7 +166,6 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
                 1.0 / FORTRESS_ATTACK_SPEED,
                 TimerMode::Repeating,
             )),
-            CurrentTarget(None),
             TargetingState::Seeking,
             Sprite::from_color(palette::ENEMY_FORTRESS, fortress_size),
             Transform::from_xyz(
