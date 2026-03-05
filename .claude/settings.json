@@ -10,7 +10,8 @@
       "Bash(bash scripts/spec_metadata.sh)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(gh pr create:*)"
     ]
   },
   "allowedTools": [
