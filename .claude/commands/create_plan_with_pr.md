@@ -5,7 +5,7 @@ model: opus
 
 # Implementation Plan with Draft PR
 
-You are tasked with creating detailed implementation plans through an interactive, iterative process. This command extends `/create_plan` by creating a worktree upfront so the entire workflow (planning, implementation, PR) happens in one isolated branch from the start.
+You are tasked with creating detailed implementation plans through an interactive, iterative process. This command creates a worktree upfront so the entire workflow (planning, implementation, PR) happens in one isolated branch from the start.
 
 **CRITICAL RULE**: Whenever you need to ask the user a question, get their input, present options, or request approval, you MUST use the **AskUserQuestion** tool. Do NOT just write questions as plain text output — the user expects structured, interactive prompts they can respond to via the tool's UI. This applies to ALL questions throughout this workflow: initial input requests, clarification questions, design option choices, approach approval gates, and review feedback requests.
 
@@ -41,7 +41,7 @@ When this command is invoked:
 
 ## Planning Process
 
-Follow the exact same planning process as `/create_plan`:
+Follow this planning process:
 
 ### Step 1: Context Gathering & Initial Analysis
 
@@ -202,18 +202,128 @@ After structure approval:
      - Example: `2025-01-08-GAM-8-fortresses-damageable.md`
    - Example (no Linear ticket): `2025-01-08-improve-error-handling.md`
 
-2. **Use the standard plan template structure** (same as `/create_plan`):
-   - Overview, Current State Analysis, Desired End State, What We're NOT Doing
-   - Implementation Approach, Phases with Changes Required and Success Criteria
-   - Testing Strategy, Performance Considerations, References
+2. **Use this template structure**:
+
+````markdown
+# [Feature/Task Name] Implementation Plan
+
+## Overview
+
+[Brief description of what we're implementing and why]
+
+## Current State Analysis
+
+[What exists now, what's missing, key constraints discovered]
+
+## Desired End State
+
+[A Specification of the desired end state after this plan is complete, and how to verify it]
+
+### Key Discoveries:
+- [Important finding with file:line reference]
+- [Pattern to follow]
+- [Constraint to work within]
+
+## What We're NOT Doing
+
+[Explicitly list out-of-scope items to prevent scope creep]
+
+## Implementation Approach
+
+[High-level strategy and reasoning]
+
+## Phase 1: [Descriptive Name]
+
+### Overview
+[What this phase accomplishes]
+
+### Changes Required:
+
+#### 1. [Component/File Group]
+**File**: `path/to/file.ext`
+**Changes**: [Summary of changes]
+
+```[language]
+// Specific code to add/modify
+```
+
+### Success Criteria:
+
+#### Automated Verification:
+- [ ] Migration applies cleanly: `make migrate`
+- [ ] Unit tests pass: `make test`
+- [ ] Type checking passes: `npm run typecheck`
+- [ ] Linting passes: `make lint`
+- [ ] Integration tests pass: `make test-integration`
+
+#### Manual Verification:
+- [ ] Feature works as expected when tested via UI
+- [ ] Performance is acceptable under load
+- [ ] Edge case handling verified manually
+- [ ] No regressions in related features
+
+**Implementation Note**: After completing this phase and all automated verification passes, pause here for manual confirmation from the human that the manual testing was successful before proceeding to the next phase.
+
+---
+
+## Phase 2: [Descriptive Name]
+
+[Similar structure with both automated and manual success criteria...]
+
+---
+
+## Testing Strategy
+
+### Unit Tests:
+- [What to test]
+- [Key edge cases]
+
+### Integration Tests:
+- [End-to-end scenarios]
+
+### Manual Testing Steps:
+1. [Specific step to verify feature]
+2. [Another verification step]
+3. [Edge case to test manually]
+
+## Performance Considerations
+
+[Any performance implications or optimizations needed]
+
+## Migration Notes
+
+[If applicable, how to handle existing data/systems]
+
+## References
+
+- Linear ticket: [GAM-XX](https://linear.app/team/issue/GAM-XX) *(include if plan is based on a Linear ticket)*
+- Original ticket: `thoughts/shared/tickets/ticket_XXXX.md`
+- Related research: `thoughts/shared/research/[relevant].md`
+- Similar implementation: `[file:line]`
+````
 
 ### Step 5: Sync and Review
 
 1. **Present the draft plan location and a brief summary** as plain text. Do NOT use AskUserQuestion here — the user will provide feedback if they want changes.
 
-2. **Iterate based on feedback conversationally**
+2. **Iterate based on feedback conversationally**:
+   - If the user provides feedback or asks a question, respond to it directly as plain text
+   - Only use AskUserQuestion when you have a **concrete question with distinct options** (e.g., "Should we use approach A or B for X?")
+   - If you need clarification on ambiguous feedback, ask a **specific** question — not a generic "what would you like to change?"
+   - When the user says it's approved or stops giving feedback, proceed — don't ask for re-confirmation
 
-3. **Document consistency check** — If the plan scope differs from the original ticket, update related documents
+   Be ready to:
+   - Add missing phases
+   - Adjust technical approach
+   - Clarify success criteria (both automated and manual)
+   - Add/remove scope items
+
+3. **Document consistency check** — If the plan scope differs from the original ticket:
+   - **Update the base ticket** to reflect the expanded/changed scope
+   - **Update the research doc** if it references patterns or architecture that the plan changes
+   - **Update dependent tickets** that referenced work now done in this ticket (e.g., if a fix was pulled forward from Ticket N+1 into this plan)
+   - **Update MEMORY.md** if project-level facts changed (e.g., architecture decisions, known issues resolved)
+   - This is NOT optional. Stale documents cause confusion in future sessions.
 
 4. **Continue refining** until the user is satisfied
 
@@ -253,7 +363,7 @@ After the plan is approved (worktree and branch already exist from the setup ste
    ```
 
 3. **Update Linear ticket**:
-   - Move the ticket to **In Progress** using `mcp__plugin_linear_linear__save_issue` (set `state` to `"In Progress"`)
+   - Move the ticket to **Plan created** using `mcp__plugin_linear_linear__save_issue` (set `state` to `"Plan created"`)
 
 4. **Report to the user**:
    ```
@@ -261,7 +371,7 @@ After the plan is approved (worktree and branch already exist from the setup ste
    - Worktree: `.claude/worktrees/<branch-name>/`
    - Branch: `<branch-name>`
    - Draft PR: <pr-url>
-   - Linear ticket: moved to In Progress
+   - Linear ticket: moved to Plan created
 
    Ready for `/implement_plan` (already in the worktree).
    ```
@@ -327,13 +437,121 @@ Before writing code snippets into the plan, **verify every API you reference** a
    - System parameter types (e.g., `ButtonInput<KeyCode>` vs `Input<KeyCode>`)
    - Struct variant syntax (tuple vs named fields)
 
+### Example: Verified API section in a plan
+
+```markdown
+## Verified API Patterns (Bevy 0.18)
+
+These were verified against the actual crate source:
+
+- `Projection` enum is the Component (not `OrthographicProjection`)
+  - Access via: `if let Projection::Orthographic(ref mut ortho) = *projection { ... }`
+- `ScalingMode` lives at `bevy::camera::ScalingMode` (NOT `bevy::render::camera`)
+- `query.single_mut()` returns `Result` — use `let Ok(..) = .. else { return; }`
+- `ApplyDeferred` is a unit struct (not a function `apply_deferred`)
+```
+
 ## Check for Built-in Alternatives
 
-Before proposing ANY custom infrastructure, **always search the framework source** for existing solutions.
+Before proposing ANY custom infrastructure (cleanup systems, state management, entity lifecycle, etc.), **always search the framework source** for existing solutions. This prevents reinventing the wheel.
+
+### Process
+
+1. **Before writing custom code for common patterns**, ask: "Does the framework already provide this?"
+2. **Search the framework source** (`~/.cargo/registry/src/` for Rust, `node_modules/` for JS/TS):
+   - Look for built-in components, traits, or systems that do the same thing
+   - Check framework examples for recommended patterns
+   - Search for the feature name in the framework's prelude or common imports
+3. **If a built-in exists**, use it and document why in the plan
+4. **If no built-in exists**, document that you checked and why the custom solution is necessary
+
+### Common Traps
+- Writing manual entity cleanup when the framework has state-scoped despawning
+- Writing custom state machines when the framework has sub-states or computed states
+- Writing custom event systems when the framework has built-in messaging
+- Writing custom scheduling when the framework has run conditions or system sets
 
 ## Architecture Considerations
 
-Plans should consider not just the current ticket, but the next 2-3 tickets that build on this work.
+Plans should consider not just the current ticket, but the next 2-3 tickets that build on this work. This prevents architectural rework.
+
+### During Research Phase
+
+1. **Read dependent tickets** — If the ticket index shows future tickets depend on this one, read them to understand what they'll need from this foundation (this should already be done in Step 1.2 of Context Gathering)
+2. **Identify future components** — What markers, components, or resources will later tickets add to entities created here?
+3. **Separate concerns early**:
+   - **World state** (entities, markers, game logic) vs **rendering** (sprites, colors, visual effects)
+   - **Constants/layout** (pure data) vs **systems** (behavior)
+   - Don't couple spawning with visual representation — use marker components so rendering can be changed independently
+
+### Module Structure Decisions
+
+When planning new modules, consider:
+- Will this file grow beyond ~200 lines as more tickets land? If yes, plan a module directory from the start
+- Propose the split: `mod.rs` (constants/types), domain-specific submodules (e.g., `zones.rs`, `rendering.rs`)
+- Define what's `pub`, `pub(crate)`, and private upfront
+
+### System Ordering
+
+When one system spawns entities and another queries them:
+- Plan for `ApplyDeferred` between spawn and query systems
+- Document the system chain in the plan (e.g., `spawn → ApplyDeferred → add_visuals → setup_camera`)
+- Use `Added<T>` queries for one-shot initialization after spawning
+
+## Success Criteria Guidelines
+
+**Always separate success criteria into two categories:**
+
+1. **Automated Verification** (can be run by execution agents):
+   - Commands that can be run: `make test`, `npm run lint`, etc.
+   - Specific files that should exist
+   - Code compilation/type checking
+   - Automated test suites
+
+2. **Manual Verification** (requires human testing):
+   - UI/UX functionality
+   - Performance under real conditions
+   - Edge cases that are hard to automate
+   - User acceptance criteria
+
+**Format example:**
+```markdown
+### Success Criteria:
+
+#### Automated Verification:
+- [ ] Database migration runs successfully: `make migrate`
+- [ ] All unit tests pass: `go test ./...`
+- [ ] No linting errors: `npm run lint`
+- [ ] API endpoint returns 200: `curl localhost:8080/api/new-endpoint`
+
+#### Manual Verification:
+- [ ] New feature appears correctly in the UI
+- [ ] Performance is acceptable with 1000+ items
+- [ ] Error messages are user-friendly
+- [ ] Feature works correctly on mobile devices
+```
+
+## Common Patterns
+
+### For Database Changes:
+- Start with schema/migration
+- Add store methods
+- Update business logic
+- Expose via API
+- Update clients
+
+### For New Features:
+- Research existing patterns first
+- Start with data model
+- Build backend logic
+- Add API endpoints
+- Implement UI last
+
+### For Refactoring:
+- Document current behavior
+- Plan incremental changes
+- Maintain backwards compatibility
+- Include migration strategy
 
 ## Sub-task Spawning Best Practices
 
