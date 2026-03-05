@@ -9,13 +9,6 @@ use crate::theme::widget::{self, Activate};
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Menu::Pause), spawn_pause_menu);
-    app.add_systems(Update, close_pause_on_escape.run_if(in_state(Menu::Pause)));
-}
-
-fn close_pause_on_escape(input: Res<ButtonInput<KeyCode>>, mut next_menu: ResMut<NextState<Menu>>) {
-    if input.just_pressed(KeyCode::Escape) {
-        next_menu.set(Menu::None);
-    }
 }
 
 fn spawn_pause_menu(mut commands: Commands) {
@@ -87,7 +80,6 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
         app.add_plugins(StatesPlugin);
-        crate::testing::init_input_resources(&mut app);
         app.init_state::<GameState>();
         app.init_state::<Menu>();
         app.add_plugins(super::plugin);
@@ -107,43 +99,5 @@ mod tests {
         assert_entity_count::<With<Text>>(&mut app, 3);
         // Continue + Exit Game
         assert_entity_count::<With<Button>>(&mut app, 2);
-    }
-
-    #[test]
-    fn escape_closes_pause_menu() {
-        use bevy::state::app::StatesPlugin;
-
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
-        app.add_plugins(StatesPlugin);
-        crate::testing::init_input_resources(&mut app);
-        app.init_state::<GameState>();
-        app.init_state::<Menu>();
-        app.add_systems(
-            Update,
-            super::close_pause_on_escape.run_if(in_state(Menu::Pause)),
-        );
-
-        // Transition to InGame then Pause
-        app.world_mut()
-            .resource_mut::<NextState<GameState>>()
-            .set(GameState::InGame);
-        app.update();
-        app.world_mut()
-            .resource_mut::<NextState<Menu>>()
-            .set(Menu::Pause);
-        app.update();
-
-        // Press Escape
-        app.world_mut()
-            .resource_mut::<ButtonInput<KeyCode>>()
-            .press(KeyCode::Escape);
-        app.update();
-
-        let next = app.world().resource::<NextState<Menu>>();
-        assert!(
-            matches!(*next, NextState::Pending(Menu::None)),
-            "Expected NextState to be Menu::None, got {next:?}"
-        );
     }
 }

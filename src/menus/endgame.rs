@@ -10,19 +10,6 @@ use crate::theme::widget::{self, Activate};
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Menu::Victory), spawn_victory_screen);
     app.add_systems(OnEnter(Menu::Defeat), spawn_defeat_screen);
-    app.add_systems(
-        Update,
-        close_endgame_on_escape.run_if(in_state(Menu::Victory).or(in_state(Menu::Defeat))),
-    );
-}
-
-fn close_endgame_on_escape(
-    input: Res<ButtonInput<KeyCode>>,
-    mut next_game: ResMut<NextState<GameState>>,
-) {
-    if input.just_pressed(KeyCode::Escape) {
-        next_game.set(GameState::MainMenu);
-    }
 }
 
 fn spawn_victory_screen(mut commands: Commands) {
@@ -100,7 +87,6 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
         app.add_plugins(StatesPlugin);
-        crate::testing::init_input_resources(&mut app);
         app.init_state::<GameState>();
         app.init_state::<Menu>();
         app.add_plugins(plugin);
@@ -132,59 +118,5 @@ mod tests {
 
         assert_entity_count::<With<Text>>(&mut app, 2);
         assert_entity_count::<With<Button>>(&mut app, 1);
-    }
-
-    fn create_endgame_escape_test_app(menu: Menu) -> App {
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
-        app.add_plugins(StatesPlugin);
-        crate::testing::init_input_resources(&mut app);
-        app.init_state::<GameState>();
-        app.init_state::<Menu>();
-        app.add_systems(
-            Update,
-            close_endgame_on_escape.run_if(in_state(Menu::Victory).or(in_state(Menu::Defeat))),
-        );
-
-        // Transition to InGame then to the target menu
-        app.world_mut()
-            .resource_mut::<NextState<GameState>>()
-            .set(GameState::InGame);
-        app.update();
-        app.world_mut().resource_mut::<NextState<Menu>>().set(menu);
-        app.update();
-        app
-    }
-
-    #[test]
-    fn escape_exits_victory_to_main_menu() {
-        let mut app = create_endgame_escape_test_app(Menu::Victory);
-
-        app.world_mut()
-            .resource_mut::<ButtonInput<KeyCode>>()
-            .press(KeyCode::Escape);
-        app.update();
-
-        let next = app.world().resource::<NextState<GameState>>();
-        assert!(
-            matches!(*next, NextState::Pending(GameState::MainMenu)),
-            "Expected NextState to be GameState::MainMenu, got {next:?}"
-        );
-    }
-
-    #[test]
-    fn escape_exits_defeat_to_main_menu() {
-        let mut app = create_endgame_escape_test_app(Menu::Defeat);
-
-        app.world_mut()
-            .resource_mut::<ButtonInput<KeyCode>>()
-            .press(KeyCode::Escape);
-        app.update();
-
-        let next = app.world().resource::<NextState<GameState>>();
-        assert!(
-            matches!(*next, NextState::Pending(GameState::MainMenu)),
-            "Expected NextState to be GameState::MainMenu, got {next:?}"
-        );
     }
 }
