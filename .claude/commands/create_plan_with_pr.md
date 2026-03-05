@@ -339,6 +339,7 @@ After the plan is approved (worktree and branch already exist from the setup ste
 1. **Commit the plan file and push**:
    - Use `git add` with specific files (never use `-A` or `.`)
    - Write clear, imperative commit messages focused on *why*, not just *what*
+   - **NEVER use `$(...)` command substitution** — it triggers a security prompt. Use plain `-m "message"` strings.
    ```
    git add thoughts/shared/plans/<plan-file>
    git commit -m "Add implementation plan for <description> (<TICKET-ID>)"
@@ -350,22 +351,11 @@ After the plan is approved (worktree and branch already exist from the setup ste
    - Title: the plan title or ticket title
    - Body: a summary of the plan phases + link to the plan file
    - Do NOT mention AI, Claude, or automation in the PR title or body
+   - **NEVER use `$(...)` command substitution** — it triggers a security prompt. Write the body as a plain string with `\n` for newlines.
 
    Format:
    ```
-   gh pr create --draft --title "<title> (<TICKET-ID>)" --body "$(cat <<'EOF'
-   ## Implementation Plan
-
-   Plan file: `thoughts/shared/plans/<plan-file>`
-
-   ### Phases:
-   1. [Phase name] — [one-line description]
-   2. [Phase name] — [one-line description]
-
-   ### Linear ticket
-   [TICKET-ID](linear-url)
-   EOF
-   )"
+   gh pr create --draft --title "<title> (<TICKET-ID>)" --body "## Implementation Plan\n\nPlan file: \`thoughts/shared/plans/<plan-file>\`\n\n### Phases:\n1. [Phase name] — [one-line description]\n2. [Phase name] — [one-line description]\n\n### Linear ticket\n[TICKET-ID](linear-url)"
    ```
 
 3. **Update Linear ticket**:

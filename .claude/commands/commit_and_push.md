@@ -36,6 +36,7 @@ You are tasked with creating git commits and pushing them to the remote for the 
    - If the push fails (e.g., no upstream branch), set it up: `git push -u origin <branch>`
 
 ## Important:
+- **NEVER use `$(...)` command substitution in git commands** — it triggers a security prompt. Use plain `git commit -m "message"` with simple strings. For multi-line messages, use multiple `-m` flags.
 - **NEVER add co-author information or Claude attribution**
 - Commits should be authored solely by the user
 - Do not include any "Generated with Claude" messages

@@ -31,6 +31,7 @@ You are tasked with creating git commits for the changes made during this sessio
    - Show the result with `git log --oneline -n [number]`
 
 ## Important:
+- **NEVER use `$(...)` command substitution in git commands** — it triggers a security prompt. Use plain `git commit -m "message"` with simple strings. For multi-line messages, use multiple `-m` flags.
 - **NEVER add co-author information or Claude attribution**
 - Commits should be authored solely by the user
 - Do not include any "Generated with Claude" messages
