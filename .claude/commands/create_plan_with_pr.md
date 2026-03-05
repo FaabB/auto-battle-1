@@ -13,20 +13,17 @@ You are tasked with creating detailed implementation plans through an interactiv
 
 When this command is invoked:
 
-1. **Check if parameters were provided**:
-   - If a file path or ticket reference was provided as a parameter, skip the default message
+1. **Identify the task** (metadata only — do NOT read files yet):
+   - If a file path or ticket reference was provided as a parameter, note it for later
    - If a **Linear ticket identifier** was provided (e.g., `GAM-8`, `LIN-123`), use the `mcp__plugin_linear_linear__get_issue` tool to fetch the ticket details. Store the identifier and URL for use in the plan's References section.
-   - Immediately read any provided files FULLY
+   - If **no parameters provided**, use the **AskUserQuestion** tool to ask the user what they want to plan. Example question: "What would you like to create an implementation plan for?" with options like:
+     - "A Linear ticket" (description: "I'll provide a Linear issue identifier like GAM-8")
+     - "A ticket file" (description: "I'll provide a path to a ticket in thoughts/shared/tickets/")
+     - "A new feature" (description: "I'll describe what I want to build")
+     - "A bug fix" (description: "I'll describe the issue to fix")
+   - Then wait for the user's input.
 
-2. **If no parameters provided**, use the **AskUserQuestion** tool to ask the user what they want to plan. Example question: "What would you like to create an implementation plan for?" with options like:
-   - "A Linear ticket" (description: "I'll provide a Linear issue identifier like GAM-8")
-   - "A ticket file" (description: "I'll provide a path to a ticket in thoughts/shared/tickets/")
-   - "A new feature" (description: "I'll describe what I want to build")
-   - "A bug fix" (description: "I'll describe the issue to fix")
-
-   Then wait for the user's input.
-
-3. **IMMEDIATELY create a worktree** — do this BEFORE any research, file reads, or agent spawning:
+2. **IMMEDIATELY create a worktree** — do this BEFORE any file reads, research, or agent spawning:
    - **Determine branch name**:
      - If a Linear ticket is associated, use: `{identifier-lowercase}-short-description` (e.g., `gam-54-snap-to-mesh`)
      - If no ticket, use: `plan-short-description`
@@ -37,7 +34,7 @@ When this command is invoked:
      This creates a worktree at `.claude/worktrees/<branch-name>/` with a new branch based on HEAD. The session's working directory switches to the worktree automatically.
    - **Why upfront?** The plan file, implementation, and PR all live in one worktree from the start. No need to copy files later. The main working tree stays clean, and multiple tickets can be in progress simultaneously.
 
-4. **Begin the research process** — all file reads, research, and plan writing happen inside the worktree (which has the full repo contents).
+3. **Now read files and begin research** — all file reads, MEMORY.md consultation, research, and plan writing happen inside the worktree (which has the full repo contents). Read any provided files FULLY before proceeding to the Planning Process.
 
 ## Planning Process
 

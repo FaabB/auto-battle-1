@@ -16,7 +16,6 @@ Plans may reference a Linear ticket (e.g., `GAM-5`, `GAM-9`). Look for a ticket 
 
 When a Linear ticket is found:
 - **On start**: Move the ticket to **In Progress** using the `update_issue` Linear tool (set `state` to `"In Progress"`)
-- **On completion** (all phases done and verified): Move the ticket to **Done** (set `state` to `"Done"`)
 
 If no Linear ticket is associated with the plan, skip this step silently.
 
@@ -77,8 +76,6 @@ After implementing a phase:
 If instructed to execute multiple phases consecutively, skip the pause until the last phase. Otherwise, assume you are just doing one phase.
 
 Do not check off items in the manual testing steps until confirmed by the user.
-
-When all phases are complete and the user confirms manual verification has passed, move the associated Linear ticket (if any) to **Done**.
 
 ## If You Get Stuck
 
