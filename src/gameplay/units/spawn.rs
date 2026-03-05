@@ -187,7 +187,7 @@ mod tests {
 
 #[cfg(test)]
 mod integration_tests {
-    use super::super::{CombatStats, CurrentTarget, Movement, Unit, UnitType};
+    use super::super::{CombatStats, Movement, TargetingState, Unit, UnitType};
     use super::*;
     use crate::gameplay::{Health, Target, Team};
     use crate::testing::{assert_entity_count, transition_to_ingame};
@@ -264,7 +264,7 @@ mod integration_tests {
 
         assert_entity_count::<(With<Unit>, With<UnitType>)>(&mut app, 1);
         assert_entity_count::<(With<Unit>, With<Target>)>(&mut app, 1);
-        assert_entity_count::<(With<Unit>, With<CurrentTarget>)>(&mut app, 1);
+        assert_entity_count::<(With<Unit>, With<TargetingState>)>(&mut app, 1);
         assert_entity_count::<(With<Unit>, With<Health>)>(&mut app, 1);
         assert_entity_count::<(With<Unit>, With<crate::gameplay::combat::HealthBarConfig>)>(
             &mut app, 1,

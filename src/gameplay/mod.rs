@@ -2,14 +2,14 @@
 //!
 //! # Entity Archetypes
 //!
-//! **Units**: `Unit`, `Team`, `Target`, `CurrentTarget`, `Health`, `CombatStats`, `Movement`,
+//! **Units**: `Unit`, `Team`, `Target`, `TargetingState`, `Health`, `CombatStats`, `Movement`,
 //!           `AttackTimer`, `HealthBarConfig`, `Mesh2d`, `MeshMaterial2d`,
 //!           `RigidBody::Dynamic`, `Collider`, `CollisionLayers`, `LockedAxes`, `LinearVelocity`
 //!
 //! **Buildings**: `Building`, `Team`, `Target`, `Health`, `HealthBarConfig`,
 //!           `ProductionTimer` or `IncomeTimer`, `RigidBody::Static`, `Collider`, `CollisionLayers`
 //!
-//! **Fortresses**: `PlayerFortress`/`EnemyFortress`, `Team`, `Target`, `CurrentTarget`,
+//! **Fortresses**: `PlayerFortress`/`EnemyFortress`, `Team`, `Target`, `TargetingState`,
 //!           `Health`, `CombatStats`, `AttackTimer`, `HealthBarConfig`,
 //!           `RigidBody::Static`, `Collider`, `CollisionLayers`
 //!
@@ -70,14 +70,7 @@ impl Health {
 #[reflect(Component)]
 pub struct Target;
 
-/// Tracks the entity this entity is currently moving toward / attacking.
-/// Updated by the AI system; read by movement and combat systems.
-#[derive(Component, Debug, Clone, Copy, Reflect)]
-#[reflect(Component)]
-pub struct CurrentTarget(pub Option<Entity>);
-
 /// State machine for targeting behavior.
-/// Coexists with `CurrentTarget` during migration (GAM-57/58).
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Reflect)]
 #[reflect(Component)]
 pub enum TargetingState {
@@ -89,6 +82,17 @@ pub enum TargetingState {
     Engaging(Entity),
     /// In attack range, firing. Velocity = 0.
     Attacking(Entity),
+}
+
+impl TargetingState {
+    /// Returns the target entity if in `Engaging` or `Attacking` state.
+    #[must_use]
+    pub const fn target_entity(self) -> Option<Entity> {
+        match self {
+            Self::Engaging(e) | Self::Attacking(e) => Some(e),
+            Self::Moving | Self::Seeking => None,
+        }
+    }
 }
 
 /// Leash that pulls a unit back to Seeking if it moves too far from origin.
@@ -129,7 +133,6 @@ pub fn plugin(app: &mut App) {
     app.register_type::<Team>()
         .register_type::<Health>()
         .register_type::<Target>()
-        .register_type::<CurrentTarget>()
         .register_type::<TargetingState>()
         .register_type::<EngagementLeash>()
         .register_type::<Movement>()

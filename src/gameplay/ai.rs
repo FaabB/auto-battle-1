@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use super::battlefield::CELL_SIZE;
 use super::spatial_hash::SpatialHash;
-use super::{CurrentTarget, Movement, Target, TargetingState, Team};
+use super::{Movement, Target, TargetingState, Team};
 use crate::screens::GameState;
 use crate::third_party::surface_distance;
 use crate::{GameSet, gameplay_running};
@@ -86,7 +86,7 @@ fn rebuild_target_grid(
     }
 }
 
-/// Finds the nearest valid target for each entity with `CurrentTarget`. Runs in `GameSet::Ai`.
+/// Finds the nearest valid target for each entity with `TargetingState`. Runs in `GameSet::Ai`.
 ///
 /// Works for both units (with `Movement`) and static entities like fortresses (no `Movement`).
 /// - Entities without a target evaluate every frame (so newly spawned units react instantly).
@@ -102,7 +102,6 @@ pub fn find_target(
         &Team,
         &GlobalTransform,
         &Collider,
-        &mut CurrentTarget,
         &mut TargetingState,
         Option<&Movement>,
     )>,
@@ -114,17 +113,10 @@ pub fn find_target(
         retarget_timer.current_slot = (retarget_timer.current_slot + 1) % RETARGET_SLOTS;
     }
 
-    for (
-        entity,
-        team,
-        transform,
-        seeker_collider,
-        mut current_target,
-        mut targeting_state,
-        movement,
-    ) in &mut seekers
-    {
-        let has_valid_target = current_target.0.is_some_and(|e| all_targets.get(e).is_ok());
+    for (entity, team, transform, seeker_collider, mut targeting_state, movement) in &mut seekers {
+        let has_valid_target = targeting_state
+            .target_entity()
+            .is_some_and(|e| all_targets.get(e).is_ok());
 
         if has_valid_target {
             if !slot_advanced {
@@ -151,7 +143,6 @@ pub fn find_target(
             &all_targets,
         );
 
-        current_target.0 = nearest;
         *targeting_state = nearest.map_or(TargetingState::Seeking, TargetingState::Engaging);
     }
 }
@@ -355,8 +346,8 @@ mod tests {
 
         app.update();
 
-        let current_target = app.world().get::<CurrentTarget>(player).unwrap();
-        assert_eq!(current_target.0, Some(near_enemy));
+        let current_target = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(current_target.target_entity(), Some(near_enemy));
     }
 
     #[test]
@@ -369,8 +360,8 @@ mod tests {
 
         app.update();
 
-        let current_target = app.world().get::<CurrentTarget>(player).unwrap();
-        assert_eq!(current_target.0, Some(fortress));
+        let current_target = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(current_target.target_entity(), Some(fortress));
     }
 
     #[test]
@@ -383,16 +374,16 @@ mod tests {
 
         // First update: targets nearest (enemy1)
         app.update();
-        let ct = app.world().get::<CurrentTarget>(player).unwrap();
-        assert_eq!(ct.0, Some(enemy1));
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(ct.target_entity(), Some(enemy1));
 
         // Despawn enemy1
         app.world_mut().despawn(enemy1);
 
         // Next update: target is invalid, re-evaluates immediately → enemy2
         app.update();
-        let ct = app.world().get::<CurrentTarget>(player).unwrap();
-        assert_eq!(ct.0, Some(enemy2));
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(ct.target_entity(), Some(enemy2));
     }
 
     #[test]
@@ -404,8 +395,8 @@ mod tests {
 
         // First update gives a target (no target yet → evaluates immediately)
         app.update();
-        let ct = app.world().get::<CurrentTarget>(player).unwrap();
-        assert_eq!(ct.0, Some(enemy_far));
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(ct.target_entity(), Some(enemy_far));
 
         // Spawn a closer enemy
         let enemy_near =
@@ -417,8 +408,8 @@ mod tests {
         app.update();
 
         // Should have switched to the closer enemy
-        let ct = app.world().get::<CurrentTarget>(player).unwrap();
-        assert_eq!(ct.0, Some(enemy_near));
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(ct.target_entity(), Some(enemy_near));
     }
 
     #[test]
@@ -433,8 +424,8 @@ mod tests {
         app.update();
 
         // Should NOT target the enemy behind (too far)
-        let ct = app.world().get::<CurrentTarget>(player).unwrap();
-        assert_eq!(ct.0, None);
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(ct.target_entity(), None);
     }
 
     #[test]
@@ -448,8 +439,8 @@ mod tests {
 
         app.update();
 
-        let ct = app.world().get::<CurrentTarget>(enemy).unwrap();
-        assert_eq!(ct.0, Some(building));
+        let ct = app.world().get::<TargetingState>(enemy).unwrap();
+        assert_eq!(ct.target_entity(), Some(building));
     }
 
     #[test]
@@ -462,7 +453,6 @@ mod tests {
             .spawn((
                 Team::Player,
                 Target,
-                CurrentTarget(None),
                 TargetingState::Seeking,
                 Transform::from_xyz(64.0, 320.0, 0.0),
                 GlobalTransform::from(Transform::from_xyz(64.0, 320.0, 0.0)),
@@ -478,8 +468,8 @@ mod tests {
 
         app.update();
 
-        let ct = app.world().get::<CurrentTarget>(fortress).unwrap();
-        assert_eq!(ct.0, Some(near_enemy));
+        let ct = app.world().get::<TargetingState>(fortress).unwrap();
+        assert_eq!(ct.target_entity(), Some(near_enemy));
     }
 
     #[test]
@@ -492,7 +482,6 @@ mod tests {
             .spawn((
                 Team::Player,
                 Target,
-                CurrentTarget(None),
                 TargetingState::Seeking,
                 Transform::from_xyz(500.0, 320.0, 0.0),
                 GlobalTransform::from(Transform::from_xyz(500.0, 320.0, 0.0)),
@@ -506,8 +495,8 @@ mod tests {
         app.update();
 
         // Static entity (no Movement) should target regardless of direction
-        let ct = app.world().get::<CurrentTarget>(fortress).unwrap();
-        assert_eq!(ct.0, Some(behind_enemy));
+        let ct = app.world().get::<TargetingState>(fortress).unwrap();
+        assert_eq!(ct.target_entity(), Some(behind_enemy));
     }
 
     #[test]
@@ -518,8 +507,8 @@ mod tests {
         let far_enemy =
             crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 4000.0, 100.0);
         app.update();
-        let ct = app.world().get::<CurrentTarget>(player).unwrap();
-        assert_eq!(ct.0, Some(far_enemy));
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(ct.target_entity(), Some(far_enemy));
     }
 
     #[test]
@@ -530,8 +519,8 @@ mod tests {
         let _far = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 3000.0, 100.0);
         let near = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 200.0, 100.0);
         app.update();
-        let ct = app.world().get::<CurrentTarget>(player).unwrap();
-        assert_eq!(ct.0, Some(near));
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(ct.target_entity(), Some(near));
     }
 
     #[test]
@@ -543,7 +532,7 @@ mod tests {
         let _friendly =
             crate::testing::spawn_test_target(app.world_mut(), Team::Player, 200.0, 100.0);
         app.update();
-        let ct = app.world().get::<CurrentTarget>(player).unwrap();
-        assert_eq!(ct.0, None);
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(ct.target_entity(), None);
     }
 }

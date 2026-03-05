@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use super::avoidance::PreferredVelocity;
 use super::pathfinding::NavPath;
-use super::{CombatStats, CurrentTarget, Movement, Unit};
+use super::{CombatStats, Movement, TargetingState, Unit};
 use crate::third_party::surface_distance;
 
 /// Distance threshold for reaching a waypoint — when the unit's center
@@ -29,7 +29,7 @@ const WAYPOINT_REACHED_DISTANCE: f32 = 4.0;
 pub(super) fn unit_movement(
     mut units: Query<
         (
-            &CurrentTarget,
+            &TargetingState,
             &Movement,
             &CombatStats,
             &GlobalTransform,
@@ -42,7 +42,7 @@ pub(super) fn unit_movement(
     targets: Query<(&GlobalTransform, &Collider)>,
 ) {
     for (
-        current_target,
+        targeting_state,
         movement,
         stats,
         global_transform,
@@ -51,7 +51,7 @@ pub(super) fn unit_movement(
         mut nav_path,
     ) in &mut units
     {
-        let Some(target_entity) = current_target.0 else {
+        let Some(target_entity) = targeting_state.target_entity() else {
             preferred.0 = Vec2::ZERO;
             continue;
         };
@@ -119,9 +119,10 @@ mod tests {
 
     fn spawn_unit_at(world: &mut World, x: f32, speed: f32, target: Option<Entity>) -> Entity {
         let id = crate::testing::spawn_test_unit(world, Team::Player, x, 100.0);
-        world
-            .entity_mut(id)
-            .insert((Movement { speed }, CurrentTarget(target)));
+        world.entity_mut(id).insert((
+            Movement { speed },
+            target.map_or(TargetingState::Seeking, TargetingState::Engaging),
+        ));
         id
     }
 

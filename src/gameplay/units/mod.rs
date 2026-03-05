@@ -15,7 +15,7 @@ use crate::gameplay::combat::{
     UNIT_HEALTH_BAR_Y_OFFSET,
 };
 use crate::gameplay::spatial_hash::SpatialHash;
-use crate::gameplay::{CombatStats, CurrentTarget, Health, Movement, Target, TargetingState, Team};
+use crate::gameplay::{CombatStats, Health, Movement, Target, TargetingState, Team};
 use crate::screens::GameState;
 use crate::third_party::solid_entity_layers;
 use crate::{GameSet, Z_UNIT, gameplay_running};
@@ -103,7 +103,6 @@ pub fn spawn_unit(
             unit_type,
             team,
             Target,
-            CurrentTarget(None),
             Health::new(stats.hp),
             HealthBarConfig {
                 width: UNIT_HEALTH_BAR_WIDTH,

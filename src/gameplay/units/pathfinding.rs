@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use vleue_navigator::prelude::*;
 
 use super::Unit;
-use crate::gameplay::CurrentTarget;
+use crate::gameplay::TargetingState;
 
 /// Seconds between periodic path recomputations for units that already have a path.
 /// Picks up navmesh changes from building placement/destruction.
@@ -122,7 +122,7 @@ fn snap_to_mesh(navmesh: &NavMesh, target: Vec2, from: Vec2) -> Option<Vec2> {
 pub(super) fn compute_paths(
     time: Res<Time>,
     mut refresh_timer: ResMut<PathRefreshTimer>,
-    mut units: Query<(&CurrentTarget, &GlobalTransform, &mut NavPath), With<Unit>>,
+    mut units: Query<(&TargetingState, &GlobalTransform, &mut NavPath), With<Unit>>,
     targets: Query<&GlobalTransform>,
     navmeshes: Option<Res<Assets<NavMesh>>>,
     navmesh_query: Option<Single<(&ManagedNavMesh, &NavMeshStatus)>>,
@@ -144,8 +144,8 @@ pub(super) fn compute_paths(
     refresh_timer.0.tick(time.delta());
     let refresh_due = refresh_timer.0.just_finished();
 
-    for (current_target, transform, mut nav_path) in &mut units {
-        let target_changed = nav_path.needs_recompute(current_target.0);
+    for (targeting_state, transform, mut nav_path) in &mut units {
+        let target_changed = nav_path.needs_recompute(targeting_state.target_entity());
 
         // Recompute if: target changed, periodic refresh due, or path fully consumed
         let path_consumed = nav_path.is_path_consumed();
@@ -153,7 +153,7 @@ pub(super) fn compute_paths(
             continue;
         }
 
-        let Some(target_entity) = current_target.0 else {
+        let Some(target_entity) = targeting_state.target_entity() else {
             nav_path.clear();
             continue;
         };
@@ -173,10 +173,10 @@ pub(super) fn compute_paths(
         let destination = snap_to_mesh(navmesh, to, from).unwrap_or(to);
 
         if let Some(path) = navmesh.path(from, destination) {
-            nav_path.set(path.path, current_target.0);
+            nav_path.set(path.path, targeting_state.target_entity());
         } else {
             // No valid path — store empty waypoints, unit stops until next refresh
-            nav_path.set(Vec::new(), current_target.0);
+            nav_path.set(Vec::new(), targeting_state.target_entity());
         }
     }
 }

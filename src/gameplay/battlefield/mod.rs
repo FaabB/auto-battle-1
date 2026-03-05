@@ -487,10 +487,10 @@ mod integration_tests {
     }
 
     #[test]
-    fn fortress_has_current_target() {
-        use crate::gameplay::CurrentTarget;
+    fn fortress_has_targeting_state() {
+        use crate::gameplay::TargetingState;
         let mut app = create_battlefield_test_app();
-        assert_entity_count::<(With<PlayerFortress>, With<CurrentTarget>)>(&mut app, 1);
-        assert_entity_count::<(With<EnemyFortress>, With<CurrentTarget>)>(&mut app, 1);
+        assert_entity_count::<(With<PlayerFortress>, With<TargetingState>)>(&mut app, 1);
+        assert_entity_count::<(With<EnemyFortress>, With<TargetingState>)>(&mut app, 1);
     }
 }

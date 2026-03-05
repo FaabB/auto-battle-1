@@ -3,7 +3,7 @@
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
-use crate::gameplay::{CombatStats, CurrentTarget, Health, Team};
+use crate::gameplay::{CombatStats, Health, TargetingState, Team};
 use crate::screens::GameState;
 use crate::third_party::{CollisionLayer, surface_distance};
 use crate::{GameSet, Z_PROJECTILE, gameplay_running};
@@ -50,7 +50,7 @@ pub struct Hitbox;
 fn attack(
     time: Res<Time>,
     mut attackers: Query<(
-        &CurrentTarget,
+        &TargetingState,
         &CombatStats,
         &mut AttackTimer,
         &GlobalTransform,
@@ -60,13 +60,14 @@ fn attack(
     targets: Query<(&GlobalTransform, &Collider)>,
     mut commands: Commands,
 ) {
-    for (target, stats, mut timer, attacker_pos, attacker_collider, team) in &mut attackers {
+    for (targeting_state, stats, mut timer, attacker_pos, attacker_collider, team) in &mut attackers
+    {
         // Always tick the timer so it stays warm — entities fire on a cadence
         // regardless of whether a target is currently in range.
         timer.0.tick(time.delta());
         let ready = timer.0.just_finished();
 
-        let Some(target_entity) = target.0 else {
+        let Some(target_entity) = targeting_state.target_entity() else {
             continue;
         };
         let Ok((target_pos, target_collider)) = targets.get(target_entity) else {
@@ -210,7 +211,7 @@ mod tests {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
-    use crate::gameplay::{CurrentTarget, Team};
+    use crate::gameplay::{TargetingState, Team};
     use crate::testing::assert_entity_count;
     use pretty_assertions::assert_eq;
     use std::time::Duration;
@@ -246,7 +247,7 @@ mod integration_tests {
     fn spawn_attacker(world: &mut World, x: f32, target: Option<Entity>) -> Entity {
         let id = crate::testing::spawn_test_unit(world, Team::Player, x, 100.0);
         if let Some(t) = target {
-            world.entity_mut(id).insert(CurrentTarget(Some(t)));
+            world.entity_mut(id).insert(TargetingState::Engaging(t));
         }
         // Nearly-expire the attack timer for immediate attack
         crate::testing::nearly_expire_timer(
@@ -332,7 +333,7 @@ mod integration_tests {
         let attacker = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
         app.world_mut()
             .entity_mut(attacker)
-            .insert(CurrentTarget(Some(target)));
+            .insert(TargetingState::Engaging(target));
 
         // First few frames — timer hasn't fired yet
         advance_and_update(&mut app, Duration::from_millis(100));
@@ -508,7 +509,7 @@ mod integration_tests {
             .world_mut()
             .spawn((
                 Team::Player,
-                CurrentTarget(None),
+                TargetingState::Seeking,
                 CombatStats {
                     damage: 50.0,
                     attack_speed: 0.5,
@@ -524,10 +525,8 @@ mod integration_tests {
         let target = spawn_target(app.world_mut(), 200.0, 100.0);
 
         // Set fortress target
-        app.world_mut()
-            .get_mut::<CurrentTarget>(fortress)
-            .unwrap()
-            .0 = Some(target);
+        *app.world_mut().get_mut::<TargetingState>(fortress).unwrap() =
+            TargetingState::Engaging(target);
 
         advance_and_update(&mut app, Duration::from_millis(100));
         assert_entity_count::<With<Projectile>>(&mut app, 1);
