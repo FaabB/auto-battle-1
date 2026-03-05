@@ -5,7 +5,7 @@ model: opus
 
 # Implementation Plan with Draft PR
 
-You are tasked with creating detailed implementation plans through an interactive, iterative process. This command extends `/create_plan` by also setting up a git branch and draft PR at the end, so the session is linked to the PR from the start.
+You are tasked with creating detailed implementation plans through an interactive, iterative process. This command extends `/create_plan` by creating a worktree upfront so the entire workflow (planning, implementation, PR) happens in one isolated branch from the start.
 
 **CRITICAL RULE**: Whenever you need to ask the user a question, get their input, present options, or request approval, you MUST use the **AskUserQuestion** tool. Do NOT just write questions as plain text output — the user expects structured, interactive prompts they can respond to via the tool's UI. This applies to ALL questions throughout this workflow: initial input requests, clarification questions, design option choices, approach approval gates, and review feedback requests.
 
@@ -26,6 +26,25 @@ When this command is invoked:
    - "A bug fix" (description: "I'll describe the issue to fix")
 
    Then wait for the user's input.
+
+## Worktree Setup (before planning begins)
+
+Once you know what you're working on (ticket identifier or task description):
+
+1. **Determine branch name**:
+   - If a Linear ticket is associated, use: `{identifier-lowercase}-short-description` (e.g., `gam-54-snap-to-mesh`)
+   - If no ticket, use: `plan-short-description`
+
+2. **Create a worktree for isolated work**:
+   Use the `EnterWorktree` tool with the branch name:
+   ```
+   EnterWorktree(name: "<branch-name>")
+   ```
+   This creates a worktree at `.claude/worktrees/<branch-name>/` with a new branch based on HEAD. The session's working directory switches to the worktree automatically.
+
+   **Why upfront?** The plan file, implementation, and PR all live in one worktree from the start. No need to copy files later. The main working tree stays clean, and multiple tickets can be in progress simultaneously.
+
+3. **Continue with planning** — all file reads, research, and plan writing happen inside the worktree (which has the full repo contents).
 
 ## Planning Process
 
@@ -207,32 +226,18 @@ After structure approval:
 
 ---
 
-## Step 6: Worktree, Branch, Draft PR, and Linear Status (NEW — unique to this command)
+## Step 6: Commit, Draft PR, and Linear Status (unique to this command)
 
-After the plan is approved:
+After the plan is approved (worktree and branch already exist from the setup step):
 
-1. **Determine branch name**:
-   - If a Linear ticket is associated, use a descriptive branch name based on the ticket:
-     - Format: `{identifier-lowercase}-short-description` (e.g., `gam-54-snap-to-mesh`)
-   - If no ticket, use: `plan-short-description`
-
-2. **Create a worktree for isolated work**:
-   Use the `EnterWorktree` tool with the branch name to create an isolated working copy:
-   ```
-   EnterWorktree(name: "<branch-name>")
-   ```
-   This creates a worktree at `.claude/worktrees/<branch-name>/` with a new branch based on HEAD. The session's working directory switches to the worktree automatically.
-
-   **Why a worktree?** It keeps the main working tree clean while the plan is being implemented. Multiple plans can be in progress simultaneously without interfering with each other.
-
-3. **Commit the plan file and push**:
+1. **Commit the plan file and push**:
    ```
    git add thoughts/shared/plans/<plan-file>
    git commit -m "Add implementation plan for <description> (<TICKET-ID>)"
    git push -u origin <branch-name>
    ```
 
-4. **Create a draft PR**:
+2. **Create a draft PR**:
    Use `gh pr create --draft` with:
    - Title: the plan title or ticket title
    - Body: a summary of the plan phases + link to the plan file
@@ -254,10 +259,10 @@ After the plan is approved:
    )"
    ```
 
-5. **Update Linear ticket**:
+3. **Update Linear ticket**:
    - Move the ticket to **In Progress** using `mcp__plugin_linear_linear__save_issue` (set `state` to `"In Progress"`)
 
-6. **Report to the user**:
+4. **Report to the user**:
    ```
    Setup complete:
    - Worktree: `.claude/worktrees/<branch-name>/`
@@ -265,7 +270,7 @@ After the plan is approved:
    - Draft PR: <pr-url>
    - Linear ticket: moved to In Progress
 
-   Ready for `/implement_plan` (run it in this worktree session).
+   Ready for `/implement_plan` (already in the worktree).
    ```
 
 ## Important Guidelines
