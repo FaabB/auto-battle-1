@@ -17,7 +17,6 @@ When this command is invoked:
    - If a file path or ticket reference was provided as a parameter, skip the default message
    - If a **Linear ticket identifier** was provided (e.g., `GAM-8`, `LIN-123`), use the `mcp__plugin_linear_linear__get_issue` tool to fetch the ticket details. Store the identifier and URL for use in the plan's References section.
    - Immediately read any provided files FULLY
-   - Begin the research process
 
 2. **If no parameters provided**, use the **AskUserQuestion** tool to ask the user what they want to plan. Example question: "What would you like to create an implementation plan for?" with options like:
    - "A Linear ticket" (description: "I'll provide a Linear issue identifier like GAM-8")
@@ -27,24 +26,18 @@ When this command is invoked:
 
    Then wait for the user's input.
 
-## Worktree Setup (before planning begins)
+3. **IMMEDIATELY create a worktree** — do this BEFORE any research, file reads, or agent spawning:
+   - **Determine branch name**:
+     - If a Linear ticket is associated, use: `{identifier-lowercase}-short-description` (e.g., `gam-54-snap-to-mesh`)
+     - If no ticket, use: `plan-short-description`
+   - **Create the worktree** using the `EnterWorktree` tool with the branch name:
+     ```
+     EnterWorktree(name: "<branch-name>")
+     ```
+     This creates a worktree at `.claude/worktrees/<branch-name>/` with a new branch based on HEAD. The session's working directory switches to the worktree automatically.
+   - **Why upfront?** The plan file, implementation, and PR all live in one worktree from the start. No need to copy files later. The main working tree stays clean, and multiple tickets can be in progress simultaneously.
 
-Once you know what you're working on (ticket identifier or task description):
-
-1. **Determine branch name**:
-   - If a Linear ticket is associated, use: `{identifier-lowercase}-short-description` (e.g., `gam-54-snap-to-mesh`)
-   - If no ticket, use: `plan-short-description`
-
-2. **Create a worktree for isolated work**:
-   Use the `EnterWorktree` tool with the branch name:
-   ```
-   EnterWorktree(name: "<branch-name>")
-   ```
-   This creates a worktree at `.claude/worktrees/<branch-name>/` with a new branch based on HEAD. The session's working directory switches to the worktree automatically.
-
-   **Why upfront?** The plan file, implementation, and PR all live in one worktree from the start. No need to copy files later. The main working tree stays clean, and multiple tickets can be in progress simultaneously.
-
-3. **Continue with planning** — all file reads, research, and plan writing happen inside the worktree (which has the full repo contents).
+4. **Begin the research process** — all file reads, research, and plan writing happen inside the worktree (which has the full repo contents).
 
 ## Planning Process
 
