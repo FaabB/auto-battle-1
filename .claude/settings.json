@@ -17,6 +17,11 @@
   "allowedTools": [
     "Read(./**)",
     "Grep(./**)",
-    "Glob(./**)"
+    "Glob(./**)",
+    "mcp__plugin_linear_linear__save_issue",
+    "mcp__plugin_linear_linear__get_issue",
+    "mcp__plugin_linear_linear__get_issue_status",
+    "mcp__plugin_linear_linear__list_comments",
+    "mcp__plugin_linear_linear__list_issues"
   ]
 }
