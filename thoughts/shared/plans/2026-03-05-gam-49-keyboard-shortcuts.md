@@ -127,9 +127,9 @@ fn handle_reroll_click(
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes — all existing tests still green (behavior unchanged)
-- [ ] `make build` passes
+- [x] `make check` passes
+- [x] `make test` passes — all existing tests still green (behavior unchanged)
+- [x] `make build` passes
 
 #### Manual Verification:
 - [ ] Mouse click card selection still works
@@ -196,9 +196,9 @@ app.add_systems(
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
-- [ ] `make build` passes
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] `make build` passes
 
 #### Manual Verification:
 - [ ] Press 1-4 during gameplay to select/deselect cards
@@ -412,8 +412,8 @@ fn keyboard_r_blocked_insufficient_gold() {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make test` passes — all 13 new tests green (7 shop.rs + 6 shop_ui.rs)
-- [ ] `make check` passes
+- [x] `make test` passes — all 13 new tests green (7 shop.rs + 6 shop_ui.rs)
+- [x] `make check` passes
 
 ---
 

@@ -63,6 +63,18 @@ impl Shop {
             .and_then(|idx| self.cards.get(idx).copied().flatten())
     }
 
+    /// Toggle selection of a card slot. If the slot is empty, does nothing.
+    /// If already selected, deselects. Otherwise, selects it.
+    pub fn toggle_select(&mut self, slot: usize) {
+        if self.cards.get(slot).is_some_and(Option::is_some) {
+            if self.selected == Some(slot) {
+                self.selected = None;
+            } else {
+                self.selected = Some(slot);
+            }
+        }
+    }
+
     /// Remove the selected card after placement.
     pub const fn remove_selected(&mut self) {
         if let Some(idx) = self.selected {
@@ -81,6 +93,19 @@ impl Shop {
             0
         } else {
             (REROLL_BASE_COST << (self.consecutive_no_build_rerolls - 1)).min(MAX_REROLL_COST)
+        }
+    }
+
+    /// Attempt a reroll: check gold, deduct cost, and reroll cards.
+    /// Returns `true` if the reroll was performed, `false` if insufficient gold.
+    pub fn try_reroll(&mut self, gold: &mut u32) -> bool {
+        let cost = self.reroll_cost();
+        if *gold >= cost {
+            *gold -= cost;
+            self.reroll();
+            true
+        } else {
+            false
         }
     }
 
@@ -296,5 +321,84 @@ mod tests {
 
         // Cost should be free after placing
         assert_eq!(shop.reroll_cost(), 0);
+    }
+
+    #[test]
+    fn toggle_select_selects_card() {
+        let mut shop = Shop::default();
+        shop.cards[1] = Some(BuildingType::Farm);
+        shop.toggle_select(1);
+        assert_eq!(shop.selected, Some(1));
+    }
+
+    #[test]
+    fn toggle_select_deselects_card() {
+        let mut shop = Shop::default();
+        shop.cards[2] = Some(BuildingType::Barracks);
+        shop.selected = Some(2);
+        shop.toggle_select(2);
+        assert_eq!(shop.selected, None);
+    }
+
+    #[test]
+    fn toggle_select_switches_card() {
+        let mut shop = Shop::default();
+        shop.cards[0] = Some(BuildingType::Farm);
+        shop.cards[1] = Some(BuildingType::Barracks);
+        shop.selected = Some(0);
+        shop.toggle_select(1);
+        assert_eq!(shop.selected, Some(1));
+    }
+
+    #[test]
+    fn toggle_select_empty_slot_ignored() {
+        let mut shop = Shop::default();
+        shop.toggle_select(0);
+        assert_eq!(shop.selected, None);
+    }
+
+    #[test]
+    fn try_reroll_deducts_gold_and_rerolls() {
+        let mut shop = Shop::default();
+        shop.generate_cards();
+        shop.placed_since_last_reroll = false;
+        shop.reroll(); // consecutive = 1, next cost = 5
+        let mut gold = 200u32;
+
+        let result = shop.try_reroll(&mut gold);
+
+        assert!(result);
+        assert_eq!(gold, 195);
+        for (i, card) in shop.cards.iter().enumerate() {
+            assert!(card.is_some(), "Card slot {i} should be filled");
+        }
+    }
+
+    #[test]
+    fn try_reroll_blocked_insufficient_gold() {
+        let mut shop = Shop::default();
+        shop.placed_since_last_reroll = false;
+        shop.consecutive_no_build_rerolls = 2; // cost = 10
+        let old_cards = shop.cards;
+        let mut gold = 5u32;
+
+        let result = shop.try_reroll(&mut gold);
+
+        assert!(!result);
+        assert_eq!(gold, 5);
+        assert_eq!(shop.cards, old_cards);
+    }
+
+    #[test]
+    fn try_reroll_free_after_placement() {
+        let mut shop = Shop::default();
+        shop.generate_cards();
+        shop.placed_since_last_reroll = true;
+        let mut gold = 200u32;
+
+        let result = shop.try_reroll(&mut gold);
+
+        assert!(result);
+        assert_eq!(gold, 200);
     }
 }
