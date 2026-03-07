@@ -52,7 +52,7 @@ Navmesh infrastructure:
 - NOT optimizing for 40k+ units — that's Ticket 6 (profiling)
 - NOT removing ORCA or `PreferredVelocity` — that's GAM-61
 - NOT removing avian2d physics — that's GAM-62
-- NOT adding `EngagementLeash` behavior — exists as component, behavior deferred
+- NOT tuning `LEASH_DISTANCE` — deferred to Ticket 6 (profiling). Leash behavior IS included in the movement rewrite.
 
 ## Implementation Approach
 
@@ -801,12 +801,13 @@ use bevy::prelude::*;
 use super::avoidance::PreferredVelocity;
 use super::{CombatStats, Movement, TargetingState, Unit};
 use crate::gameplay::flow_field::{AssignedGoal, GoalRegistry};
-use crate::gameplay::{EntityExtent, extent_distance};
+use crate::gameplay::{EngagementLeash, EntityExtent, extent_distance};
 
 /// Sets unit `PreferredVelocity` based on `TargetingState`:
 ///
-/// - **No target** (Seeking/Moving): follow flow field direction toward team's goal.
-/// - **Engaging**: steer directly toward target entity.
+/// - **No target** (Seeking/Moving): follow flow field direction toward assigned goal.
+/// - **Engaging**: steer directly toward target entity. If leash exceeded, revert to
+///   flow field (transition back to Seeking handled by AI system next frame).
 /// - **Attacking**: velocity = 0 (in range, attack system fires).
 ///
 /// The downstream `compute_avoidance` system reads `PreferredVelocity`
@@ -816,12 +817,13 @@ use crate::gameplay::{EntityExtent, extent_distance};
 pub(super) fn unit_movement(
     mut units: Query<
         (
-            &TargetingState,
+            &mut TargetingState,
             &Movement,
             &CombatStats,
             &GlobalTransform,
             &EntityExtent,
             &AssignedGoal,
+            Option<&EngagementLeash>,
             &mut PreferredVelocity,
         ),
         With<Unit>,
@@ -833,12 +835,20 @@ pub(super) fn unit_movement(
         return; // Flow fields not yet initialized
     };
 
-    for (targeting_state, movement, stats, global_transform, unit_extent, goal, mut preferred) in
-        &mut units
+    for (
+        mut targeting_state,
+        movement,
+        stats,
+        global_transform,
+        unit_extent,
+        goal,
+        leash,
+        mut preferred,
+    ) in &mut units
     {
         let current_xy = global_transform.translation().xy();
 
-        match targeting_state {
+        match *targeting_state {
             TargetingState::Moving | TargetingState::Seeking => {
                 // Follow flow field toward assigned goal
                 let field = &goals.goals[goal.0].flow_field;
@@ -846,7 +856,17 @@ pub(super) fn unit_movement(
                 preferred.0 = direction * movement.speed;
             }
             TargetingState::Engaging(target_entity) => {
-                let Ok((target_pos, target_extent)) = targets.get(*target_entity) else {
+                // Check engagement leash — if too far from origin, disengage
+                if let Some(leash) = leash {
+                    if current_xy.distance(leash.origin) > leash.max_distance {
+                        *targeting_state = TargetingState::Seeking;
+                        let field = &goals.goals[goal.0].flow_field;
+                        preferred.0 = field.direction_at(current_xy) * movement.speed;
+                        continue;
+                    }
+                }
+
+                let Ok((target_pos, target_extent)) = targets.get(target_entity) else {
                     preferred.0 = Vec2::ZERO;
                     continue;
                 };
@@ -876,7 +896,38 @@ pub(super) fn unit_movement(
 }
 ```
 
-#### 2. `gameplay/units/mod.rs` — Update unit archetype
+#### 2. `gameplay/ai.rs` — Set EngagementLeash on target acquisition
+
+In `find_target` (line 144), when transitioning to `Engaging`, insert an `EngagementLeash` with the unit's current position as origin:
+
+```rust
+// Replace line 144:
+// *targeting_state = nearest.map_or(TargetingState::Seeking, TargetingState::Engaging);
+
+// With:
+match nearest {
+    Some(target) => {
+        if !matches!(*targeting_state, TargetingState::Engaging(_) | TargetingState::Attacking(_)) {
+            // New engagement — set leash origin to current position
+            commands.entity(entity).insert(EngagementLeash {
+                origin: my_pos,
+                max_distance: LEASH_DISTANCE,
+            });
+        }
+        *targeting_state = TargetingState::Engaging(target);
+    }
+    None => {
+        if matches!(*targeting_state, TargetingState::Engaging(_) | TargetingState::Attacking(_)) {
+            commands.entity(entity).remove::<EngagementLeash>();
+        }
+        *targeting_state = TargetingState::Seeking;
+    }
+}
+```
+
+This requires adding `mut commands: Commands` to the `find_target` system signature, and importing `EngagementLeash` and `LEASH_DISTANCE`. The `BACKTRACK_DISTANCE` check in `search_radius` can be removed since `EngagementLeash` replaces it.
+
+#### 3. `gameplay/units/mod.rs` — Update unit archetype
 
 In `spawn_unit` (line 131):
 - Remove `pathfinding::NavPath::default(),` from the `.insert(...)` block
@@ -1046,6 +1097,7 @@ The existing tests in `movement.rs` reference `NavPath`. Rewrite them to test th
 - `unit_follows_flow_field_when_seeking` → Seeking unit with GoalRegistry follows flow field direction
 - `unit_stops_when_attacking` → Attacking state gets zero velocity
 - `unit_steers_direct_when_engaging` → Engaging unit steers toward target, not flow field
+- `unit_disengages_when_leash_exceeded` → Engaging unit beyond leash distance reverts to flow field
 
 ### Success Criteria
 
