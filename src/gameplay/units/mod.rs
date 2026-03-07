@@ -15,7 +15,7 @@ use crate::gameplay::combat::{
     UNIT_HEALTH_BAR_Y_OFFSET,
 };
 use crate::gameplay::spatial_hash::SpatialHash;
-use crate::gameplay::{CombatStats, Health, Movement, Target, TargetingState, Team};
+use crate::gameplay::{CombatStats, EntityExtent, Health, Movement, Target, TargetingState, Team};
 use crate::screens::GameState;
 use crate::third_party::solid_entity_layers;
 use crate::{GameSet, Z_UNIT, gameplay_running};
@@ -130,6 +130,7 @@ pub fn spawn_unit(
             TargetingState::Seeking,
             pathfinding::NavPath::default(),
             RigidBody::Dynamic,
+            EntityExtent::Circle(UNIT_RADIUS),
             Collider::circle(UNIT_RADIUS),
             solid_entity_layers(),
             LockedAxes::ROTATION_LOCKED,

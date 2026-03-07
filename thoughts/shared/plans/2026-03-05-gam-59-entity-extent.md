@@ -152,11 +152,11 @@ Tests for `surface_distance_from()` (point-to-surface) and `extent_distance()` (
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes — new unit tests for both functions
+- [x] `make check` passes
+- [x] `make test` passes — new unit tests for both functions
 
 #### Manual Verification:
-- [ ] None needed — pure data + math, no visual behavior
+- [x] None needed — pure data + math, no visual behavior
 
 ---
 
@@ -200,11 +200,11 @@ Add `EntityExtent` to every entity that currently has `Collider` + (`Target` or 
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes — all existing tests still pass
+- [x] `make check` passes
+- [x] `make test` passes — all existing tests still pass
 
 #### Manual Verification:
-- [ ] None needed — additive only, no behavior change
+- [x] None needed — additive only, no behavior change
 
 ---
 
@@ -294,13 +294,13 @@ let distance = extent_distance(
 ### Success Criteria
 
 #### Automated Verification:
-- [ ] `make check` passes (no unused imports, no missing components)
-- [ ] `make test` passes — all existing tests produce equivalent results
+- [x] `make check` passes (no unused imports, no missing components)
+- [x] `make test` passes — all existing tests produce equivalent results (267 total)
 
 #### Manual Verification:
-- [ ] Units still target and attack correctly
-- [ ] Fortresses still fire at enemies in range
-- [ ] Buildings are targetable by enemy units
+- [x] Units still target and attack correctly
+- [x] Fortresses still fire at enemies in range
+- [x] Buildings are targetable by enemy units
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause for manual confirmation before considering the ticket done.
 

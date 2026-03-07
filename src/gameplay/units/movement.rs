@@ -1,12 +1,11 @@
 //! Unit movement toward current target, following `NavPath` waypoints around obstacles.
 
-use avian2d::prelude::Collider;
 use bevy::prelude::*;
 
 use super::avoidance::PreferredVelocity;
 use super::pathfinding::NavPath;
 use super::{CombatStats, Movement, TargetingState, Unit};
-use crate::third_party::surface_distance;
+use crate::gameplay::{EntityExtent, extent_distance};
 
 /// Distance threshold for reaching a waypoint — when the unit's center
 /// is within this distance of a waypoint, advance to the next one.
@@ -33,20 +32,20 @@ pub(super) fn unit_movement(
             &Movement,
             &CombatStats,
             &GlobalTransform,
-            &Collider,
+            &EntityExtent,
             &mut PreferredVelocity,
             &mut NavPath,
         ),
         With<Unit>,
     >,
-    targets: Query<(&GlobalTransform, &Collider)>,
+    targets: Query<(&GlobalTransform, &EntityExtent)>,
 ) {
     for (
         targeting_state,
         movement,
         stats,
         global_transform,
-        unit_collider,
+        unit_extent,
         mut preferred,
         mut nav_path,
     ) in &mut units
@@ -55,15 +54,14 @@ pub(super) fn unit_movement(
             preferred.0 = Vec2::ZERO;
             continue;
         };
-        let Ok((target_pos, target_collider)) = targets.get(target_entity) else {
+        let Ok((target_pos, target_extent)) = targets.get(target_entity) else {
             preferred.0 = Vec2::ZERO;
             continue;
         };
 
         let current_xy = global_transform.translation().xy();
         let target_xy = target_pos.translation().xy();
-        let distance_to_target =
-            surface_distance(unit_collider, current_xy, target_collider, target_xy);
+        let distance_to_target = extent_distance(unit_extent, current_xy, target_extent, target_xy);
 
         // Already within attack range — stop
         if distance_to_target <= stats.range {
@@ -108,6 +106,7 @@ mod tests {
     use crate::gameplay::Team;
     use crate::gameplay::units::UnitType;
     use crate::gameplay::units::unit_stats;
+    use avian2d::prelude::Collider;
 
     fn create_movement_test_app() -> App {
         let mut app = App::new();
@@ -232,6 +231,7 @@ mod tests {
             .spawn((
                 Transform::from_xyz(400.0, 200.0, 0.0),
                 GlobalTransform::from(Transform::from_xyz(400.0, 200.0, 0.0)),
+                crate::gameplay::EntityExtent::Circle(5.0),
                 Collider::circle(5.0),
             ))
             .id();

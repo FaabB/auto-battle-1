@@ -47,6 +47,7 @@ pub fn solid_entity_layers() -> CollisionLayers {
 /// Returns `f32::MAX` if the shape is unsupported (should never happen
 /// with circles and rectangles).
 #[must_use]
+#[allow(dead_code)] // Kept until Ticket 5 removes physics; still used in tests
 pub fn surface_distance(c1: &Collider, pos1: Vec2, c2: &Collider, pos2: Vec2) -> f32 {
     contact_query::distance(c1, pos1, 0.0, c2, pos2, 0.0).unwrap_or(f32::MAX)
 }

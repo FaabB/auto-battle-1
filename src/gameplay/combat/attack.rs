@@ -3,9 +3,9 @@
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
-use crate::gameplay::{CombatStats, Health, TargetingState, Team};
+use crate::gameplay::{CombatStats, EntityExtent, Health, TargetingState, Team, extent_distance};
 use crate::screens::GameState;
-use crate::third_party::{CollisionLayer, surface_distance};
+use crate::third_party::CollisionLayer;
 use crate::{GameSet, Z_PROJECTILE, gameplay_running};
 
 // === Constants ===
@@ -54,14 +54,13 @@ fn attack(
         &CombatStats,
         &mut AttackTimer,
         &GlobalTransform,
-        &Collider,
+        &EntityExtent,
         &Team,
     )>,
-    targets: Query<(&GlobalTransform, &Collider)>,
+    targets: Query<(&GlobalTransform, &EntityExtent)>,
     mut commands: Commands,
 ) {
-    for (targeting_state, stats, mut timer, attacker_pos, attacker_collider, team) in &mut attackers
-    {
+    for (targeting_state, stats, mut timer, attacker_pos, attacker_extent, team) in &mut attackers {
         // Always tick the timer so it stays warm — entities fire on a cadence
         // regardless of whether a target is currently in range.
         timer.0.tick(time.delta());
@@ -70,15 +69,15 @@ fn attack(
         let Some(target_entity) = targeting_state.target_entity() else {
             continue;
         };
-        let Ok((target_pos, target_collider)) = targets.get(target_entity) else {
+        let Ok((target_pos, target_extent)) = targets.get(target_entity) else {
             continue;
         };
 
         // Only attack when in range (surface-to-surface)
-        let distance = surface_distance(
-            attacker_collider,
+        let distance = extent_distance(
+            attacker_extent,
             attacker_pos.translation().xy(),
-            target_collider,
+            target_extent,
             target_pos.translation().xy(),
         );
         if distance > stats.range {
@@ -518,6 +517,7 @@ mod integration_tests {
                 AttackTimer(timer),
                 Transform::from_xyz(64.0, 320.0, 0.0),
                 GlobalTransform::from(Transform::from_xyz(64.0, 320.0, 0.0)),
+                crate::gameplay::EntityExtent::Rect(64.0, 64.0),
                 Collider::rectangle(128.0, 128.0),
             ))
             .id();
