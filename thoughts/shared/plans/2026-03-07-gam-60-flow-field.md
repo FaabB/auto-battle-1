@@ -31,7 +31,8 @@ Navmesh infrastructure:
 ## Desired End State
 
 - `FlowField` struct computes Dijkstra direction grid from goal position
-- `GoalRegistry` resource holds one flow field per team, recomputed on topology change
+- `GoalRegistry` resource with `Vec<GoalInfo>` holds flow fields per goal, recomputed on topology change
+- `AssignedGoal(usize)` component on units indexes into `GoalRegistry.goals`
 - `unit_movement` rewritten: no-target units follow flow field, engaged units steer direct
 - No `vleue_navigator` dependency, no `NavPath`, no `NavObstacle`, no `PathRefreshTimer`
 - `PreferredVelocity` still written by movement, read by ORCA (bridge until GAM-61)
@@ -47,7 +48,6 @@ Navmesh infrastructure:
 
 ## What We're NOT Doing
 
-- NOT adding `AssignedGoal` component — derive from `Team::opposing()` for now
 - NOT using `TargetingState::Moving` actively — units stay `Seeking`, optimization deferred
 - NOT optimizing for 40k+ units — that's Ticket 6 (profiling)
 - NOT removing ORCA or `PreferredVelocity` — that's GAM-61
@@ -544,17 +544,42 @@ use super::Team;
 use crate::screens::GameState;
 use crate::GameSet;
 
+// === Components ===
+
+/// Index into `GoalRegistry.goals` — which flow field this unit follows.
+/// Default: enemy fortress (assigned on spawn based on team).
+#[derive(Component, Debug, Clone, Copy, Reflect)]
+#[reflect(Component)]
+pub struct AssignedGoal(pub usize);
+
 // === Resources ===
 
-/// Holds one flow field per team. Player flow field routes toward enemy fortress,
-/// enemy flow field routes toward player fortress.
+/// Info about a single goal: its position, team, and precomputed flow field.
+#[derive(Debug, Clone, Reflect)]
+pub struct GoalInfo {
+    pub position: Vec2,
+    pub team: Team,
+    pub flow_field: FlowField,
+}
+
+/// Registry of all active goals and their flow fields.
+/// Index 0 = enemy fortress (for player units), index 1 = player fortress (for enemy units).
 #[derive(Resource, Debug, Reflect)]
 #[reflect(Resource)]
 pub struct GoalRegistry {
-    /// Flow field for player units (goal = enemy fortress).
-    pub player_field: FlowField,
-    /// Flow field for enemy units (goal = player fortress).
-    pub enemy_field: FlowField,
+    pub goals: Vec<GoalInfo>,
+}
+
+impl GoalRegistry {
+    /// Look up the goal index for a given team.
+    /// Player units → index 0 (enemy fortress), Enemy units → index 1 (player fortress).
+    #[must_use]
+    pub fn goal_for_team(&self, team: Team) -> usize {
+        match team {
+            Team::Player => 0,
+            Team::Enemy => 1,
+        }
+    }
 }
 
 /// Marker resource: when present, flow fields need recomputation.
@@ -573,22 +598,27 @@ fn initialize_flow_fields(
     enemy_fortress: Single<&Transform, With<EnemyFortress>>,
     buildings: Query<&Transform, With<Building>>,
 ) {
-    let mut registry = GoalRegistry {
-        player_field: FlowField::new_battlefield(),
-        enemy_field: FlowField::new_battlefield(),
-    };
+    let enemy_pos = enemy_fortress.translation.xy();
+    let player_pos = player_fortress.translation.xy();
 
-    apply_building_costs(&mut registry.player_field, &buildings);
-    apply_building_costs(&mut registry.enemy_field, &buildings);
+    // Goal 0: enemy fortress (for player units)
+    let mut player_field = FlowField::new_battlefield();
+    apply_building_costs(&mut player_field, &buildings);
+    apply_fortress_blocks(&mut player_field, &*player_fortress, &*enemy_fortress);
+    player_field.compute(enemy_pos);
 
-    // Apply fortress blocks (both fortresses block both flow fields)
-    apply_fortress_blocks(&mut registry.player_field, &player_fortress, &enemy_fortress);
-    apply_fortress_blocks(&mut registry.enemy_field, &player_fortress, &enemy_fortress);
+    // Goal 1: player fortress (for enemy units)
+    let mut enemy_field = FlowField::new_battlefield();
+    apply_building_costs(&mut enemy_field, &buildings);
+    apply_fortress_blocks(&mut enemy_field, &*player_fortress, &*enemy_fortress);
+    enemy_field.compute(player_pos);
 
-    registry.player_field.compute(enemy_fortress.translation.xy());
-    registry.enemy_field.compute(player_fortress.translation.xy());
-
-    commands.insert_resource(registry);
+    commands.insert_resource(GoalRegistry {
+        goals: vec![
+            GoalInfo { position: enemy_pos, team: Team::Player, flow_field: player_field },
+            GoalInfo { position: player_pos, team: Team::Enemy, flow_field: enemy_field },
+        ],
+    });
 }
 
 /// Recompute flow fields when the dirty flag is set (building placed/destroyed).
@@ -604,18 +634,13 @@ fn recompute_flow_fields(
         return;
     }
 
-    // Reset and reapply costs
-    registry.player_field.reset_costs();
-    registry.enemy_field.reset_costs();
-
-    apply_building_costs(&mut registry.player_field, &buildings);
-    apply_building_costs(&mut registry.enemy_field, &buildings);
-
-    apply_fortress_blocks(&mut registry.player_field, &player_fortress, &enemy_fortress);
-    apply_fortress_blocks(&mut registry.enemy_field, &player_fortress, &enemy_fortress);
-
-    registry.player_field.compute(enemy_fortress.translation.xy());
-    registry.enemy_field.compute(player_fortress.translation.xy());
+    // Reset and reapply costs for all goals
+    for goal in &mut registry.goals {
+        goal.flow_field.reset_costs();
+        apply_building_costs(&mut goal.flow_field, &buildings);
+        apply_fortress_blocks(&mut goal.flow_field, &player_fortress, &enemy_fortress);
+        goal.flow_field.compute(goal.position);
+    }
 
     commands.remove_resource::<FlowFieldDirty>();
 }
@@ -687,7 +712,8 @@ fn apply_fortress_blocks(
 
 ```rust
 pub(super) fn plugin(app: &mut App) {
-    app.register_type::<GoalRegistry>()
+    app.register_type::<AssignedGoal>()
+        .register_type::<GoalRegistry>()
         .register_type::<FlowFieldDirty>();
 
     // Initialize flow fields after battlefield is spawned
@@ -774,8 +800,8 @@ use bevy::prelude::*;
 
 use super::avoidance::PreferredVelocity;
 use super::{CombatStats, Movement, TargetingState, Unit};
-use crate::gameplay::flow_field::GoalRegistry;
-use crate::gameplay::{EntityExtent, Team, extent_distance};
+use crate::gameplay::flow_field::{AssignedGoal, GoalRegistry};
+use crate::gameplay::{EntityExtent, extent_distance};
 
 /// Sets unit `PreferredVelocity` based on `TargetingState`:
 ///
@@ -795,7 +821,7 @@ pub(super) fn unit_movement(
             &CombatStats,
             &GlobalTransform,
             &EntityExtent,
-            &Team,
+            &AssignedGoal,
             &mut PreferredVelocity,
         ),
         With<Unit>,
@@ -807,18 +833,15 @@ pub(super) fn unit_movement(
         return; // Flow fields not yet initialized
     };
 
-    for (targeting_state, movement, stats, global_transform, unit_extent, team, mut preferred) in
+    for (targeting_state, movement, stats, global_transform, unit_extent, goal, mut preferred) in
         &mut units
     {
         let current_xy = global_transform.translation().xy();
 
         match targeting_state {
             TargetingState::Moving | TargetingState::Seeking => {
-                // Follow flow field toward team's goal
-                let field = match team {
-                    Team::Player => &goals.player_field,
-                    Team::Enemy => &goals.enemy_field,
-                };
+                // Follow flow field toward assigned goal
+                let field = &goals.goals[goal.0].flow_field;
                 let direction = field.direction_at(current_xy);
                 preferred.0 = direction * movement.speed;
             }
@@ -853,13 +876,21 @@ pub(super) fn unit_movement(
 }
 ```
 
-#### 2. `gameplay/units/mod.rs` — Remove NavPath from unit archetype
+#### 2. `gameplay/units/mod.rs` — Update unit archetype
 
-In `spawn_unit` (line 131), remove `pathfinding::NavPath::default(),`.
+In `spawn_unit` (line 131):
+- Remove `pathfinding::NavPath::default(),` from the `.insert(...)` block
+- Add `AssignedGoal` based on team:
 
-Remove `pathfinding::NavPath::default(),` from the `.insert(...)` block.
+```rust
+use crate::gameplay::flow_field::AssignedGoal;
 
-Add `Team` query access: the unit already has `team` in the first `.spawn(...)` block, so movement can read it.
+// In the .insert(...) block, replace NavPath with:
+AssignedGoal(match team {
+    Team::Player => 0, // enemy fortress
+    Team::Enemy => 1,  // player fortress
+}),
+```
 
 #### 3. `gameplay/units/mod.rs` — Remove pathfinding system registration
 
@@ -883,10 +914,12 @@ Remove `pub mod pathfinding;` declaration (line 5).
 Remove `use vleue_navigator::prelude::NavMesh;` (line 10).
 Remove `reset_path_refresh_timer` function.
 
-#### 4. `src/testing.rs` — Remove NavPath from test helper
+#### 4. `src/testing.rs` — Update test helper
 
-Remove `NavPath::default(),` from `spawn_test_unit` (line 185).
-Remove `use crate::gameplay::units::pathfinding::NavPath;` (line 14).
+- Remove `NavPath::default(),` from `spawn_test_unit` (line 185)
+- Remove `use crate::gameplay::units::pathfinding::NavPath;` (line 14)
+- Add `use crate::gameplay::flow_field::AssignedGoal;`
+- Add `AssignedGoal(match team { Team::Player => 0, Team::Enemy => 1 }),` to the spawn bundle
 
 #### 5. `dev_tools/mod.rs` — Replace navmesh overlay with flow field arrows
 
@@ -957,13 +990,14 @@ fn toggle_flow_field_debug(
     }
 }
 
-/// Draw flow field direction arrows for the player team's flow field.
+/// Draw flow field direction arrows for the player team's flow field (goal index 0).
 fn debug_draw_flow_field(
     goals: Option<Res<GoalRegistry>>,
     mut gizmos: Gizmos,
 ) {
     let Some(goals) = goals else { return };
-    let field = &goals.player_field;
+    let Some(goal_info) = goals.goals.first() else { return };
+    let field = &goal_info.flow_field;
 
     for row in 0..field.height() {
         for col in 0..field.width() {
