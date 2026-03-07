@@ -58,17 +58,22 @@ Follow this planning process:
    - **This ticket depends on** — to understand what's already available
    This is NOT optional. Missing this leads to architectural rework when later tickets discover the foundation is wrong.
 
-3. **Spawn initial research tasks to gather context**:
-   Before asking the user any questions, use specialized agents to research in parallel:
+3. **Spawn initial research tasks to gather context** — this is **MANDATORY**, even for small tickets. Do NOT skip this step because the task "seems simple." Direct file reads find what exists; research agents find patterns, duplication, and design concerns you'd miss.
 
+   Before asking the user any questions, use specialized agents to research in parallel. At minimum spawn:
+
+   - Use the **codebase-pattern-finder** agent to find how similar features are implemented (e.g., "how is input handling structured? Are there shared helpers for duplicated logic?")
+   - Use the **codebase-analyzer** agent to trace the full data flow of the feature being modified
    - Use the **codebase-locator** agent to find all files related to the ticket/task
-   - Use the **codebase-analyzer** agent to understand how the current implementation works
    - If relevant, use a thoughts-locator agent to find any existing thoughts documents about this feature
+
+   **Key insight**: Reading files tells you what the code does. Pattern-finding tells you how to write code that fits.
 
    These agents will:
    - Find relevant source files, configs, and tests
    - Identify the specific directories to focus on
    - Trace data flow and key functions
+   - Surface shared patterns, helpers, and conventions to follow
    - Return detailed explanations with file:line references
 
 4. **Read all files identified by research tasks**:
@@ -330,6 +335,9 @@ After structure approval:
 
 After the plan is approved (worktree and branch already exist from the setup step):
 
+**Plan Quality Gate — review before committing:**
+Before committing the plan, review it for stream-of-consciousness text. The plan must contain only resolved decisions, not working-through-the-problem reasoning. Remove phrases like "Actually...", "Let me re-read...", "This gets complex", and incomplete code snippets with `...`. Every code block must be complete. Every design question must be answered.
+
 **IMPORTANT — No AI Attribution:**
 - **NEVER add co-author information or Claude attribution** to commits or PRs
 - Commits should be authored solely by the user
@@ -351,11 +359,20 @@ After the plan is approved (worktree and branch already exist from the setup ste
    - Title: the plan title or ticket title
    - Body: a summary of the plan phases + link to the plan file
    - Do NOT mention AI, Claude, or automation in the PR title or body
-   - **NEVER use `$(...)` command substitution** — it triggers a security prompt. Write the body as a plain string with `\n` for newlines.
+   - **NEVER use `$(...)` command substitution** — it triggers a security prompt. Use a multi-line string with real newlines inside double quotes.
 
    Format:
    ```
-   gh pr create --draft --title "<title> (<TICKET-ID>)" --body "## Implementation Plan\n\nPlan file: \`thoughts/shared/plans/<plan-file>\`\n\n### Phases:\n1. [Phase name] — [one-line description]\n2. [Phase name] — [one-line description]\n\n### Linear ticket\n[TICKET-ID](linear-url)"
+   gh pr create --draft --title "<title> (<TICKET-ID>)" --body "## Implementation Plan
+
+   Plan file: \`thoughts/shared/plans/<plan-file>\`
+
+   ### Phases:
+   1. [Phase name] — [one-line description]
+   2. [Phase name] — [one-line description]
+
+   ### Linear ticket
+   [TICKET-ID](linear-url)"
    ```
 
 3. **Update Linear ticket**:

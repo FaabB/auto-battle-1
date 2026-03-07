@@ -47,17 +47,22 @@ When this command is invoked:
    - **This ticket depends on** — to understand what's already available
    This is NOT optional. Missing this leads to architectural rework when later tickets discover the foundation is wrong.
 
-3. **Spawn initial research tasks to gather context**:
-   Before asking the user any questions, use specialized agents to research in parallel:
+3. **Spawn initial research tasks to gather context** — this is **MANDATORY**, even for small tickets. Do NOT skip this step because the task "seems simple." Direct file reads find what exists; research agents find patterns, duplication, and design concerns you'd miss.
 
+   Before asking the user any questions, use specialized agents to research in parallel. At minimum spawn:
+
+   - Use the **codebase-pattern-finder** agent to find how similar features are implemented (e.g., "how is input handling structured? Are there shared helpers for duplicated logic?")
+   - Use the **codebase-analyzer** agent to trace the full data flow of the feature being modified
    - Use the **codebase-locator** agent to find all files related to the ticket/task
-   - Use the **codebase-analyzer** agent to understand how the current implementation works
    - If relevant, use a thoughts-locator agent to find any existing thoughts documents about this feature
+
+   **Key insight**: Reading files tells you what the code does. Pattern-finding tells you how to write code that fits.
 
    These agents will:
    - Find relevant source files, configs, and tests
    - Identify the specific directories to focus on
    - Trace data flow and key functions
+   - Surface shared patterns, helpers, and conventions to follow
    - Return detailed explanations with file:line references
 
 4. **Read all files identified by research tasks**:
