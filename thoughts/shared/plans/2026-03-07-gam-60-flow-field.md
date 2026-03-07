@@ -48,7 +48,7 @@ Navmesh infrastructure:
 
 ## What We're NOT Doing
 
-- NOT using `TargetingState::Moving` actively — units stay `Seeking`, optimization deferred
+- NOT using `TargetingState::Moving` actively — units stay `Seeking`. Moving optimization (skip spatial queries for far-from-enemy units) deferred to Ticket 6 (profiling/tuning at 40k units)
 - NOT optimizing for 40k+ units — that's Ticket 6 (profiling)
 - NOT removing ORCA or `PreferredVelocity` — that's GAM-61
 - NOT removing avian2d physics — that's GAM-62
