@@ -40,15 +40,7 @@ fn handle_card_click(
 ) {
     for (interaction, slot) in &cards {
         if *interaction == Interaction::Pressed {
-            // Only select if the slot has a card
-            if shop.cards[slot.0].is_some() {
-                // Toggle selection: click same card deselects
-                if shop.selected == Some(slot.0) {
-                    shop.selected = None;
-                } else {
-                    shop.selected = Some(slot.0);
-                }
-            }
+            shop.toggle_select(slot.0);
         }
     }
 }
@@ -61,12 +53,33 @@ fn handle_reroll_click(
 ) {
     for interaction in &reroll_btn {
         if *interaction == Interaction::Pressed {
-            let cost = shop.reroll_cost();
-            if gold.0 >= cost {
-                gold.0 -= cost;
-                shop.reroll();
-            }
+            shop.try_reroll(&mut gold.0);
         }
+    }
+}
+
+/// Handle keyboard shortcuts for card selection (1-4) and reroll (R).
+fn handle_shop_keyboard(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut shop: ResMut<Shop>,
+    mut gold: ResMut<Gold>,
+) {
+    const CARD_KEYS: [KeyCode; 4] = [
+        KeyCode::Digit1,
+        KeyCode::Digit2,
+        KeyCode::Digit3,
+        KeyCode::Digit4,
+    ];
+
+    for (slot_index, &key) in CARD_KEYS.iter().enumerate() {
+        if keyboard.just_pressed(key) {
+            shop.toggle_select(slot_index);
+            return;
+        }
+    }
+
+    if keyboard.just_pressed(KeyCode::KeyR) {
+        shop.try_reroll(&mut gold.0);
     }
 }
 
@@ -142,7 +155,7 @@ pub(super) fn plugin(app: &mut App) {
 
     app.add_systems(
         Update,
-        (handle_card_click, handle_reroll_click)
+        (handle_card_click, handle_reroll_click, handle_shop_keyboard)
             .in_set(GameSet::Input)
             .run_if(gameplay_running),
     );
@@ -273,5 +286,113 @@ mod tests {
     fn no_placement_without_card_selected() {
         let shop = Shop::default();
         assert!(shop.selected_building().is_none());
+    }
+
+    // === Keyboard system tests ===
+
+    fn create_keyboard_test_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<Shop>();
+        app.init_resource::<Gold>();
+        app.init_resource::<ButtonInput<KeyCode>>();
+        app.add_systems(Update, handle_shop_keyboard);
+        app
+    }
+
+    #[test]
+    fn keyboard_digit1_selects_first_card() {
+        let mut app = create_keyboard_test_app();
+        app.world_mut().resource_mut::<Shop>().cards[0] = Some(BuildingType::Barracks);
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Digit1);
+        app.update();
+
+        assert_eq!(app.world().resource::<Shop>().selected, Some(0));
+    }
+
+    #[test]
+    fn keyboard_digit_toggles_selection() {
+        let mut app = create_keyboard_test_app();
+        let mut shop = app.world_mut().resource_mut::<Shop>();
+        shop.cards[2] = Some(BuildingType::Farm);
+        shop.selected = Some(2);
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Digit3);
+        app.update();
+
+        assert_eq!(app.world().resource::<Shop>().selected, None);
+    }
+
+    #[test]
+    fn keyboard_digit_empty_slot_ignored() {
+        let mut app = create_keyboard_test_app();
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Digit1);
+        app.update();
+
+        assert_eq!(app.world().resource::<Shop>().selected, None);
+    }
+
+    #[test]
+    fn keyboard_r_rerolls() {
+        let mut app = create_keyboard_test_app();
+        app.world_mut().resource_mut::<Shop>().generate_cards();
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyR);
+        app.update();
+
+        let shop = app.world().resource::<Shop>();
+        for (i, card) in shop.cards.iter().enumerate() {
+            assert!(
+                card.is_some(),
+                "Card slot {i} should be filled after reroll"
+            );
+        }
+    }
+
+    #[test]
+    fn keyboard_r_deducts_gold() {
+        let mut app = create_keyboard_test_app();
+        let mut shop = app.world_mut().resource_mut::<Shop>();
+        shop.generate_cards();
+        shop.placed_since_last_reroll = false;
+        shop.reroll(); // consecutive = 1, cost = 5
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyR);
+        app.update();
+
+        assert_eq!(
+            app.world().resource::<Gold>().0,
+            crate::gameplay::economy::STARTING_GOLD - 5
+        );
+    }
+
+    #[test]
+    fn keyboard_r_blocked_insufficient_gold() {
+        let mut app = create_keyboard_test_app();
+        let mut shop = app.world_mut().resource_mut::<Shop>();
+        shop.placed_since_last_reroll = false;
+        shop.consecutive_no_build_rerolls = 2; // cost = 10
+        let old_cards = shop.cards;
+        app.world_mut().resource_mut::<Gold>().0 = 5;
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyR);
+        app.update();
+
+        assert_eq!(app.world().resource::<Shop>().cards, old_cards);
+        assert_eq!(app.world().resource::<Gold>().0, 5);
     }
 }
