@@ -12,7 +12,7 @@ use crate::gameplay::battlefield::{
     BUILD_ZONE_START_COL, GridIndex, col_to_world_x, row_to_world_y,
 };
 use crate::gameplay::combat::HealthBarConfig;
-use crate::gameplay::{Health, Target, Team};
+use crate::gameplay::{EntityExtent, Health, Target, Team};
 
 use crate::screens::GameState;
 use crate::third_party::{NavObstacle, solid_entity_layers};
@@ -143,6 +143,7 @@ pub(super) fn handle_building_placement(
         ),
         Transform::from_xyz(world_x, world_y, Z_BUILDING),
         DespawnOnExit(GameState::InGame),
+        EntityExtent::Rect(BUILDING_SPRITE_SIZE / 2.0, BUILDING_SPRITE_SIZE / 2.0),
         NavObstacle,
         // Physics
         RigidBody::Static,

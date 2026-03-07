@@ -14,7 +14,7 @@ use super::{
 };
 use crate::gameplay::combat::{AttackTimer, HealthBarConfig};
 use crate::gameplay::units::UNIT_RADIUS;
-use crate::gameplay::{CombatStats, Health, Target, TargetingState, Team};
+use crate::gameplay::{CombatStats, EntityExtent, Health, Target, TargetingState, Team};
 use crate::screens::GameState;
 use crate::third_party::{NavObstacle, solid_entity_layers};
 use crate::{Z_BACKGROUND, Z_FORTRESS, Z_GRID, Z_ZONE};
@@ -94,6 +94,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
             DespawnOnExit(GameState::InGame),
         ))
         .insert((
+            EntityExtent::Rect(fortress_size.x / 2.0, fortress_size.y / 2.0),
             NavObstacle,
             RigidBody::Static,
             Collider::rectangle(fortress_size.x, fortress_size.y),
@@ -176,6 +177,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
             DespawnOnExit(GameState::InGame),
         ))
         .insert((
+            EntityExtent::Rect(fortress_size.x / 2.0, fortress_size.y / 2.0),
             NavObstacle,
             RigidBody::Static,
             Collider::rectangle(fortress_size.x, fortress_size.y),

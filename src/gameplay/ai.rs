@@ -1,13 +1,11 @@
 //! AI: target selection for all combat entities (units, fortresses, turrets).
 
-use avian2d::prelude::*;
 use bevy::prelude::*;
 
 use super::battlefield::CELL_SIZE;
 use super::spatial_hash::SpatialHash;
-use super::{Movement, Target, TargetingState, Team};
+use super::{EntityExtent, Movement, Target, TargetingState, Team, extent_distance};
 use crate::screens::GameState;
-use crate::third_party::surface_distance;
 use crate::{GameSet, gameplay_running};
 
 /// Maximum distance (pixels) a mobile entity will backtrack to chase a target behind it.
@@ -101,11 +99,11 @@ pub fn find_target(
         Entity,
         &Team,
         &GlobalTransform,
-        &Collider,
+        &EntityExtent,
         &mut TargetingState,
         Option<&Movement>,
     )>,
-    all_targets: Query<(Entity, &Team, &GlobalTransform, &Collider), With<Target>>,
+    all_targets: Query<(Entity, &Team, &GlobalTransform, &EntityExtent), With<Target>>,
 ) {
     retarget_timer.timer.tick(time.delta());
     let slot_advanced = retarget_timer.timer.just_finished();
@@ -113,7 +111,7 @@ pub fn find_target(
         retarget_timer.current_slot = (retarget_timer.current_slot + 1) % RETARGET_SLOTS;
     }
 
-    for (entity, team, transform, seeker_collider, mut targeting_state, movement) in &mut seekers {
+    for (entity, team, transform, seeker_extent, mut targeting_state, movement) in &mut seekers {
         let has_valid_target = targeting_state
             .target_entity()
             .is_some_and(|e| all_targets.get(e).is_ok());
@@ -136,7 +134,7 @@ pub fn find_target(
             &grid,
             entity,
             my_pos,
-            seeker_collider,
+            seeker_extent,
             opposing_team,
             movement.is_some(),
             *team,
@@ -154,17 +152,17 @@ pub fn find_target(
 /// 2. If nothing found, search the full battlefield
 ///
 /// Within each pass, uses center-distance as a cheap pre-filter before
-/// calling `surface_distance` (GJK) on close candidates.
+/// calling `extent_distance` on close candidates.
 #[allow(clippy::too_many_arguments)]
 fn find_nearest_target(
     grid: &TargetSpatialHash,
     seeker_entity: Entity,
     seeker_pos: Vec2,
-    seeker_collider: &Collider,
+    seeker_extent: &EntityExtent,
     opposing_team: Team,
     is_mobile: bool,
     seeker_team: Team,
-    all_targets: &Query<(Entity, &Team, &GlobalTransform, &Collider), With<Target>>,
+    all_targets: &Query<(Entity, &Team, &GlobalTransform, &EntityExtent), With<Target>>,
 ) -> Option<Entity> {
     // First pass: nearby targets
     let result = search_radius(
@@ -172,7 +170,7 @@ fn find_nearest_target(
         INITIAL_SEARCH_RADIUS + MAX_ENTITY_HALF_EXTENT,
         seeker_entity,
         seeker_pos,
-        seeker_collider,
+        seeker_extent,
         opposing_team,
         is_mobile,
         seeker_team,
@@ -189,7 +187,7 @@ fn find_nearest_target(
         BATTLEFIELD_DIAGONAL,
         seeker_entity,
         seeker_pos,
-        seeker_collider,
+        seeker_extent,
         opposing_team,
         is_mobile,
         seeker_team,
@@ -203,18 +201,18 @@ fn search_radius(
     radius: f32,
     seeker_entity: Entity,
     seeker_pos: Vec2,
-    seeker_collider: &Collider,
+    seeker_extent: &EntityExtent,
     opposing_team: Team,
     is_mobile: bool,
     seeker_team: Team,
-    all_targets: &Query<(Entity, &Team, &GlobalTransform, &Collider), With<Target>>,
+    all_targets: &Query<(Entity, &Team, &GlobalTransform, &EntityExtent), With<Target>>,
 ) -> Option<Entity> {
     let candidates = grid.query_neighbors(seeker_pos, radius);
 
     // Phase 1: Filter and compute center distances (cheap)
-    let mut valid_candidates: Vec<(Entity, Vec2, &Collider, f32)> = Vec::new();
+    let mut valid_candidates: Vec<(Entity, Vec2, &EntityExtent, f32)> = Vec::new();
     for candidate_entity in candidates {
-        let Ok((cand_entity, cand_team, cand_transform, cand_collider)) =
+        let Ok((cand_entity, cand_team, cand_transform, cand_extent)) =
             all_targets.get(candidate_entity)
         else {
             continue;
@@ -238,7 +236,7 @@ fn search_radius(
         }
 
         let center_dist = seeker_pos.distance(cand_pos);
-        valid_candidates.push((cand_entity, cand_pos, cand_collider, center_dist));
+        valid_candidates.push((cand_entity, cand_pos, cand_extent, center_dist));
     }
 
     if valid_candidates.is_empty() {
@@ -259,7 +257,7 @@ fn search_radius(
     let center_cutoff = 2.0f32.mul_add(MAX_ENTITY_HALF_EXTENT, min_center_dist);
 
     let mut nearest: Option<(Entity, f32)> = None;
-    for (cand_entity, cand_pos, cand_collider, center_dist) in &valid_candidates {
+    for (cand_entity, cand_pos, cand_extent, center_dist) in &valid_candidates {
         if *center_dist > center_cutoff {
             if let Some((_, best_surf)) = nearest {
                 // Tighten cutoff as we find better candidates
@@ -271,7 +269,7 @@ fn search_radius(
             }
         }
 
-        let surf_dist = surface_distance(seeker_collider, seeker_pos, cand_collider, *cand_pos);
+        let surf_dist = extent_distance(seeker_extent, seeker_pos, cand_extent, *cand_pos);
         if nearest.is_none_or(|(_, d)| surf_dist < d) {
             nearest = Some((*cand_entity, surf_dist));
         }
@@ -303,6 +301,7 @@ pub(super) fn plugin(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use avian2d::prelude::Collider;
     use pretty_assertions::assert_eq;
 
     fn create_ai_test_app() -> App {
@@ -456,6 +455,7 @@ mod tests {
                 TargetingState::Seeking,
                 Transform::from_xyz(64.0, 320.0, 0.0),
                 GlobalTransform::from(Transform::from_xyz(64.0, 320.0, 0.0)),
+                crate::gameplay::EntityExtent::Rect(64.0, 64.0),
                 Collider::rectangle(128.0, 128.0),
             ))
             .id();
@@ -485,6 +485,7 @@ mod tests {
                 TargetingState::Seeking,
                 Transform::from_xyz(500.0, 320.0, 0.0),
                 GlobalTransform::from(Transform::from_xyz(500.0, 320.0, 0.0)),
+                crate::gameplay::EntityExtent::Rect(64.0, 64.0),
                 Collider::rectangle(128.0, 128.0),
             ))
             .id();

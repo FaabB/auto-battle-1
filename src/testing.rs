@@ -13,7 +13,7 @@ use crate::gameplay::combat::AttackTimer;
 use crate::gameplay::units::avoidance::{AvoidanceAgent, PreferredVelocity};
 use crate::gameplay::units::pathfinding::NavPath;
 use crate::gameplay::units::{UNIT_RADIUS, Unit, UnitType, unit_stats};
-use crate::gameplay::{CombatStats, Health, Movement, Target, TargetingState, Team};
+use crate::gameplay::{CombatStats, EntityExtent, Health, Movement, Target, TargetingState, Team};
 
 /// Creates a minimal app for testing with essential plugins.
 pub fn create_test_app() -> App {
@@ -175,6 +175,7 @@ pub fn spawn_test_unit(world: &mut World, team: Team, x: f32, y: f32) -> Entity 
             )),
             Transform::from_xyz(x, y, 0.0),
             GlobalTransform::from(Transform::from_xyz(x, y, 0.0)),
+            EntityExtent::Circle(UNIT_RADIUS),
             Collider::circle(UNIT_RADIUS),
         ))
         .insert((
@@ -198,6 +199,7 @@ pub fn spawn_test_target(world: &mut World, team: Team, x: f32, y: f32) -> Entit
             Target,
             Transform::from_xyz(x, y, 0.0),
             GlobalTransform::from(Transform::from_xyz(x, y, 0.0)),
+            EntityExtent::Circle(5.0),
             Collider::circle(5.0),
         ))
         .id()
