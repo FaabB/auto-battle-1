@@ -9,6 +9,26 @@ You are tasked with creating detailed implementation plans through an interactiv
 
 **CRITICAL RULE**: Whenever you need to ask the user a question, get their input, present options, or request approval, you MUST use the **AskUserQuestion** tool. Do NOT just write questions as plain text output — the user expects structured, interactive prompts they can respond to via the tool's UI. This applies to ALL questions throughout this workflow: initial input requests, clarification questions, design option choices, approach approval gates, and review feedback requests.
 
+## Required Steps (DO NOT SKIP ANY)
+
+```
+1. Fetch ticket/input
+2. Read ticket file + dependent tickets (ONLY ticket docs — no source files yet)
+3. SPAWN 3+ research agents (pattern-finder, analyzer, locator) — WAIT for results
+4. Read source files agents identified
+5. Present approach to user — GET APPROVAL (gate)
+6. Write plan
+7. Quality review (no stream-of-consciousness, no incomplete snippets)
+```
+
+```
+ticket → read ticket docs → agents (parallel) → read agent results → approach gate → plan → quality gate
+                                                                           ↑
+                                                                  user approval required
+```
+
+**Why this order matters**: If you read source files before spawning agents, you accumulate false confidence that you understand everything. Agents find patterns, call sites, and indirect dependencies that direct reads miss. The order is designed to prevent skipping.
+
 ## Initial Response
 
 When this command is invoked:
@@ -31,44 +51,38 @@ When this command is invoked:
 
 ### Step 1: Context Gathering & Initial Analysis
 
-1. **Read all mentioned files immediately and FULLY**:
+1. **Read ONLY ticket documents** (do NOT read source files yet):
    - Ticket files (e.g., `thoughts/shared/tickets/ticket_1234.md`)
-   - Research documents
+   - Research documents referenced by the ticket
    - Related implementation plans
-   - Any JSON/data files mentioned
    - **Linear tickets**: If a Linear issue identifier was provided, fetch it with `mcp__plugin_linear_linear__get_issue` (with `includeRelations: true`) and read any linked local ticket files. Also fetch comments with `mcp__plugin_linear_linear__list_comments` for additional context.
    - **IMPORTANT**: Use the Read tool WITHOUT limit/offset parameters to read entire files
-   - **CRITICAL**: DO NOT spawn sub-tasks before reading these files yourself in the main context
    - **NEVER** read files partially - if a file is mentioned, read it completely
+   - **DO NOT read source code files yet** — that happens AFTER agents report back
 
 2. **Read dependent and depended-on tickets**:
-   Before spawning research tasks, check the ticket index in MEMORY.md (or the ticket directory). Read ALL tickets that:
+   Check the ticket index in MEMORY.md (or the ticket directory). Read ALL tickets that:
    - **Depend on this ticket** — to understand what this foundation must provide (markers, constants, module structure)
    - **This ticket depends on** — to understand what's already available
    This is NOT optional. Missing this leads to architectural rework when later tickets discover the foundation is wrong.
 
-3. **Spawn initial research tasks to gather context** — this is **MANDATORY**, even for small tickets. Do NOT skip this step because the task "seems simple." Direct file reads find what exists; research agents find patterns, duplication, and design concerns you'd miss.
+3. **SPAWN 3+ research agents NOW** — this is **MANDATORY** and must happen BEFORE you read any source files. Do NOT skip this step because the task "seems simple." Do NOT substitute manual file reads for agent research — do both.
 
-   Before asking the user any questions, use specialized agents to research in parallel. At minimum spawn:
+   Spawn at minimum these 3 agents in parallel:
 
-   - Use the **codebase-pattern-finder** agent to find how similar features are implemented (e.g., "how is input handling structured? Are there shared helpers for duplicated logic?")
-   - Use the **codebase-analyzer** agent to trace the full data flow of the feature being modified
-   - Use the **codebase-locator** agent to find all files related to the ticket/task
-   - If relevant, use a thoughts-locator agent to find any existing thoughts documents about this feature
+   - **codebase-pattern-finder** — find how similar features are implemented (e.g., "how is input handling structured? Are there shared helpers for duplicated logic?")
+   - **codebase-analyzer** — trace the full data flow of the feature being modified
+   - **codebase-locator** — find all files related to the ticket/task
+   - If relevant, also a **thoughts-locator** to find any existing thoughts documents about this feature
 
-   **Key insight**: Reading files tells you what the code does. Pattern-finding tells you how to write code that fits.
+   **Why before source reads**: If you read source files first, you accumulate false confidence that you understand everything. Agents find patterns, call sites, test spawns, and indirect dependencies that direct reads miss.
 
-   These agents will:
-   - Find relevant source files, configs, and tests
-   - Identify the specific directories to focus on
-   - Trace data flow and key functions
-   - Surface shared patterns, helpers, and conventions to follow
-   - Return detailed explanations with file:line references
+   **WAIT for all agents to complete before proceeding.**
 
-4. **Read all files identified by research tasks**:
-   - After research tasks complete, read ALL files they identified as relevant
+4. **Read source files identified by research agents**:
+   - After agents complete, read ALL source files they identified as relevant
    - Read them FULLY into the main context
-   - This ensures you have complete understanding before proceeding
+   - This is the first time you read source code — now informed by agent findings
 
 5. **Analyze and verify understanding**:
    - Cross-reference the ticket requirements with actual code
@@ -330,9 +344,11 @@ After structure approval:
    - **Update MEMORY.md** if project-level facts changed (e.g., architecture decisions, known issues resolved)
    - This is NOT optional. Stale documents cause confusion in future sessions.
 
-4. **Continue refining** until the user is satisfied
+4. **Plan quality gate** — Before presenting the final plan, review it for stream-of-consciousness text. The plan must contain only resolved decisions, not working-through-the-problem reasoning. Remove phrases like "Actually...", "Let me re-read...", "This gets complex", and incomplete code snippets with `...`. Every code block must be complete. Every design question must be answered.
 
-5. **Update Linear ticket status** — If the plan is based on a Linear ticket:
+5. **Continue refining** until the user is satisfied
+
+6. **Update Linear ticket status** — If the plan is based on a Linear ticket:
    - Use `mcp__plugin_linear_linear__update_issue` to move the ticket to the **Plan created** state
    - This signals that the ticket has a finalized implementation plan and is ready for `/implement_plan`
 
