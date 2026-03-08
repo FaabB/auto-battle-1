@@ -1,0 +1,104 @@
+[
+  {
+    "style_name": "Arcane Siege",
+    "style_description": "A colorful fantasy pixel art style with rich, varied battlefields. High-readability high top-down (~35-degree angle) view optimized for 1,000+ unit swarms. Buildings are charming stone-and-magic anchors with visible roofs and front walls, while units (16x16) form vibrant team-colored rivers with readable faces and weapons. The mood is adventurous and 'juicy' with a clear visual hierarchy.",
+    "rendering_rules": {
+      "perspective": "High Top-Down (~35-degree angle)",
+      "shadows": "Global 2px offset (bottom-right) drop shadow at 30% opacity for all buildings and units to create depth.",
+      "visual_anchoring": "Every building must have a 4-8px 'footprint' layer (dirt, stone, or cracked earth) that blends the building into the terrain tiles.",
+      "readability_threshold": "Units must never exceed 25% of the brightness of spell effects. Spell effects use 'Additive' blending; units use 'Alpha' blending.",
+      "sorting": "Strict Y-sorting is required based on the entity's bottom-most pixel (its 'feet') to handle depth and minimal occlusion."
+    },
+    "color_palette": {
+      "background_primary_note": "Varies per battlefield -- these are defaults for the green meadow biome",
+      "background_primary": "#1E3020",
+      "background_secondary": "#2A4A2C",
+      "background_accent": "#3B5E3A",
+      "player_primary": "#22DD66",
+      "player_secondary": "#44FFAA",
+      "player_accent": "#88FFDD",
+      "enemy_primary": "#DD2233",
+      "enemy_secondary": "#FF4455",
+      "enemy_accent": "#FF8866",
+      "vfx_spell_holy": "#FFEE55",
+      "vfx_spell_arcane": "#DD88FF",
+      "vfx_spell_fire": "#FF5500",
+      "ui_background": "#2C2418",
+      "ui_text": "#F5EDE0",
+      "ui_highlight": "#E8C840",
+      "ui_border": "#8B7355",
+      "gold_currency": "#FFB830",
+      "mana_currency": "#7B5FDD",
+      "poi_neutral": "#A09880",
+      "poi_captured": "#33BBFF",
+      "building_military": "#5566AA",
+      "building_economy": "#66884A",
+      "building_production": "#AA7744",
+      "death_particles": "#FFEE55",
+      "biomes": {
+        "meadow": {
+          "primary": "#1E3020",
+          "secondary": "#2A4A2C",
+          "accent": "#3B5E3A",
+          "mood": "lush green grass, wildflowers, warm sunlight"
+        },
+        "enchanted_forest": {
+          "primary": "#142818",
+          "secondary": "#1E3E22",
+          "accent": "#2B5530",
+          "mood": "towering trees, dappled light, magical mushrooms, fireflies"
+        },
+        "frozen_pass": {
+          "primary": "#1C2838",
+          "secondary": "#283848",
+          "accent": "#3A5068",
+          "mood": "snow-covered ground, ice crystals, cold blue light, frosted rocks"
+        },
+        "desert_ruins": {
+          "primary": "#2E2418",
+          "secondary": "#443420",
+          "accent": "#5E4A30",
+          "mood": "warm sand, ancient stone ruins, heat shimmer, golden light"
+        },
+        "corrupted_wastes": {
+          "primary": "#1A1020",
+          "secondary": "#281830",
+          "accent": "#3D2548",
+          "mood": "dark purple terrain, pulsing veins, twisted flora -- the 'hard mode' biome"
+        }
+      }
+    },
+    "building_style": {
+      "description": "Warm, charming fantasy architecture. Drawn to show a dominant roof and a foreshortened front wall.",
+      "outline": "1px black",
+      "sprite_canvas": "Base footprint is 64x64 for grid logic. Actual sprite canvas can be slightly taller (e.g., 64x80) to allow roofs to project upward, overlapping the tile behind.",
+      "damage_states": {
+        "100_percent": "Clean, colorful, animated.",
+        "50_percent": "Subtle cracks on stone, dust particles, animation speed slows by 20%.",
+        "25_percent": "Heavy cracks, small localized fire/smoke sprites, rune lights flicker erratically."
+      },
+      "footprint": "A 4-8px perimeter of ground-blending pixels (dirt for farms, cobblestone for barracks).",
+      "animation": "2-3 frame idle loops. Production timer shown as a small radial fill on the building sprite."
+    },
+    "unit_style": {
+      "sprite_canvas": "16x16 pixel art. Rendered at native size (16px on screen).",
+      "description": "Recognizable fantasy characters with oversized heads for readability. Faces and chests are clearly visible. 4-directional (Up, Down, Left, Right) with Left/Right mirrored.",
+      "elite_variants": "Elite/Tiered units are 18x18px (slightly larger), have a 1px gold trim on their silhouette, and a 1-frame 'shimmer' overlay every 2 seconds.",
+      "silhouette_approach": "Head/helmet takes up top 8-10px. Torso/legs take bottom 6-8px. Weapons stick out clearly to sides or front.",
+      "movement_feel": "Melee units march with a 2-frame bob. Mages glide smoothly. Cavalry have a 3-frame gallop.",
+      "death_effect": "3-frame burst: Flash -> Expand with team-colored sparkles and equipment fragments -> Fade to golden mana particles."
+    },
+    "battlefield_style": {
+      "grid_tile": "64x64 pixel art tiles. The ground is flat 2D square logic, using 3-4 shades to ensure the player units and buildings remain the focus.",
+      "vfx_layering": "Spells use a dedicated palette (Purple/Gold/Orange) to ensure they are visible on top of both Green (Player) and Red (Enemy) unit swarms.",
+      "poi_visual": "48x48 pixel art. Silhouette-based: obelisk=buff, mine=resource, watchtower=strategic, chest=loot.",
+      "stronghold_visual": "Imposing fortresses. Sprite canvas 96x128. Player = Radiant core/warm stone; Enemy = Crimson core/dark obsidian."
+    },
+    "ui_style": {
+      "description": "Warm parchment-and-wood fantasy UI. Feels like an adventurer's toolkit.",
+      "font_style": "Pixel font (5x7 base grid) in warm off-white (#F5EDE0).",
+      "panel_style": "Warm dark-brown panels (#2C2418) with 1px bronze borders (#8B7355) and rounded corners."
+    },
+    "image_generation_prompt": "High top-down 35-degree angle pixel art game mockup. A lush green meadow battlefield with a dark-green grass texture and a faint drop shadow under every object. On the left, a player stronghold (warm stone, blue glowing crystals, green banners, showing front wall and large roof). On the right, an enemy dark-stone fortress (red banners, pulsing crimson light). Between them, two massive swarms of tiny 16x16 pixel units (bright green vs bright red) collide in the center. Units show heads, faces, and weapons clearly. Where they meet, golden sparkles and bright purple magical bursts pop. Charming 64x64 base fantasy buildings (barracks, farms, forges) project slightly upward to show roofs. The bottom UI is a warm wood-and-parchment spellbook-style bar with four wooden card frames. 32x32 pixel style, crisp edges, no anti-aliasing, vibrant colors, dark background terrain."
+  }
+]
