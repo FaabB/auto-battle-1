@@ -1,0 +1,33 @@
+{
+  "_style_guide": "See ART_STYLE.md (project root)",
+  "barracks": {
+    "file": null,
+    "canvas": "64x64",
+    "palette_role": "building_military",
+    "pixellab_tool": "create_character",
+    "description": "A sturdy stone barracks with a slate-gray roof and steel-blue trim. Red-and-silver banner hangs from the front wall. Small wooden weapon rack beside the entrance. Cobblestone footprint around the base. Warm torch glow from the doorway. High top-down 35-degree angle pixel art, 1px black outline, 6-8 colors.",
+    "damage_states": {
+      "100_percent": "Clean stone, torch lit, banner crisp",
+      "50_percent": "Cracks in walls, dust particles, torch flickers",
+      "25_percent": "Heavy cracks, small fire on roof corner, banner torn"
+    },
+    "animation_frames": 3,
+    "generated": null,
+    "version": null
+  },
+  "farm": {
+    "file": null,
+    "canvas": "64x64",
+    "palette_role": "building_economy",
+    "pixellab_tool": "create_character",
+    "description": "A small thatched-roof farmhouse with golden-green crop rows in front. Warm brown wood walls, hay-colored roof. Tiny wooden fence along one side. Dirt footprint blending into terrain. Gentle chimney smoke. High top-down 35-degree angle pixel art, 1px black outline, 6-8 colors.",
+    "damage_states": {
+      "100_percent": "Lush crops, clean thatch, steady smoke",
+      "50_percent": "Wilting crops, loose thatch strands, smoke sputters",
+      "25_percent": "Trampled crops, holes in roof, small fire"
+    },
+    "animation_frames": 3,
+    "generated": null,
+    "version": null
+  }
+}

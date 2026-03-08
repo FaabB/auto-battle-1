@@ -1,0 +1,21 @@
+{
+  "_style_guide": "See ART_STYLE.md (project root)",
+  "grass_base": {
+    "file": null,
+    "canvas": "64x64",
+    "pixellab_tool": "create_topdown_tileset",
+    "description": "Dark lush green grass ground tile with subtle blade texture. 3-4 shades: #1E3020 base, #2A4A2C mid, #3B5E3A highlights. Occasional tiny wildflower dots. Must tile seamlessly. High top-down pixel art, no outline on edges.",
+    "variants": 3,
+    "generated": null,
+    "version": null
+  },
+  "grass_path": {
+    "file": null,
+    "canvas": "64x64",
+    "pixellab_tool": "create_topdown_tileset",
+    "description": "Worn dirt path tile cutting through dark green grass. Brown (#3B2E1A) packed earth center with grass fringe on edges. Must tile seamlessly in path direction and transition to grass_base on sides.",
+    "variants": 1,
+    "generated": null,
+    "version": null
+  }
+}

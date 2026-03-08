@@ -1,0 +1,21 @@
+{
+  "_style_guide": "See ART_STYLE.md (project root)",
+  "soldier": {
+    "file": null,
+    "canvas": "16x16",
+    "team_variants": ["player", "enemy"],
+    "pixellab_tool": "create_character",
+    "description": "A fantasy swordsman with oversized round helmet and small shield. Sword held forward in right hand. Stocky 2-head-tall proportions. Visible face under helmet. Armor is neutral gray — team color applied to shield emblem and cape. High top-down 35-degree angle pixel art, 1px black outline.",
+    "directions": ["down", "up", "left"],
+    "animations": {
+      "idle": { "frames": 2, "notes": "Gentle breathing bob" },
+      "walk": { "frames": 4, "notes": "Marching step with 2-frame bob" },
+      "attack": { "frames": 3, "notes": "Sword swing forward" },
+      "death": { "frames": 3, "notes": "Flash, sparkles, fade to golden particles" }
+    },
+    "player_colors": { "primary": "#22DD66", "secondary": "#44FFAA" },
+    "enemy_colors": { "primary": "#DD2233", "secondary": "#FF4455" },
+    "generated": null,
+    "version": null
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "_style_guide": "See ART_STYLE.md (project root)",
+  "player_fortress": {
+    "file": null,
+    "canvas": "128x128",
+    "pixellab_tool": "create_character",
+    "description": "A radiant stone fortress with warm sandstone walls and blue-crystal spires. Green banners with gold trim hang from the battlements. Glowing cyan crystal core visible through the central archway. Cobblestone courtyard at the base. High top-down 35-degree angle pixel art, 1px black outline.",
+    "damage_states": {
+      "100_percent": "Crystal glows bright, banners pristine, walls clean",
+      "50_percent": "Crystal dims, cracks in walls, one banner torn",
+      "25_percent": "Crystal flickers, heavy rubble, fires on battlements"
+    },
+    "animation_frames": 3,
+    "generated": null,
+    "version": null
+  },
+  "enemy_fortress": {
+    "file": null,
+    "canvas": "128x128",
+    "pixellab_tool": "create_character",
+    "description": "A menacing dark obsidian fortress with jagged spires and crimson glowing cracks. Red banners with black sigils. Pulsing red crystal core visible in the center. Scorched earth footprint. Faint embers drifting upward. High top-down 35-degree angle pixel art, 1px black outline.",
+    "damage_states": {
+      "100_percent": "Crystal pulses bright red, embers steady, walls intact",
+      "50_percent": "Crystal flickers, obsidian crumbling, embers intensify",
+      "25_percent": "Crystal nearly dark, walls crumbling, heavy smoke"
+    },
+    "animation_frames": 3,
+    "generated": null,
+    "version": null
+  }
+}

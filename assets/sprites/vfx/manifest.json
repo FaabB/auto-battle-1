@@ -1,0 +1,21 @@
+{
+  "_style_guide": "See ART_STYLE.md (project root)",
+  "projectile": {
+    "file": null,
+    "canvas": "8x8",
+    "pixellab_tool": "create_character",
+    "description": "A small glowing yellow-white energy bolt. Bright core (#FFEE55) with soft white center. Slightly elongated shape suggesting motion. Pixel art, no outline, additive blending friendly.",
+    "animation_frames": 2,
+    "generated": null,
+    "version": null
+  },
+  "death_sparkle": {
+    "file": null,
+    "canvas": "16x16",
+    "pixellab_tool": "create_character",
+    "description": "Golden mana particle burst. 3-frame sequence: bright flash (#FFEE55), expanding ring of golden sparkles with tiny equipment fragments, fading golden motes. Pixel art, no outline, additive blending friendly.",
+    "animation_frames": 3,
+    "generated": null,
+    "version": null
+  }
+}
