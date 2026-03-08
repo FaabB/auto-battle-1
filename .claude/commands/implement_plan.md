@@ -42,6 +42,8 @@ Plans are carefully designed, but reality can be messy. Your job is to:
 
 When things don't match the plan exactly, think about why and communicate clearly. The plan is your guide, but your judgment matters too.
 
+**Never propose "minimal fixes" or "quick fixes".** If you discover something needs deeper work than the plan covers, say so clearly and recommend creating a proper plan or ticket. Do not offer a shortcut option — the user wants things done right, not fast.
+
 If you encounter a mismatch:
 - STOP and think deeply about why the plan can't be followed
 - Present the issue context as text:
@@ -76,6 +78,13 @@ After implementing a phase:
 If instructed to execute multiple phases consecutively, skip the pause until the last phase. Otherwise, assume you are just doing one phase.
 
 Do not check off items in the manual testing steps until confirmed by the user.
+
+**When the user reports manual test feedback, PAUSE.** Do not immediately start editing code. Instead:
+1. Acknowledge what they observed
+2. Present your analysis of what the fix likely is
+3. Wait for approval before making changes
+
+The user's feedback is input for discussion, not a trigger for immediate action.
 
 ## If You Get Stuck
 
