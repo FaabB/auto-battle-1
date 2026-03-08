@@ -43,9 +43,3 @@ temp/
 
 # Rust
 /target/
-
-# Assets (keep .gitkeep and manifest.json files, ignore generated binaries)
-assets/**/*
-!assets/**/
-!assets/**/.gitkeep
-!assets/**/manifest.json
