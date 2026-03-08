@@ -85,7 +85,7 @@ Low-resolution grid where units "stamp" their presence. Values decay and blur ou
 
 Three rules based on nearby same-team units: Separation (push apart), Alignment (match heading), Cohesion (move toward group center). Plus Attraction (toward enemy).
 
-**Verdict**: Adopt separation only, with team-weighted forces and a lateral nudge for opposing armies. Full boids is unnecessary — flow fields handle alignment and cohesion implicitly (all units in a region move the same direction). See Section 4.5 for details.
+**Verdict**: ~~Adopt separation only~~ **Keep ORCA**. Separation-only was implemented and tested (GAM-61, 2026-03-08) through 7 iterations — it fundamentally doesn't work because it's reactive (push based on current overlap) while ORCA is predictive (compute collision-free velocity considering future trajectories). Separation created push-pull oscillations with movement, state-based filtering created a combinatorial tuning problem, and no single set of constants worked for all situations (marching, engaging, attacking, death transitions). ORCA handles all these cases gracefully in velocity space. See Section 4.5 for revised approach.
 
 ### 2.6 Bounding Volume Hierarchies (BVH)
 
@@ -456,81 +456,31 @@ fn move_projectiles(
 }
 ```
 
-### 4.5 Separation Force (replaces ORCA + physics)
+### 4.5 ORCA Local Steering (decoupled from physics)
 
-**Team-weighted separation with lateral nudge** — handles both same-team streaming and opposing army head-on collisions.
+**UPDATE (2026-03-08)**: The original plan proposed replacing ORCA with a simple separation force. This was implemented and tested through 7 iterations in GAM-61 — it fundamentally doesn't work. Separation force is reactive (push based on current overlap) while ORCA is predictive (compute collision-free velocity considering future trajectories). The separation approach created:
+- Push-pull oscillations between separation and movement toward targets
+- State-based filtering (skip Attacking, modify Engaging) = combinatorial tuning nightmare
+- No single set of constants worked across all situations (marching, engaging, attacking, death transitions)
+- "Explosion" effect when enemies die (units transition states, sudden full separation applied)
+- Spiral/orbiting behavior from lateral nudges
 
-Two-system split avoids snapshot allocation:
+**Revised approach**: Keep ORCA as-is for local steering, but decouple it from physics integration:
 
-```rust
-/// Intermediate component — computed push vector before application.
-#[derive(Component, Debug, Clone, Copy, Default, Reflect)]
-#[reflect(Component)]
-pub struct SeparationForce(pub Vec2);
+1. **Keep** `orca.rs` algorithm, `PreferredVelocity`, `AvoidanceAgent`, `AvoidanceSpatialHash`
+2. **Keep** `unit_movement` writing `PreferredVelocity` (desired velocity from flow field / target steering)
+3. **Change** `compute_avoidance` to write a new `AdjustedVelocity` component instead of `LinearVelocity`
+4. **Add** `apply_movement` system: writes `AdjustedVelocity * dt` to `Transform.translation` directly
+5. **Switch** units to `RigidBody::Kinematic` — physics colliders remain (for projectile hits) but physics doesn't push units apart. Only ORCA controls spacing.
 
-/// System 1: Read Transform (immutable), write SeparationForce.
-fn compute_separation(
-    units: Query<(Entity, &Transform, &Team, &TargetingState), With<Unit>>,
-    mut forces: Query<&mut SeparationForce>,
-    unit_grid: Res<UnitSpatialHash>,
-) {
-    for (entity, transform, team, state) in &units {
-        // Skip Moving units — they're spread out on the flow field
-        if matches!(state, TargetingState::Moving) {
-            if let Ok(mut f) = forces.get_mut(entity) { f.0 = Vec2::ZERO; }
-            continue;
-        }
+**Why this works**: ORCA operates in velocity space — it takes the desired velocity and computes the closest collision-free velocity. This naturally handles all the cases separation couldn't:
+- Units approaching targets slow down and navigate around blockers without oscillation
+- Attacking units that stop moving (PreferredVelocity = 0) still get pushed by ORCA if overlapping
+- Death transitions don't cause force discontinuities — ORCA smoothly recomputes velocities
 
-        let pos = transform.translation.xy();
-        let mut push = Vec2::ZERO;
+**Performance**: ORCA cost is O(contact_zone) same as separation would have been. The spatial hash neighbor query is identical. The ORCA half-plane intersection is ~10-20 iterations per unit but only for units with nearby neighbors.
 
-        unit_grid.for_each_neighbor(pos, SEPARATION_RADIUS, |neighbor| {
-            if let Ok((_, neighbor_tf, neighbor_team, _)) = units.get(neighbor) {
-                let diff = pos - neighbor_tf.translation.xy();
-                let dist = diff.length();
-                if dist < f32::EPSILON || dist >= SEPARATION_RADIUS { return; }
-
-                if *neighbor_team != *team {
-                    // Cross-team: 3x stronger push + lateral slide
-                    let lateral = diff.normalize().perp();
-                    push += (diff.normalize() / dist) * CROSS_TEAM_STRENGTH
-                          + lateral * CROSS_TEAM_SLIDE;
-                } else {
-                    // Same-team: gentle push
-                    push += (diff.normalize() / dist) * SAME_TEAM_STRENGTH;
-                }
-            }
-        });
-
-        if let Ok(mut force) = forces.get_mut(entity) {
-            force.0 = push.normalize_or_zero() * SEPARATION_MAX;
-        }
-    }
-}
-
-/// System 2: Read SeparationForce (immutable), write Transform.
-fn apply_separation(
-    mut units: Query<(&mut Transform, &SeparationForce), With<Unit>>,
-    time: Res<Time>,
-) {
-    for (mut transform, force) in &mut units {
-        transform.translation += (force.0 * time.delta_secs()).extend(0.0);
-    }
-}
-```
-
-**Constants** (starting values, tuned in Ticket 6):
-- `SAME_TEAM_STRENGTH`: 30.0
-- `CROSS_TEAM_STRENGTH`: 90.0 (3x same-team)
-- `CROSS_TEAM_SLIDE`: 15.0 (perpendicular nudge to slide past)
-- `SEPARATION_RADIUS`: 20.0 (slightly larger than 2x UNIT_RADIUS)
-- `SEPARATION_MAX`: 60.0 (cap output magnitude)
-
-**Key design**: The `perp()` lateral nudge prevents head-on oscillation by sliding opposing units sideways past each other, rather than bouncing back and forth. This is the critical piece that basic separation misses.
-
-**Contact-zone optimization**: Only `Seeking`, `Engaging`, and `Attacking` units get separation applied. `Moving` units are streaming along the flow field, naturally spread out. Saves 60-75% of separation work at 40k units.
-
-**Note**: ALL units are inserted into `UnitSpatialHash` regardless of state, so Seeking/Engaging units can push away from Moving units passing through. The filter is only on who RECEIVES a force.
+**Optional future optimization**: Upgrade `AvoidanceSpatialHash` from `HashMap<(i32,i32), Vec<Entity>>` to flat `Vec<Vec<Entity>>` grid for cache-friendly access (same idea as Section 4.6).
 
 ### 4.6 Spatial Hash Optimization — Flat Grid
 
@@ -685,7 +635,7 @@ Every Frame:
 | **Target finding** | O(n) spatial queries (staggered) | O(contact_zone) spatial queries (only nearby units) |
 | **Range check** | O(n) GJK surface_distance (~10-20 iterations) | O(n) EntityExtent distance (1 subtraction or 4 ops + sqrt) |
 | **Death handling** | O(n) poll + mass retarget spike | O(1) observer, orphans → Seeking |
-| **Collision avoidance** | O(n) ORCA solver + O(n log n) physics | O(contact_zone) team-weighted separation |
+| **Collision avoidance** | O(n) ORCA solver + O(n log n) physics | O(contact_zone) ORCA solver (no physics double-push) |
 | **Physics step** | O(n log n) broad-phase on all bodies | None — removed entirely |
 | **Projectile hits** | O(p) sensor collision detection | O(p) distance check |
 | **Spatial hash** | O(n) HashMap insertions (2 hashes) | O(n) flat array insertions (2 grids, cache-friendly) |
@@ -699,22 +649,22 @@ Every Frame:
 | Module/Dependency | Reason |
 |-------------------|--------|
 | `vleue_navigator` (crate) | Flow fields replace navmesh pathfinding |
-| `avian2d` (crate) | Separation force + distance checks replace physics |
+| `avian2d` (crate) | ORCA + distance checks replace physics collision response |
 | `NavPath` component | No more per-unit waypoint paths |
 | `PathRefreshTimer` resource | No periodic path recomputation |
 | `NavObstacle` component | Buildings are blocked cells in flow field cost grid |
 | `compute_paths` system | Replaced by `flow_field_movement` |
 | `snap_to_mesh()` function | No navmesh edge to snap to |
-| `units/avoidance/` module (ORCA) | Replaced by team-weighted separation force |
-| `AvoidanceAgent` component | Not needed |
-| `AvoidanceConfig` resource | Not needed |
-| `AvoidanceSpatialHash` resource | Replaced by `UnitSpatialHash` |
+| ~~`units/avoidance/` module (ORCA)~~ | **KEPT** — separation force approach tested and failed (2026-03-08). ORCA stays as local steering. |
+| ~~`AvoidanceAgent` component~~ | **KEPT** — needed by ORCA |
+| ~~`AvoidanceConfig` resource~~ | **KEPT** — needed by ORCA |
+| ~~`AvoidanceSpatialHash` resource~~ | **KEPT** — needed by ORCA (optionally upgrade to flat grid) |
 | `third_party/avian.rs` | No physics |
 | `surface_distance()` helper | Replaced by `EntityExtent::surface_distance_from()` |
 | `RigidBody`, `Collider`, `Sensor` on all entities | No physics |
 | `CollisionLayers`, `CollidingEntities` | No physics sensors |
-| `LinearVelocity` component | Direct Transform updates |
-| `PreferredVelocity` component | Flow field direction used directly |
+| `LinearVelocity` component | Replaced by `AdjustedVelocity` + direct Transform updates |
+| ~~`PreferredVelocity` component~~ | **KEPT** — ORCA reads it as desired velocity input |
 | `CurrentTarget` component | Replaced by `TargetingState` enum |
 
 ---
@@ -730,15 +680,12 @@ Every Frame:
 | `TargetingState` enum component | `Moving` / `Seeking` / `Engaging(Entity)` / `Attacking(Entity)` |
 | `EngagementLeash` component | Origin + max distance for leash-based disengagement |
 | `EntityExtent` enum component | `Circle(f32)` / `Rect(f32, f32)` for cheap range checks |
-| `SeparationForce` component | Intermediate push vector (two-system split, zero snapshot) |
-| `FlatSpatialGrid` struct | Flat `Vec<Vec<Entity>>` replacing HashMap-based spatial hash |
-| `UnitSpatialHash` resource | All units, for separation force neighbor queries |
+| `AdjustedVelocity` component | ORCA-adjusted velocity, written to Transform by `apply_movement` |
+| `apply_movement` system | Reads `AdjustedVelocity`, writes `Transform.translation` directly (replaces physics integration) |
 | `On<Remove, Target>` observer | Notifies orphaned units on target death → Seeking |
 | `detect_enemies` system | Time-sliced check for Moving → Seeking transition |
 | `verify_targets` system | Leash + backtrack + hysteresis checks |
 | `flow_field_movement` system | Read flow field or steer to target, per TargetingState |
-| `compute_separation` system | Team-weighted push + lateral nudge, writes SeparationForce |
-| `apply_separation` system | Reads SeparationForce, writes Transform |
 | `clamp_to_battlefield` system | Prevent units leaving map bounds |
 | `eject_units_from_building` system | Push units out of newly-placed building cells |
 
@@ -788,13 +735,15 @@ Every Frame:
 
 **Files touched**: New `gameplay/flow_field.rs`, `gameplay/units/movement.rs` (rewrite), `gameplay/units/pathfinding.rs` (delete), `gameplay/battlefield/` (dirty flag + ejection), `Cargo.toml`
 
-### Ticket 4: Separation Force + Remove ORCA
+### Ticket 4: Decouple ORCA from Physics + Direct Transform Movement
 
-**Scope**: Implement team-weighted separation with lateral nudge as two-system split (`compute_separation` + `apply_separation`). Add `SeparationForce` component. Add `UnitSpatialHash` (flat grid). Remove ORCA module, `AvoidanceAgent`, `AvoidanceConfig`, `AvoidanceSpatialHash`. Remove `PreferredVelocity` (no longer needed — flow field writes Transform directly, separation uses SeparationForce).
+**UPDATE (2026-03-08)**: Original scope was "replace ORCA with separation force". Separation force was implemented and tested through 7 iterations — it fundamentally doesn't work (reactive vs predictive). ORCA stays as local steering.
 
-**Why fourth**: Depends on flow field being in place (ORCA was compensating for lack of global routing).
+**Scope**: Keep ORCA algorithm but decouple from physics integration. Change `compute_avoidance` to write `AdjustedVelocity` instead of `LinearVelocity`. Add `apply_movement` system that writes `AdjustedVelocity * dt` to `Transform.translation` directly. Switch units to `RigidBody::Kinematic` (confirmed working in GAM-61 experiment). Remove `LinearVelocity` from units. Optionally upgrade `AvoidanceSpatialHash` to flat `Vec<Vec<Entity>>` grid.
 
-**Files touched**: New `gameplay/units/separation.rs`, delete `gameplay/units/avoidance/` (entire module), unit spawn sites, `gameplay/mod.rs`
+**Why fourth**: Depends on flow field being in place (flow field provides PreferredVelocity, ORCA adjusts it).
+
+**Files touched**: `gameplay/units/avoidance/orca.rs` (output change), `gameplay/units/movement.rs` (add apply_movement), `gameplay/units/mod.rs` (RigidBody::Kinematic, remove LinearVelocity), unit spawn sites
 
 ### Ticket 5: Remove avian2d
 
@@ -806,7 +755,7 @@ Every Frame:
 
 ### Ticket 6: Profiling & Tuning Pass (40k target)
 
-**Scope**: Profile at 4k, 10k, 40k units. Switch unit rendering from `Mesh2d` to `Sprite::from_color()` (optimized sprite batching). Tune constants: flow field cell size, separation strength/radius, detection radius, spatial hash cell size, ATTACK_HYSTERESIS, LEASH_DISTANCE. Validate frame budget (<16ms at 40k). Smoke test at 100k. If orphan scan is hot, add reverse-lookup index. Identify remaining hotspots.
+**Scope**: Profile at 4k, 10k, 40k units. Switch unit rendering from `Mesh2d` to `Sprite::from_color()` (optimized sprite batching). Tune constants: flow field cell size, ORCA neighbor distance, detection radius, spatial hash cell size, ATTACK_HYSTERESIS, LEASH_DISTANCE. Optionally upgrade `AvoidanceSpatialHash` to flat grid. Validate frame budget (<16ms at 40k). Smoke test at 100k. If orphan scan is hot, add reverse-lookup index. Identify remaining hotspots.
 
 **Why last**: Validates the entire refactoring.
 
@@ -822,19 +771,18 @@ Every Frame:
 | **1b** | Nothing | Nothing | `CurrentTarget` |
 | **2** | `EntityExtent` | `Collider` (still on entities for physics) + `EntityExtent` (used by range checks) | GJK `surface_distance` calls |
 | **3** | `FlowField`, `FlowFieldDirty`, `GoalRegistry`, `AssignedGoal` | `Collider` + `RigidBody` (physics still active), `PreferredVelocity` (flow field writes it, ORCA reads it) | `NavPath`, `PathRefreshTimer`, `NavObstacle`, `vleue_navigator` |
-| **4** | `UnitSpatialHash`, `SeparationForce` | `Collider` + `RigidBody` (physics still active) | `AvoidanceSpatialHash`, `AvoidanceAgent`, `AvoidanceConfig`, `PreferredVelocity`, entire `avoidance/` module |
+| **4** | `AdjustedVelocity` | `Collider` + `RigidBody::Kinematic` (colliders kept for projectile hits) | `LinearVelocity` (replaced by `AdjustedVelocity` + direct Transform writes) |
 | **5** | Nothing | Nothing | `Collider`, `RigidBody`, `Sensor`, `CollisionLayers`, `CollidingEntities`, `LockedAxes`, `LinearVelocity`, `avian2d` dep, `third_party/avian.rs` |
 | **6** | Nothing | Nothing | Nothing (profiling + tuning only) |
 
 ### Spatial Hash Migration
 
-| Ticket | TargetSpatialHash | AvoidanceSpatialHash | UnitSpatialHash |
-|--------|-------------------|----------------------|-----------------|
-| 1a-3 | Exists | Exists (for ORCA) | Not yet |
-| 4 | Exists | **Removed** (ORCA deleted) | **Added** (flat grid) |
-| 5-6 | Exists | Gone | Exists |
+| Ticket | TargetSpatialHash | AvoidanceSpatialHash |
+|--------|-------------------|----------------------|
+| 1a-5 | Exists | Exists (for ORCA) |
+| 6 | Exists | Exists (optionally upgraded to flat grid) |
 
-No period with 3 hashes coexisting. Direct replacement in Ticket 4.
+ORCA stays, so `AvoidanceSpatialHash` stays throughout. Optional flat grid upgrade in Ticket 6 profiling pass.
 
 ---
 
@@ -1001,6 +949,7 @@ Architecture reviewed by 4 specialist agents on 2026-03-05. Key findings incorpo
 
 - Reverse-lookup index for O(n) orphan scan on mass death
 - Flow field Dijkstra benchmark with complex building layouts
-- Separation constant tuning (strength, radius, cross-team weight)
+- ORCA tuning (neighbor distance, max neighbors, time horizon)
+- Optional AvoidanceSpatialHash upgrade to flat grid
 - Rendering benchmark at 40k (`Sprite::from_color()` vs `Mesh2d`)
 - Verify `propagate_transforms` overhead with 40k flat entities
