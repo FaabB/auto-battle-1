@@ -4,7 +4,10 @@ use bevy::prelude::*;
 
 use super::battlefield::CELL_SIZE;
 use super::spatial_hash::SpatialHash;
-use super::{EntityExtent, Movement, Target, TargetingState, Team, extent_distance};
+use super::{
+    CombatStats, EngagementLeash, EntityExtent, LEASH_DISTANCE, Movement, Target, TargetingState,
+    Team, extent_distance,
+};
 use crate::screens::GameState;
 use crate::{GameSet, gameplay_running};
 
@@ -33,6 +36,19 @@ const RETARGET_SLOTS: u32 = 10;
 /// Seconds between slot ticks (0.15s full cycle / 10 slots = 0.015s per slot).
 /// Entities without a target (or with a despawned target) always evaluate immediately.
 const RETARGET_SLOT_INTERVAL_SECS: f32 = 0.015;
+
+/// Attack range hysteresis — prevents Attacking ↔ Engaging oscillation.
+/// Exit Attacking when surface distance > range + `ATTACK_HYSTERESIS`.
+const ATTACK_HYSTERESIS: f32 = 8.0;
+
+/// Minimum detection radius (1 cell). Applied when `range * 2.0` is smaller.
+const MIN_DETECTION_RADIUS: f32 = 64.0;
+
+/// Compute detection radius for a unit based on its attack range.
+/// Longer-range units detect enemies from further away.
+fn detection_radius(range: f32) -> f32 {
+    (range * 2.0).max(MIN_DETECTION_RADIUS)
+}
 
 /// Timer and slot state for staggered retargeting.
 /// Entities re-evaluate targets in round-robin fashion: slot 0 first, then slot 1, etc.
@@ -86,11 +102,12 @@ fn rebuild_target_grid(
 
 /// Finds the nearest valid target for each entity with `TargetingState`. Runs in `GameSet::Ai`.
 ///
-/// Works for both units (with `Movement`) and static entities like fortresses (no `Movement`).
-/// - Entities without a target evaluate every frame (so newly spawned units react instantly).
-/// - Entities with a valid target re-evaluate on their stagger slot (once per
-///   [`RETARGET_INTERVAL_SECS`] cycle, spread across [`RETARGET_SLOTS`] time intervals).
-/// - Backtrack limit only applies to mobile entities (those with `Movement`).
+/// State machine behavior:
+/// - `Moving`: check detection radius → `Seeking` if enemy nearby
+/// - `Seeking`: find best target → `Engaging` + leash, or back to `Moving` (mobile) / stay `Seeking` (static)
+/// - `Engaging`/`Attacking`: retarget on stagger slot, switch target or disengage
+///
+/// Backtrack limit only applies to mobile entities (those with `Movement`).
 pub fn find_target(
     time: Res<Time>,
     mut retarget_timer: ResMut<RetargetTimer>,
@@ -100,10 +117,12 @@ pub fn find_target(
         &Team,
         &GlobalTransform,
         &EntityExtent,
+        &CombatStats,
         &mut TargetingState,
         Option<&Movement>,
     )>,
     all_targets: Query<(Entity, &Team, &GlobalTransform, &EntityExtent), With<Target>>,
+    mut commands: Commands,
 ) {
     retarget_timer.timer.tick(time.delta());
     let slot_advanced = retarget_timer.timer.just_finished();
@@ -111,38 +130,124 @@ pub fn find_target(
         retarget_timer.current_slot = (retarget_timer.current_slot + 1) % RETARGET_SLOTS;
     }
 
-    for (entity, team, transform, seeker_extent, mut targeting_state, movement) in &mut seekers {
-        let has_valid_target = targeting_state
-            .target_entity()
-            .is_some_and(|e| all_targets.get(e).is_ok());
-
-        if has_valid_target {
-            if !slot_advanced {
-                continue;
-            }
-            let entity_slot = entity.index().index() % RETARGET_SLOTS;
-            if entity_slot != retarget_timer.current_slot {
-                continue;
-            }
-        }
-
+    for (entity, team, transform, seeker_extent, stats, mut targeting_state, movement) in
+        &mut seekers
+    {
         let my_pos = transform.translation().xy();
         let opposing_team = team.opposing();
+        let is_mobile = movement.is_some();
 
-        // Two-pass spatial search: nearby first, full battlefield fallback
-        let nearest = find_nearest_target(
-            &grid,
-            entity,
-            my_pos,
-            seeker_extent,
-            opposing_team,
-            movement.is_some(),
-            *team,
-            &all_targets,
-        );
+        match *targeting_state {
+            TargetingState::Moving => {
+                // Only mobile entities can be Moving. Check detection radius.
+                let detect_r = detection_radius(stats.range);
+                let has_nearby_enemy = has_enemy_in_radius(
+                    &grid,
+                    entity,
+                    my_pos,
+                    detect_r,
+                    opposing_team,
+                    &all_targets,
+                );
+                if has_nearby_enemy {
+                    *targeting_state = TargetingState::Seeking;
+                }
+            }
+            TargetingState::Seeking => {
+                // Find best target
+                let nearest = find_nearest_target(
+                    &grid,
+                    entity,
+                    my_pos,
+                    seeker_extent,
+                    opposing_team,
+                    is_mobile,
+                    *team,
+                    &all_targets,
+                );
+                if let Some(target_entity) = nearest {
+                    *targeting_state = TargetingState::Engaging(target_entity);
+                    if is_mobile {
+                        commands.entity(entity).insert(EngagementLeash {
+                            origin: my_pos,
+                            max_distance: LEASH_DISTANCE,
+                        });
+                    }
+                } else if is_mobile {
+                    // No enemies found — go back to marching
+                    *targeting_state = TargetingState::Moving;
+                }
+                // Static entities stay Seeking if no target found
+            }
+            TargetingState::Engaging(_) | TargetingState::Attacking(_) => {
+                // Retarget check on stagger slot
+                let has_valid_target = targeting_state
+                    .target_entity()
+                    .is_some_and(|e| all_targets.get(e).is_ok());
 
-        *targeting_state = nearest.map_or(TargetingState::Seeking, TargetingState::Engaging);
+                if has_valid_target {
+                    if !slot_advanced {
+                        continue;
+                    }
+                    let entity_slot = entity.index().index() % RETARGET_SLOTS;
+                    if entity_slot != retarget_timer.current_slot {
+                        continue;
+                    }
+                }
+
+                let nearest = find_nearest_target(
+                    &grid,
+                    entity,
+                    my_pos,
+                    seeker_extent,
+                    opposing_team,
+                    is_mobile,
+                    *team,
+                    &all_targets,
+                );
+                if let Some(target_entity) = nearest {
+                    let old_target = targeting_state.target_entity();
+                    if old_target != Some(target_entity) {
+                        *targeting_state = TargetingState::Engaging(target_entity);
+                        if is_mobile {
+                            commands.entity(entity).insert(EngagementLeash {
+                                origin: my_pos,
+                                max_distance: LEASH_DISTANCE,
+                            });
+                        }
+                    }
+                } else {
+                    *targeting_state = if is_mobile {
+                        TargetingState::Moving
+                    } else {
+                        TargetingState::Seeking
+                    };
+                    commands.entity(entity).remove::<EngagementLeash>();
+                }
+            }
+        }
     }
+}
+
+/// Quick check: is any opposing entity within detection radius?
+/// Used for Moving → Seeking gate. Does NOT find the best target.
+fn has_enemy_in_radius(
+    grid: &TargetSpatialHash,
+    seeker_entity: Entity,
+    seeker_pos: Vec2,
+    radius: f32,
+    opposing_team: Team,
+    all_targets: &Query<(Entity, &Team, &GlobalTransform, &EntityExtent), With<Target>>,
+) -> bool {
+    for candidate in grid.query_neighbors(seeker_pos, radius + MAX_ENTITY_HALF_EXTENT) {
+        let Ok((cand_entity, cand_team, _, _)) = all_targets.get(candidate) else {
+            continue;
+        };
+        if cand_entity != seeker_entity && *cand_team == opposing_team {
+            return true;
+        }
+    }
+    false
 }
 
 /// Search the spatial grid for the nearest valid target.
@@ -278,6 +383,73 @@ fn search_radius(
     nearest.map(|(e, _)| e)
 }
 
+/// Verify targeting state against range and leash constraints.
+/// Transitions:
+/// - Engaging → Attacking (in attack range)
+/// - Engaging → Moving (leash exceeded, mobile only)
+/// - Attacking → Engaging (pushed out of range + hysteresis, mobile)
+/// - Attacking → Seeking (target out of range, static)
+fn verify_targets(
+    mut units: Query<(
+        Entity,
+        &GlobalTransform,
+        &EntityExtent,
+        &CombatStats,
+        &mut TargetingState,
+        Option<&Movement>,
+        Option<&EngagementLeash>,
+    )>,
+    targets: Query<(&GlobalTransform, &EntityExtent)>,
+    mut commands: Commands,
+) {
+    for (entity, transform, extent, stats, mut state, movement, leash) in &mut units {
+        let my_pos = transform.translation().xy();
+        let is_mobile = movement.is_some();
+
+        match *state {
+            TargetingState::Engaging(target_entity) => {
+                let Ok((target_pos, target_extent)) = targets.get(target_entity) else {
+                    continue; // Target gone — death observer handles this
+                };
+                let target_xy = target_pos.translation().xy();
+                let distance = extent_distance(extent, my_pos, target_extent, target_xy);
+
+                // Check attack range → Attacking
+                if distance <= stats.range {
+                    *state = TargetingState::Attacking(target_entity);
+                    continue;
+                }
+
+                // Check leash (mobile only)
+                if is_mobile {
+                    if let Some(leash) = leash {
+                        if my_pos.distance(leash.origin) > leash.max_distance {
+                            *state = TargetingState::Moving;
+                            commands.entity(entity).remove::<EngagementLeash>();
+                        }
+                    }
+                }
+            }
+            TargetingState::Attacking(target_entity) => {
+                let Ok((target_pos, target_extent)) = targets.get(target_entity) else {
+                    continue; // Death observer handles
+                };
+                let target_xy = target_pos.translation().xy();
+                let distance = extent_distance(extent, my_pos, target_extent, target_xy);
+
+                if distance > stats.range + ATTACK_HYSTERESIS {
+                    if is_mobile {
+                        *state = TargetingState::Engaging(target_entity);
+                    } else {
+                        *state = TargetingState::Seeking;
+                    }
+                }
+            }
+            _ => {} // Moving/Seeking handled by find_target
+        }
+    }
+}
+
 // === Plugin ===
 
 fn reset_retarget_timer(mut commands: Commands) {
@@ -291,7 +463,7 @@ pub(super) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(GameState::InGame), reset_retarget_timer);
     app.add_systems(
         Update,
-        (rebuild_target_grid, find_target)
+        (rebuild_target_grid, find_target, verify_targets)
             .chain_ignore_deferred()
             .in_set(GameSet::Ai)
             .run_if(gameplay_running),
@@ -313,7 +485,7 @@ mod tests {
         )));
         app.add_systems(
             Update,
-            (rebuild_target_grid, find_target).chain_ignore_deferred(),
+            (rebuild_target_grid, find_target, verify_targets).chain_ignore_deferred(),
         );
         app
     }
@@ -333,11 +505,37 @@ mod tests {
         crate::testing::nearly_expire_timer(&mut timer.timer);
     }
 
+    /// Spawn a fortress-like static entity (no Movement) with CombatStats.
+    fn spawn_test_fortress(world: &mut World, team: Team, x: f32, y: f32) -> Entity {
+        world
+            .spawn((
+                team,
+                Target,
+                TargetingState::Seeking,
+                CombatStats {
+                    damage: 20.0,
+                    attack_speed: 1.0,
+                    range: 100.0,
+                },
+                Transform::from_xyz(x, y, 0.0),
+                GlobalTransform::from(Transform::from_xyz(x, y, 0.0)),
+                EntityExtent::Rect(64.0, 64.0),
+                Collider::rectangle(128.0, 128.0),
+            ))
+            .id()
+    }
+
+    // === Target selection tests (units start as Seeking to test find logic) ===
+
     #[test]
-    fn unit_targets_nearest_enemy() {
+    fn seeking_unit_targets_nearest_enemy() {
         let mut app = create_ai_test_app();
 
         let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        // Override to Seeking to test target selection directly
+        app.world_mut()
+            .entity_mut(player)
+            .insert(TargetingState::Seeking);
         let _far_enemy =
             crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 500.0, 100.0);
         let near_enemy =
@@ -345,22 +543,48 @@ mod tests {
 
         app.update();
 
-        let current_target = app.world().get::<TargetingState>(player).unwrap();
-        assert_eq!(current_target.target_entity(), Some(near_enemy));
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(ct.target_entity(), Some(near_enemy));
     }
 
     #[test]
-    fn unit_targets_fortress_when_no_enemies() {
+    fn seeking_unit_with_no_enemies_returns_to_moving() {
         let mut app = create_ai_test_app();
 
         let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
-        let fortress =
-            crate::testing::spawn_test_target(app.world_mut(), Team::Enemy, 5000.0, 320.0);
+        app.world_mut()
+            .entity_mut(player)
+            .insert(TargetingState::Seeking);
+        // Only friendly targets
+        let _friendly =
+            crate::testing::spawn_test_target(app.world_mut(), Team::Player, 200.0, 100.0);
 
         app.update();
 
-        let current_target = app.world().get::<TargetingState>(player).unwrap();
-        assert_eq!(current_target.target_entity(), Some(fortress));
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        // Mobile unit with no enemies goes back to Moving
+        assert_eq!(*ct, TargetingState::Moving);
+    }
+
+    #[test]
+    fn seeking_unit_gets_engagement_leash() {
+        let mut app = create_ai_test_app();
+
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        app.world_mut()
+            .entity_mut(player)
+            .insert(TargetingState::Seeking);
+        let _enemy = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 200.0, 100.0);
+
+        app.update();
+
+        let leash = app.world().get::<EngagementLeash>(player);
+        assert!(
+            leash.is_some(),
+            "Mobile unit should get EngagementLeash on Engaging"
+        );
+        let leash = leash.unwrap();
+        assert!((leash.max_distance - LEASH_DISTANCE).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -368,10 +592,13 @@ mod tests {
         let mut app = create_ai_test_app();
 
         let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
-        let enemy1 = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 300.0, 100.0);
-        let enemy2 = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 500.0, 100.0);
+        app.world_mut()
+            .entity_mut(player)
+            .insert(TargetingState::Seeking);
+        let enemy1 = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 200.0, 100.0);
+        let enemy2 = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 300.0, 100.0);
 
-        // First update: targets nearest (enemy1)
+        // First update: Seeking → Engaging(enemy1)
         app.update();
         let ct = app.world().get::<TargetingState>(player).unwrap();
         assert_eq!(ct.target_entity(), Some(enemy1));
@@ -379,7 +606,7 @@ mod tests {
         // Despawn enemy1
         app.world_mut().despawn(enemy1);
 
-        // Next update: target is invalid, re-evaluates immediately → enemy2
+        // Next update: target is invalid, re-evaluates immediately → Engaging(enemy2)
         app.update();
         let ct = app.world().get::<TargetingState>(player).unwrap();
         assert_eq!(ct.target_entity(), Some(enemy2));
@@ -390,12 +617,14 @@ mod tests {
         let mut app = create_ai_test_app();
 
         let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
-        let enemy_far = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 300.0, 100.0);
+        app.world_mut()
+            .entity_mut(player)
+            .insert(TargetingState::Seeking);
+        let _enemy_far =
+            crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 300.0, 100.0);
 
-        // First update gives a target (no target yet → evaluates immediately)
+        // First update: Seeking → Engaging(enemy_far)
         app.update();
-        let ct = app.world().get::<TargetingState>(player).unwrap();
-        assert_eq!(ct.target_entity(), Some(enemy_far));
 
         // Spawn a closer enemy
         let enemy_near =
@@ -403,36 +632,39 @@ mod tests {
 
         // Set timer to fire on the player's slot next update
         set_retarget_for_entity(&mut app, player);
-
         app.update();
 
-        // Should have switched to the closer enemy
         let ct = app.world().get::<TargetingState>(player).unwrap();
         assert_eq!(ct.target_entity(), Some(enemy_near));
     }
 
     #[test]
-    fn unit_respects_backtrack_limit() {
+    fn seeking_unit_respects_backtrack_limit() {
         let mut app = create_ai_test_app();
 
         // Player unit at x=500, enemy far behind at x=100 (400px behind > 128px limit)
         let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 500.0, 100.0);
+        app.world_mut()
+            .entity_mut(player)
+            .insert(TargetingState::Seeking);
         let _behind_enemy =
             crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 100.0, 100.0);
 
         app.update();
 
-        // Should NOT target the enemy behind (too far)
+        // No valid target → back to Moving
         let ct = app.world().get::<TargetingState>(player).unwrap();
-        assert_eq!(ct.target_entity(), None);
+        assert_eq!(*ct, TargetingState::Moving);
     }
 
     #[test]
-    fn unit_targets_building() {
+    fn seeking_unit_targets_building() {
         let mut app = create_ai_test_app();
 
-        // Enemy unit should target a player building
         let enemy = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 500.0, 100.0);
+        app.world_mut()
+            .entity_mut(enemy)
+            .insert(TargetingState::Seeking);
         let building =
             crate::testing::spawn_test_target(app.world_mut(), Team::Player, 300.0, 100.0);
 
@@ -442,25 +674,68 @@ mod tests {
         assert_eq!(ct.target_entity(), Some(building));
     }
 
+    // === Moving → detection tests ===
+
+    #[test]
+    fn moving_unit_detects_nearby_enemy() {
+        let mut app = create_ai_test_app();
+
+        // Player unit at 100, enemy at 200 (100px apart, within detection radius 128)
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        let _enemy = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 200.0, 100.0);
+
+        // Frame 1: Moving → detect enemy → Seeking
+        app.update();
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(*ct, TargetingState::Seeking);
+
+        // Frame 2: Seeking → find target → Engaging
+        app.update();
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert!(
+            ct.target_entity().is_some(),
+            "Should be Engaging after detection + search"
+        );
+    }
+
+    #[test]
+    fn moving_unit_ignores_distant_enemy() {
+        let mut app = create_ai_test_app();
+
+        // Enemy far away (4000px), outside detection radius
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        let _far_enemy =
+            crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 4000.0, 100.0);
+
+        app.update();
+
+        // Stays Moving — enemy is too far to detect
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(*ct, TargetingState::Moving);
+    }
+
+    #[test]
+    fn moving_unit_no_enemies_stays_moving() {
+        let mut app = create_ai_test_app();
+
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        let _friendly =
+            crate::testing::spawn_test_target(app.world_mut(), Team::Player, 200.0, 100.0);
+
+        app.update();
+
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(*ct, TargetingState::Moving);
+    }
+
+    // === Fortress (static entity) tests ===
+
     #[test]
     fn fortress_targets_nearest_enemy() {
         let mut app = create_ai_test_app();
 
-        // Spawn a fortress-like entity (no Unit, no Movement — static)
-        let fortress = app
-            .world_mut()
-            .spawn((
-                Team::Player,
-                Target,
-                TargetingState::Seeking,
-                Transform::from_xyz(64.0, 320.0, 0.0),
-                GlobalTransform::from(Transform::from_xyz(64.0, 320.0, 0.0)),
-                crate::gameplay::EntityExtent::Rect(64.0, 64.0),
-                Collider::rectangle(128.0, 128.0),
-            ))
-            .id();
+        let fortress = spawn_test_fortress(app.world_mut(), Team::Player, 64.0, 320.0);
 
-        // Spawn two enemy targets
         let near_enemy =
             crate::testing::spawn_test_target(app.world_mut(), Team::Enemy, 200.0, 320.0);
         let _far_enemy =
@@ -476,64 +751,196 @@ mod tests {
     fn static_entity_has_no_backtrack_limit() {
         let mut app = create_ai_test_app();
 
-        // Fortress at x=500 with enemy "behind" at x=100 (would be filtered for units)
-        let fortress = app
-            .world_mut()
-            .spawn((
-                Team::Player,
-                Target,
-                TargetingState::Seeking,
-                Transform::from_xyz(500.0, 320.0, 0.0),
-                GlobalTransform::from(Transform::from_xyz(500.0, 320.0, 0.0)),
-                crate::gameplay::EntityExtent::Rect(64.0, 64.0),
-                Collider::rectangle(128.0, 128.0),
-            ))
-            .id();
+        let fortress = spawn_test_fortress(app.world_mut(), Team::Player, 500.0, 320.0);
 
         let behind_enemy =
             crate::testing::spawn_test_target(app.world_mut(), Team::Enemy, 100.0, 320.0);
 
         app.update();
 
-        // Static entity (no Movement) should target regardless of direction
         let ct = app.world().get::<TargetingState>(fortress).unwrap();
         assert_eq!(ct.target_entity(), Some(behind_enemy));
     }
 
     #[test]
-    fn targets_enemy_across_large_distance() {
-        // Tests the fallback search (enemy far away, beyond initial radius)
+    fn static_entity_stays_seeking_with_no_enemies() {
         let mut app = create_ai_test_app();
-        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
-        let far_enemy =
-            crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 4000.0, 100.0);
+
+        let fortress = spawn_test_fortress(app.world_mut(), Team::Player, 64.0, 320.0);
+
         app.update();
+
+        let ct = app.world().get::<TargetingState>(fortress).unwrap();
+        assert_eq!(*ct, TargetingState::Seeking);
+    }
+
+    // === verify_targets tests ===
+
+    #[test]
+    fn engaging_transitions_to_attacking_in_range() {
+        let mut app = create_ai_test_app();
+
+        let target = crate::testing::spawn_test_target(app.world_mut(), Team::Enemy, 110.0, 100.0);
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        // Place unit very close to target (within attack range of 5.0)
+        // Unit extent = circle(6), target extent = circle(5). Surface dist = 11 - 6 - 5 = 0.
+        // Actually entities at same Y, 10px apart: center dist = 10, surface = 10 - 6 - 5 = 0 (overlap)
+        // That's ≤ range (5.0) → should transition to Attacking
+        app.world_mut()
+            .entity_mut(player)
+            .insert(TargetingState::Engaging(target));
+
+        app.update();
+
         let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(*ct, TargetingState::Attacking(target));
+    }
+
+    #[test]
+    fn engaging_transitions_to_moving_on_leash_exceeded() {
+        let mut app = create_ai_test_app();
+
+        let target = crate::testing::spawn_test_target(app.world_mut(), Team::Enemy, 500.0, 100.0);
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 400.0, 100.0);
+        app.world_mut().entity_mut(player).insert((
+            TargetingState::Engaging(target),
+            EngagementLeash {
+                origin: Vec2::new(100.0, 100.0), // Leash origin far behind
+                max_distance: LEASH_DISTANCE,
+            },
+        ));
+
+        // Unit at 400, leash origin at 100 → distance = 300 > LEASH_DISTANCE (192)
+        app.update();
+
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(*ct, TargetingState::Moving);
+        assert!(
+            app.world().get::<EngagementLeash>(player).is_none(),
+            "Leash should be removed"
+        );
+    }
+
+    #[test]
+    fn attacking_transitions_to_engaging_on_range_exceeded() {
+        let mut app = create_ai_test_app();
+
+        // Target far away — surface distance > range + hysteresis
+        let target = crate::testing::spawn_test_target(app.world_mut(), Team::Enemy, 200.0, 100.0);
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        app.world_mut()
+            .entity_mut(player)
+            .insert(TargetingState::Attacking(target));
+
+        // Surface distance: 100 - 6 - 5 = 89. Range = 5.0 + hysteresis 8.0 = 13.0. 89 > 13 → Engaging
+        app.update();
+
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        assert_eq!(*ct, TargetingState::Engaging(target));
+    }
+
+    #[test]
+    fn attacking_stays_within_hysteresis() {
+        let mut app = create_ai_test_app();
+
+        // Place target just barely outside attack range but within hysteresis
+        let stats = crate::gameplay::units::unit_stats(crate::gameplay::units::UnitType::Soldier);
+        // Unit circle(6) at 100, target circle(5) at x. Surface dist = (x-100) - 6 - 5 = x - 111
+        // Want surface dist > range (5.0) but ≤ range + hysteresis (13.0)
+        // x - 111 = 10 → x = 121
+        let target = crate::testing::spawn_test_target(app.world_mut(), Team::Enemy, 121.0, 100.0);
+        let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        app.world_mut()
+            .entity_mut(player)
+            .insert(TargetingState::Attacking(target));
+
+        app.update();
+
+        let ct = app.world().get::<TargetingState>(player).unwrap();
+        // Surface dist = 10, which is > range (5) but ≤ range + hysteresis (13) → stays Attacking
+        assert_eq!(
+            *ct,
+            TargetingState::Attacking(target),
+            "Should stay Attacking within hysteresis (surface_dist={}, range={}, hyst={})",
+            10.0,
+            stats.attack_range,
+            ATTACK_HYSTERESIS
+        );
+    }
+
+    #[test]
+    fn static_attacking_transitions_to_seeking_on_range_exceeded() {
+        let mut app = create_ai_test_app();
+
+        let target = crate::testing::spawn_test_target(app.world_mut(), Team::Enemy, 500.0, 320.0);
+        let fortress = spawn_test_fortress(app.world_mut(), Team::Player, 64.0, 320.0);
+        app.world_mut()
+            .entity_mut(fortress)
+            .insert(TargetingState::Attacking(target));
+
+        // Surface distance from fortress (Rect 64x64 at 64,320) to target (Circle 5 at 500,320):
+        // Rect surface at x=128. Point-to-rect = 500-128 = 372. Surface = 372 - 5 = 367.
+        // Range = 100 + hysteresis 8 = 108. 367 > 108 → Seeking
+        app.update();
+
+        let ct = app.world().get::<TargetingState>(fortress).unwrap();
+        assert_eq!(*ct, TargetingState::Seeking);
+    }
+
+    // === Seeking fallback tests (from original suite) ===
+
+    #[test]
+    fn seeking_targets_enemy_across_large_distance() {
+        // Static entity (fortress) can find far targets via fallback search
+        let mut app = create_ai_test_app();
+
+        let fortress = spawn_test_fortress(app.world_mut(), Team::Player, 100.0, 320.0);
+        let far_enemy =
+            crate::testing::spawn_test_target(app.world_mut(), Team::Enemy, 4000.0, 320.0);
+
+        app.update();
+
+        let ct = app.world().get::<TargetingState>(fortress).unwrap();
         assert_eq!(ct.target_entity(), Some(far_enemy));
     }
 
     #[test]
-    fn prefers_nearby_over_distant() {
-        // Nearby enemy should be chosen even with a distant enemy in the grid
+    fn seeking_prefers_nearby_over_distant() {
         let mut app = create_ai_test_app();
+
         let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
+        app.world_mut()
+            .entity_mut(player)
+            .insert(TargetingState::Seeking);
         let _far = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 3000.0, 100.0);
         let near = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 200.0, 100.0);
+
         app.update();
+
         let ct = app.world().get::<TargetingState>(player).unwrap();
         assert_eq!(ct.target_entity(), Some(near));
     }
 
+    // === Death observer integration ===
+
     #[test]
-    fn no_targets_gives_none() {
-        // Seeker with no enemies at all
+    fn mobile_unit_death_transitions_to_moving() {
         let mut app = create_ai_test_app();
+
+        let target = crate::testing::spawn_test_target(app.world_mut(), Team::Enemy, 200.0, 100.0);
         let player = crate::testing::spawn_test_unit(app.world_mut(), Team::Player, 100.0, 100.0);
-        // Only spawn friendly targets
-        let _friendly =
-            crate::testing::spawn_test_target(app.world_mut(), Team::Player, 200.0, 100.0);
+        app.world_mut()
+            .entity_mut(player)
+            .insert(TargetingState::Engaging(target));
+
+        // Engaging with no valid target → retargets; since target still exists, stays engaging
+        // Actually we need to test the death observer separately — this test is in death.rs
+        // Instead test: engaging unit whose target gets lost reverts via find_target
+        app.world_mut().despawn(target);
         app.update();
+
         let ct = app.world().get::<TargetingState>(player).unwrap();
-        assert_eq!(ct.target_entity(), None);
+        // No enemies left → Mobile unit: Moving
+        assert_eq!(*ct, TargetingState::Moving);
     }
 }

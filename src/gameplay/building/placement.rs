@@ -12,10 +12,12 @@ use crate::gameplay::battlefield::{
     BUILD_ZONE_START_COL, GridIndex, col_to_world_x, row_to_world_y,
 };
 use crate::gameplay::combat::HealthBarConfig;
+use crate::gameplay::flow_field::{FlowFieldDirty, GoalRegistry};
+use crate::gameplay::units::Unit;
 use crate::gameplay::{EntityExtent, Health, Target, Team};
 
 use crate::screens::GameState;
-use crate::third_party::{NavObstacle, solid_entity_layers};
+use crate::third_party::solid_entity_layers;
 use crate::{Z_BUILDING, Z_GRID_CURSOR};
 
 /// Spawns the semi-transparent grid cursor entity. Hidden by default.
@@ -76,6 +78,9 @@ pub(super) fn handle_building_placement(
     mut gold: ResMut<crate::gameplay::economy::Gold>,
     mut shop: ResMut<crate::gameplay::economy::shop::Shop>,
     ui_buttons: Query<&Interaction, With<Button>>,
+    mut registry: Option<ResMut<GoalRegistry>>,
+    mut dirty: Option<ResMut<FlowFieldDirty>>,
+    mut units: Query<&mut Transform, With<Unit>>,
 ) {
     if !mouse.just_pressed(MouseButton::Left) {
         return;
@@ -144,7 +149,6 @@ pub(super) fn handle_building_placement(
         Transform::from_xyz(world_x, world_y, Z_BUILDING),
         DespawnOnExit(GameState::InGame),
         EntityExtent::Rect(BUILDING_SPRITE_SIZE / 2.0, BUILDING_SPRITE_SIZE / 2.0),
-        NavObstacle,
         // Physics
         RigidBody::Static,
         Collider::rectangle(BUILDING_SPRITE_SIZE, BUILDING_SPRITE_SIZE),
@@ -166,6 +170,26 @@ pub(super) fn handle_building_placement(
         entity_commands.insert(crate::gameplay::economy::income::IncomeTimer(
             Timer::from_seconds(interval, TimerMode::Repeating),
         ));
+    }
+
+    // Update flow field cost grid and eject overlapping units
+    let half = BUILDING_SPRITE_SIZE / 2.0;
+    let building_min = Vec2::new(world_x - half, world_y - half);
+    let building_max = Vec2::new(world_x + half, world_y + half);
+
+    if let (Some(registry), Some(dirty)) = (registry.as_deref_mut(), dirty.as_deref_mut()) {
+        crate::gameplay::flow_field::mark_building_placed(
+            registry,
+            dirty,
+            building_min,
+            building_max,
+        );
+        crate::gameplay::flow_field::eject_units_from_blocked(
+            &registry.cost_grid,
+            building_min,
+            building_max,
+            units.iter_mut(),
+        );
     }
 }
 

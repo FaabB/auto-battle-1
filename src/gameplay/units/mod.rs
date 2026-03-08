@@ -2,18 +2,17 @@
 
 pub mod avoidance;
 mod movement;
-pub mod pathfinding;
 pub mod spawn;
 
 use avian2d::prelude::*;
 use bevy::prelude::*;
-use vleue_navigator::prelude::NavMesh;
 
 use self::avoidance::{AvoidanceAgent, AvoidanceConfig, AvoidanceSpatialHash, PreferredVelocity};
 use crate::gameplay::combat::{
     AttackTimer, HealthBarConfig, UNIT_HEALTH_BAR_HEIGHT, UNIT_HEALTH_BAR_WIDTH,
     UNIT_HEALTH_BAR_Y_OFFSET,
 };
+use crate::gameplay::flow_field::AssignedGoal;
 use crate::gameplay::spatial_hash::SpatialHash;
 use crate::gameplay::{CombatStats, EntityExtent, Health, Movement, Target, TargetingState, Team};
 use crate::screens::GameState;
@@ -127,8 +126,11 @@ pub fn spawn_unit(
             DespawnOnExit(GameState::InGame),
         ))
         .insert((
-            TargetingState::Seeking,
-            pathfinding::NavPath::default(),
+            TargetingState::Moving,
+            match team {
+                Team::Player => AssignedGoal::EnemyFortress,
+                Team::Enemy => AssignedGoal::PlayerFortress,
+            },
             RigidBody::Dynamic,
             EntityExtent::Circle(UNIT_RADIUS),
             Collider::circle(UNIT_RADIUS),
@@ -143,34 +145,18 @@ pub fn spawn_unit(
 
 // === Spawn Placement ===
 
-/// Max retry attempts for finding a navigable spawn point.
-const SPAWN_PLACEMENT_ATTEMPTS: u32 = 8;
-
-/// Pick a random position at `radius` from `center` that is navigable.
+/// Pick a random position at `radius` from `center`.
 ///
-/// Tries up to `SPAWN_PLACEMENT_ATTEMPTS` random angles. When `navmesh` is `Some`,
-/// each candidate is validated with `is_in_mesh()`. When `None` (navmesh not built
-/// yet), returns the first random point without validation.
-///
-/// Falls back to `center` if all attempts land outside the mesh.
-pub fn random_navigable_spawn(center: Vec2, radius: f32, navmesh: Option<&NavMesh>) -> Vec2 {
+/// Returns a random point on a circle of `radius` around `center`.
+/// Flow field handles routing from any spawn position.
+pub fn random_navigable_spawn(center: Vec2, radius: f32) -> Vec2 {
     use rand::Rng;
     let mut rng = rand::rng();
-
-    for _ in 0..SPAWN_PLACEMENT_ATTEMPTS {
-        let angle = rng.random_range(0.0..std::f32::consts::TAU);
-        let point = Vec2::new(
-            radius.mul_add(angle.cos(), center.x),
-            radius.mul_add(angle.sin(), center.y),
-        );
-
-        if navmesh.is_none_or(|mesh| mesh.is_in_mesh(point)) {
-            return point;
-        }
-    }
-
-    // All attempts failed — spawn at center (pathfinding handles off-mesh start)
-    center
+    let angle = rng.random_range(0.0..std::f32::consts::TAU);
+    Vec2::new(
+        radius.mul_add(angle.cos(), center.x),
+        radius.mul_add(angle.sin(), center.y),
+    )
 }
 
 // === Resources ===
@@ -201,10 +187,6 @@ fn setup_unit_assets(
     });
 }
 
-fn reset_path_refresh_timer(mut commands: Commands) {
-    commands.insert_resource(pathfinding::PathRefreshTimer::default());
-}
-
 // === Plugin ===
 
 pub(super) fn plugin(app: &mut App) {
@@ -213,9 +195,6 @@ pub(super) fn plugin(app: &mut App) {
         .register_type::<PreferredVelocity>()
         .register_type::<AvoidanceAgent>()
         .register_type::<AvoidanceConfig>()
-        .register_type::<pathfinding::NavPath>()
-        .register_type::<pathfinding::PathRefreshTimer>()
-        .init_resource::<pathfinding::PathRefreshTimer>()
         .init_resource::<AvoidanceConfig>();
 
     let config = AvoidanceConfig::default();
@@ -223,27 +202,19 @@ pub(super) fn plugin(app: &mut App) {
         config.neighbor_distance,
     )));
 
-    app.add_systems(
-        OnEnter(GameState::InGame),
-        (setup_unit_assets, reset_path_refresh_timer),
-    );
+    app.add_systems(OnEnter(GameState::InGame), setup_unit_assets);
 
     spawn::plugin(app);
 
     app.add_systems(
         Update,
         (
-            pathfinding::compute_paths
-                .in_set(GameSet::Ai)
-                .after(crate::gameplay::ai::find_target),
-            (
-                movement::unit_movement,
-                avoidance::rebuild_spatial_hash,
-                avoidance::compute_avoidance,
-            )
-                .chain_ignore_deferred()
-                .in_set(GameSet::Movement),
+            movement::unit_movement,
+            avoidance::rebuild_spatial_hash,
+            avoidance::compute_avoidance,
         )
+            .chain_ignore_deferred()
+            .in_set(GameSet::Movement)
             .run_if(gameplay_running),
     );
 }
@@ -294,10 +265,10 @@ mod tests {
     }
 
     #[test]
-    fn random_navigable_spawn_correct_distance_without_navmesh() {
+    fn random_navigable_spawn_correct_distance() {
         let center = Vec2::new(100.0, 200.0);
         let radius = 40.0;
-        let result = random_navigable_spawn(center, radius, None);
+        let result = random_navigable_spawn(center, radius);
         let dist = center.distance(result);
         assert!(
             (dist - radius).abs() < 0.01,

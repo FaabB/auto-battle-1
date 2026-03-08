@@ -1,25 +1,17 @@
-//! Unit movement toward current target, following `NavPath` waypoints around obstacles.
+//! Unit movement using flow field directions.
 
 use bevy::prelude::*;
 
 use super::avoidance::PreferredVelocity;
-use super::pathfinding::NavPath;
 use super::{CombatStats, Movement, TargetingState, Unit};
+use crate::gameplay::flow_field::{AssignedGoal, GoalRegistry};
 use crate::gameplay::{EntityExtent, extent_distance};
 
-/// Distance threshold for reaching a waypoint — when the unit's center
-/// is within this distance of a waypoint, advance to the next one.
-const WAYPOINT_REACHED_DISTANCE: f32 = 4.0;
-
-/// Sets unit `PreferredVelocity` toward their current navmesh waypoint.
+/// Sets unit `PreferredVelocity` based on targeting state and flow field.
 ///
-/// If the unit has a `NavPath` with remaining waypoints, steers toward
-/// the next waypoint. When close enough, advances to the next waypoint.
-/// When all waypoints are consumed (or no path exists), stops the unit
-/// and waits for path recomputation — never steers directly at the target.
-///
-/// Always checks attack range against the actual target — if in range,
-/// stops regardless of remaining waypoints.
+/// - `Moving`/`Seeking`: follow flow field toward assigned goal.
+/// - `Engaging`: steer directly toward target; stop if in attack range.
+/// - `Attacking`: zero velocity.
 ///
 /// The downstream `compute_avoidance` system reads `PreferredVelocity`
 /// and writes the final `LinearVelocity`.
@@ -33,70 +25,57 @@ pub(super) fn unit_movement(
             &CombatStats,
             &GlobalTransform,
             &EntityExtent,
+            &AssignedGoal,
             &mut PreferredVelocity,
-            &mut NavPath,
         ),
         With<Unit>,
     >,
     targets: Query<(&GlobalTransform, &EntityExtent)>,
+    registry: Option<Res<GoalRegistry>>,
 ) {
-    for (
-        targeting_state,
-        movement,
-        stats,
-        global_transform,
-        unit_extent,
-        mut preferred,
-        mut nav_path,
-    ) in &mut units
+    let Some(registry) = registry else { return };
+
+    for (targeting_state, movement, stats, global_transform, unit_extent, goal, mut preferred) in
+        &mut units
     {
-        let Some(target_entity) = targeting_state.target_entity() else {
-            preferred.0 = Vec2::ZERO;
-            continue;
-        };
-        let Ok((target_pos, target_extent)) = targets.get(target_entity) else {
-            preferred.0 = Vec2::ZERO;
-            continue;
-        };
-
         let current_xy = global_transform.translation().xy();
-        let target_xy = target_pos.translation().xy();
-        let distance_to_target = extent_distance(unit_extent, current_xy, target_extent, target_xy);
 
-        // Already within attack range — stop
-        if distance_to_target <= stats.range {
-            preferred.0 = Vec2::ZERO;
-            continue;
-        }
-
-        // Determine steering target from navmesh waypoints — never steer direct to target
-        let Some(steer_toward) = nav_path.current_waypoint().and_then(|waypoint| {
-            let dist_to_waypoint = current_xy.distance(waypoint);
-            if dist_to_waypoint < WAYPOINT_REACHED_DISTANCE {
-                if nav_path.advance() {
-                    nav_path.current_waypoint()
-                } else {
-                    None // All waypoints consumed — stop, re-path next frame
-                }
-            } else {
-                Some(waypoint)
+        match *targeting_state {
+            TargetingState::Moving | TargetingState::Seeking => {
+                // Follow flow field
+                let flow_field = match goal {
+                    AssignedGoal::EnemyFortress => &registry.enemy_fortress.flow_field,
+                    AssignedGoal::PlayerFortress => &registry.player_fortress.flow_field,
+                };
+                let direction = flow_field.direction_at(current_xy);
+                preferred.0 = direction * movement.speed;
             }
-        }) else {
-            // No waypoints available — stop and wait for path computation
-            preferred.0 = Vec2::ZERO;
-            continue;
-        };
+            TargetingState::Engaging(target_entity) => {
+                // Steer directly toward target
+                let Ok((target_pos, target_extent)) = targets.get(target_entity) else {
+                    preferred.0 = Vec2::ZERO;
+                    continue;
+                };
+                let target_xy = target_pos.translation().xy();
+                let distance = extent_distance(unit_extent, current_xy, target_extent, target_xy);
 
-        // Compute velocity toward steering target
-        let diff = steer_toward - current_xy;
-        let dist = diff.length();
-        if dist < f32::EPSILON {
-            preferred.0 = Vec2::ZERO;
-            continue;
+                if distance <= stats.range {
+                    preferred.0 = Vec2::ZERO;
+                    continue;
+                }
+
+                let diff = target_xy - current_xy;
+                let dist = diff.length();
+                if dist < f32::EPSILON {
+                    preferred.0 = Vec2::ZERO;
+                } else {
+                    preferred.0 = (diff / dist) * movement.speed;
+                }
+            }
+            TargetingState::Attacking(_) => {
+                preferred.0 = Vec2::ZERO;
+            }
         }
-
-        let direction = diff / dist;
-        preferred.0 = direction * movement.speed;
     }
 }
 
@@ -104,53 +83,137 @@ pub(super) fn unit_movement(
 mod tests {
     use super::*;
     use crate::gameplay::Team;
+    use crate::gameplay::flow_field::{
+        CostGrid, DijkstraFlowField, FLOW_COLS, FLOW_ROWS, FlowFieldAlgorithm, GoalFlowField,
+    };
     use crate::gameplay::units::UnitType;
     use crate::gameplay::units::unit_stats;
     use avian2d::prelude::Collider;
 
+    /// Create a GoalRegistry with open-grid flow fields.
+    /// Player fortress goal at (0, 20), enemy fortress goal at (327, 20).
+    fn test_registry() -> GoalRegistry {
+        let cost_grid = CostGrid::new(FLOW_COLS, FLOW_ROWS);
+        let algo = Box::new(DijkstraFlowField);
+        let pf_cells = vec![(0, 20)];
+        let ef_cells = vec![(FLOW_COLS - 1, 20)];
+        let player_ff = algo.compute(&cost_grid, &pf_cells);
+        let enemy_ff = algo.compute(&cost_grid, &ef_cells);
+
+        GoalRegistry {
+            player_fortress: GoalFlowField {
+                flow_field: player_ff,
+                goal_cells: pf_cells,
+            },
+            enemy_fortress: GoalFlowField {
+                flow_field: enemy_ff,
+                goal_cells: ef_cells,
+            },
+            cost_grid,
+            algorithm: algo,
+        }
+    }
+
     fn create_movement_test_app() -> App {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
+        app.insert_resource(test_registry());
         app.add_systems(Update, unit_movement);
         app.update(); // Initialize time
         app
     }
 
-    fn spawn_unit_at(world: &mut World, x: f32, speed: f32, target: Option<Entity>) -> Entity {
-        let id = crate::testing::spawn_test_unit(world, Team::Player, x, 100.0);
-        world.entity_mut(id).insert((
-            Movement { speed },
-            target.map_or(TargetingState::Seeking, TargetingState::Engaging),
-        ));
+    fn spawn_unit_at(
+        world: &mut World,
+        x: f32,
+        speed: f32,
+        targeting_state: TargetingState,
+    ) -> Entity {
+        let id = crate::testing::spawn_test_unit(world, Team::Player, x, 320.0);
+        world
+            .entity_mut(id)
+            .insert((Movement { speed }, targeting_state));
         id
     }
 
     fn spawn_target_at(world: &mut World, x: f32) -> Entity {
-        crate::testing::spawn_test_target(world, Team::Player, x, 100.0)
+        crate::testing::spawn_test_target(world, Team::Player, x, 320.0)
     }
 
     #[test]
-    fn unit_sets_velocity_toward_target() {
+    fn seeking_unit_gets_flow_field_velocity() {
         let mut app = create_movement_test_app();
         let stats = unit_stats(UnitType::Soldier);
 
-        let target = spawn_target_at(app.world_mut(), 500.0);
-        let unit = spawn_unit_at(app.world_mut(), 100.0, stats.move_speed, Some(target));
-
-        // Give the unit a path toward the target
-        let mut nav_path = app.world_mut().get_mut::<NavPath>(unit).unwrap();
-        nav_path.set(vec![Vec2::new(500.0, 100.0)], Some(target));
+        // Player unit at x=100 with Seeking state → should follow enemy fortress flow field (rightward)
+        let unit = spawn_unit_at(
+            app.world_mut(),
+            100.0,
+            stats.move_speed,
+            TargetingState::Seeking,
+        );
 
         app.update();
 
         let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
-        // Velocity should point right (positive x) toward target
+        // Flow field for enemy fortress goal at right edge → velocity should point right
         assert!(
             velocity.0.x > 0.0,
-            "Velocity x should be positive toward target, got {}",
-            velocity.0.x
+            "Seeking unit should move toward enemy fortress (rightward), got {:?}",
+            velocity.0
         );
-        // Magnitude should be approximately move_speed
+        let speed = velocity.0.length();
+        assert!(
+            (speed - stats.move_speed).abs() < 1.0,
+            "Velocity magnitude should be ~{}, got {}",
+            stats.move_speed,
+            speed
+        );
+    }
+
+    #[test]
+    fn moving_unit_gets_flow_field_velocity() {
+        let mut app = create_movement_test_app();
+        let stats = unit_stats(UnitType::Soldier);
+
+        let unit = spawn_unit_at(
+            app.world_mut(),
+            100.0,
+            stats.move_speed,
+            TargetingState::Moving,
+        );
+
+        app.update();
+
+        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
+        assert!(
+            velocity.0.x > 0.0,
+            "Moving unit should move toward enemy fortress (rightward), got {:?}",
+            velocity.0
+        );
+    }
+
+    #[test]
+    fn engaging_unit_steers_toward_target() {
+        let mut app = create_movement_test_app();
+        let stats = unit_stats(UnitType::Soldier);
+
+        let target = spawn_target_at(app.world_mut(), 500.0);
+        let unit = spawn_unit_at(
+            app.world_mut(),
+            100.0,
+            stats.move_speed,
+            TargetingState::Engaging(target),
+        );
+
+        app.update();
+
+        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
+        assert!(
+            velocity.0.x > 0.0,
+            "Engaging unit should steer toward target, got {:?}",
+            velocity.0
+        );
         let speed = velocity.0.length();
         assert!(
             (speed - stats.move_speed).abs() < 0.1,
@@ -161,7 +224,7 @@ mod tests {
     }
 
     #[test]
-    fn unit_stops_at_attack_range() {
+    fn engaging_unit_stops_at_attack_range() {
         let mut app = create_movement_test_app();
         let stats = unit_stats(UnitType::Soldier);
 
@@ -171,7 +234,7 @@ mod tests {
             app.world_mut(),
             500.0 - stats.attack_range + 1.0,
             stats.move_speed,
-            Some(target),
+            TargetingState::Engaging(target),
         );
 
         app.update();
@@ -179,37 +242,47 @@ mod tests {
         let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
         assert!(
             velocity.0.length() < f32::EPSILON,
-            "Unit within range should have zero velocity, got {:?}",
+            "Engaging unit within range should stop, got {:?}",
             velocity.0
         );
     }
 
     #[test]
-    fn unit_zero_velocity_without_target() {
-        let mut app = create_movement_test_app();
-        let stats = unit_stats(UnitType::Soldier);
-
-        let unit = spawn_unit_at(app.world_mut(), 100.0, stats.move_speed, None);
-
-        app.update();
-
-        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
-        assert!(
-            velocity.0.length() < f32::EPSILON,
-            "Unit with no target should have zero velocity, got {:?}",
-            velocity.0
-        );
-    }
-
-    #[test]
-    fn unit_zero_velocity_when_target_despawned() {
+    fn attacking_unit_gets_zero_velocity() {
         let mut app = create_movement_test_app();
         let stats = unit_stats(UnitType::Soldier);
 
         let target = spawn_target_at(app.world_mut(), 500.0);
-        let unit = spawn_unit_at(app.world_mut(), 100.0, stats.move_speed, Some(target));
+        let unit = spawn_unit_at(
+            app.world_mut(),
+            100.0,
+            stats.move_speed,
+            TargetingState::Attacking(target),
+        );
 
-        // Despawn the target
+        app.update();
+
+        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
+        assert!(
+            velocity.0.length() < f32::EPSILON,
+            "Attacking unit should have zero velocity, got {:?}",
+            velocity.0
+        );
+    }
+
+    #[test]
+    fn engaging_unit_zero_velocity_when_target_despawned() {
+        let mut app = create_movement_test_app();
+        let stats = unit_stats(UnitType::Soldier);
+
+        let target = spawn_target_at(app.world_mut(), 500.0);
+        let unit = spawn_unit_at(
+            app.world_mut(),
+            100.0,
+            stats.move_speed,
+            TargetingState::Engaging(target),
+        );
+
         app.world_mut().despawn(target);
         app.update();
 
@@ -222,29 +295,25 @@ mod tests {
     }
 
     #[test]
-    fn unit_velocity_direction_is_normalized() {
+    fn engaging_unit_velocity_direction_is_normalized() {
         let mut app = create_movement_test_app();
 
-        // Target at a diagonal — velocity direction should be normalized * speed
+        // Target at a diagonal
         let target = app
             .world_mut()
             .spawn((
-                Transform::from_xyz(400.0, 200.0, 0.0),
-                GlobalTransform::from(Transform::from_xyz(400.0, 200.0, 0.0)),
-                crate::gameplay::EntityExtent::Circle(5.0),
+                Transform::from_xyz(400.0, 500.0, 0.0),
+                GlobalTransform::from(Transform::from_xyz(400.0, 500.0, 0.0)),
+                EntityExtent::Circle(5.0),
                 Collider::circle(5.0),
             ))
             .id();
-        let unit = spawn_unit_at(app.world_mut(), 100.0, 50.0, Some(target));
-        // Move unit to different Y to create diagonal
-        let new_transform = Transform::from_xyz(100.0, 0.0, 0.0);
-        *app.world_mut().get_mut::<Transform>(unit).unwrap() = new_transform;
-        *app.world_mut().get_mut::<GlobalTransform>(unit).unwrap() =
-            GlobalTransform::from(new_transform);
-
-        // Give the unit a path toward the target at a diagonal
-        let mut nav_path = app.world_mut().get_mut::<NavPath>(unit).unwrap();
-        nav_path.set(vec![Vec2::new(400.0, 200.0)], Some(target));
+        let unit = spawn_unit_at(
+            app.world_mut(),
+            100.0,
+            50.0,
+            TargetingState::Engaging(target),
+        );
 
         app.update();
 
@@ -254,144 +323,6 @@ mod tests {
             (speed - 50.0).abs() < 0.1,
             "Velocity magnitude should be 50.0, got {}",
             speed
-        );
-    }
-
-    // === NavPath waypoint tests ===
-
-    #[test]
-    fn unit_follows_waypoint_instead_of_direct() {
-        let mut app = create_movement_test_app();
-        let stats = unit_stats(UnitType::Soldier);
-
-        let target = spawn_target_at(app.world_mut(), 500.0);
-        let unit = spawn_unit_at(app.world_mut(), 100.0, stats.move_speed, Some(target));
-
-        // Set a path that goes up then right (around an obstacle)
-        let mut nav_path = app.world_mut().get_mut::<NavPath>(unit).unwrap();
-        nav_path.set(
-            vec![
-                Vec2::new(100.0, 300.0),
-                Vec2::new(500.0, 300.0),
-                Vec2::new(500.0, 100.0),
-            ],
-            Some(target),
-        );
-
-        app.update();
-
-        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
-        // Should head toward first waypoint (100, 300) = upward from (100, 100)
-        assert!(
-            velocity.0.y > 0.0,
-            "Unit should move upward toward first waypoint, got vy={}",
-            velocity.0.y
-        );
-        assert!(
-            velocity.0.x.abs() < 0.1,
-            "Unit should not move horizontally toward first waypoint, got vx={}",
-            velocity.0.x
-        );
-    }
-
-    #[test]
-    fn unit_advances_to_next_waypoint() {
-        let mut app = create_movement_test_app();
-        let stats = unit_stats(UnitType::Soldier);
-
-        let target = spawn_target_at(app.world_mut(), 500.0);
-        // Place unit very close to the first waypoint
-        let unit = spawn_unit_at(app.world_mut(), 100.0, stats.move_speed, Some(target));
-
-        // Set path with first waypoint very close to current position
-        let mut nav_path = app.world_mut().get_mut::<NavPath>(unit).unwrap();
-        nav_path.set(
-            vec![Vec2::new(102.0, 100.0), Vec2::new(500.0, 100.0)],
-            Some(target),
-        );
-
-        app.update();
-
-        // Should have advanced past the first waypoint (within WAYPOINT_REACHED_DISTANCE)
-        let nav_path = app.world().get::<NavPath>(unit).unwrap();
-        assert!(
-            nav_path.current_index >= 1,
-            "Should have advanced past first waypoint, index={}",
-            nav_path.current_index
-        );
-    }
-
-    #[test]
-    fn unit_stops_when_no_path() {
-        let mut app = create_movement_test_app();
-        let stats = unit_stats(UnitType::Soldier);
-
-        let target = spawn_target_at(app.world_mut(), 500.0);
-        let unit = spawn_unit_at(app.world_mut(), 100.0, stats.move_speed, Some(target));
-        // NavPath is default (empty) — should stop, not steer direct
-
-        app.update();
-
-        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
-        assert!(
-            velocity.0.length() < f32::EPSILON,
-            "Unit with no path should stop, got {:?}",
-            velocity.0
-        );
-    }
-
-    #[test]
-    fn unit_stops_when_all_waypoints_consumed() {
-        let mut app = create_movement_test_app();
-        let stats = unit_stats(UnitType::Soldier);
-
-        // Target far away (not in attack range)
-        let target = spawn_target_at(app.world_mut(), 500.0);
-        let unit = spawn_unit_at(app.world_mut(), 100.0, stats.move_speed, Some(target));
-
-        // Set a single waypoint very close to the unit so it's consumed immediately
-        let mut nav_path = app.world_mut().get_mut::<NavPath>(unit).unwrap();
-        nav_path.set(vec![Vec2::new(101.0, 100.0)], Some(target));
-
-        app.update();
-
-        // Waypoint consumed, but not in attack range — unit should stop
-        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
-        assert!(
-            velocity.0.length() < f32::EPSILON,
-            "Unit should stop when all waypoints consumed, got {:?}",
-            velocity.0
-        );
-    }
-
-    #[test]
-    fn unit_stops_at_range_even_with_remaining_waypoints() {
-        let mut app = create_movement_test_app();
-        let stats = unit_stats(UnitType::Soldier);
-
-        let target = spawn_target_at(app.world_mut(), 500.0);
-        // Place unit within attack range of target
-        let unit = spawn_unit_at(
-            app.world_mut(),
-            500.0 - stats.attack_range + 1.0,
-            stats.move_speed,
-            Some(target),
-        );
-
-        // Give it a path with remaining waypoints
-        let mut nav_path = app.world_mut().get_mut::<NavPath>(unit).unwrap();
-        nav_path.set(
-            vec![Vec2::new(600.0, 100.0), Vec2::new(700.0, 100.0)],
-            Some(target),
-        );
-
-        app.update();
-
-        let velocity = app.world().get::<PreferredVelocity>(unit).unwrap();
-        assert!(
-            velocity.0.length() < f32::EPSILON,
-            "Unit in attack range should stop even with waypoints, got {:?}",
-            velocity.0
         );
     }
 }

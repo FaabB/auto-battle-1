@@ -10,8 +10,8 @@ use bevy::state::state::FreelyMutableState;
 use bevy::window::WindowPlugin;
 
 use crate::gameplay::combat::AttackTimer;
+use crate::gameplay::flow_field::AssignedGoal;
 use crate::gameplay::units::avoidance::{AvoidanceAgent, PreferredVelocity};
-use crate::gameplay::units::pathfinding::NavPath;
 use crate::gameplay::units::{UNIT_RADIUS, Unit, UnitType, unit_stats};
 use crate::gameplay::{CombatStats, EntityExtent, Health, Movement, Target, TargetingState, Team};
 
@@ -145,9 +145,9 @@ pub fn init_input_resources(app: &mut App) {
 
 /// Spawn a test unit with the full Soldier archetype at `(x, y)`.
 ///
-/// Includes: Unit, UnitType::Soldier, Team, Target, TargetingState::Seeking,
+/// Includes: Unit, UnitType::Soldier, Team, Target, TargetingState::Moving,
 /// Health, CombatStats, Movement, AttackTimer, Transform, GlobalTransform,
-/// Collider, LinearVelocity, NavPath.
+/// Collider, LinearVelocity.
 ///
 /// Callers can override specific components via `world.entity_mut(id).insert(...)`.
 #[allow(dead_code)]
@@ -159,7 +159,7 @@ pub fn spawn_test_unit(world: &mut World, team: Team, x: f32, y: f32) -> Entity 
             UnitType::Soldier,
             team,
             Target,
-            TargetingState::Seeking,
+            TargetingState::Moving,
             Health::new(stats.hp),
             CombatStats {
                 damage: stats.damage,
@@ -182,7 +182,10 @@ pub fn spawn_test_unit(world: &mut World, team: Team, x: f32, y: f32) -> Entity 
             LinearVelocity::ZERO,
             PreferredVelocity::default(),
             AvoidanceAgent::default(),
-            NavPath::default(),
+            match team {
+                Team::Player => AssignedGoal::EnemyFortress,
+                Team::Enemy => AssignedGoal::PlayerFortress,
+            },
         ))
         .id()
 }

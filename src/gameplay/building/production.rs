@@ -1,7 +1,6 @@
 //! Building production: timer ticking, unit spawning, and production progress bars.
 
 use bevy::prelude::*;
-use vleue_navigator::prelude::*;
 
 use super::ProductionTimer;
 use crate::gameplay::building::building_stats;
@@ -91,17 +90,8 @@ pub(super) fn tick_production_and_spawn_units(
     time: Res<Time>,
     mut buildings: Query<(&super::Building, &mut ProductionTimer, &Transform)>,
     unit_assets: Res<UnitAssets>,
-    navmeshes: Option<Res<Assets<NavMesh>>>,
-    navmesh_query: Option<Single<(&ManagedNavMesh, &NavMeshStatus)>>,
     mut commands: Commands,
 ) {
-    // Extract navmesh if available and built
-    let navmesh = navmesh_query.and_then(|inner| {
-        let (managed, status) = *inner;
-        let meshes = navmeshes.as_ref()?;
-        (*status == NavMeshStatus::Built).then(|| meshes.get(managed))?
-    });
-
     for (building, mut timer, transform) in &mut buildings {
         timer.0.tick(time.delta());
 
@@ -109,7 +99,7 @@ pub(super) fn tick_production_and_spawn_units(
             let stats = building_stats(building.building_type);
             if let Some(unit_type) = stats.produced_unit {
                 let center = transform.translation.xy();
-                let spawn_xy = random_navigable_spawn(center, BUILDING_SPAWN_RADIUS, navmesh);
+                let spawn_xy = random_navigable_spawn(center, BUILDING_SPAWN_RADIUS);
 
                 spawn_unit(
                     &mut commands,

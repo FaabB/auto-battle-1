@@ -22,6 +22,7 @@ pub mod building;
 pub mod combat;
 pub mod economy;
 pub mod endgame_detection;
+pub mod flow_field;
 mod hud;
 pub mod spatial_hash;
 pub mod units;
@@ -204,6 +205,7 @@ pub fn plugin(app: &mut App) {
         combat::plugin,
         economy::plugin,
         endgame_detection::plugin,
+        flow_field::plugin,
         hud::plugin,
         units::plugin,
     ));
