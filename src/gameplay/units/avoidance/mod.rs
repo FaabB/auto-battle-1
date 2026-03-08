@@ -22,7 +22,7 @@ const DEFAULT_VELOCITY_SMOOTHING: f32 = 0.85;
 
 // === Components ===
 
-/// The velocity the unit wants to move at (from pathfinding/movement logic).
+/// The velocity the unit wants to move at (from flow field / movement logic).
 /// Written by `unit_movement`, read by `compute_avoidance`.
 #[derive(Component, Debug, Clone, Copy, Reflect, Default)]
 #[reflect(Component)]
@@ -108,7 +108,7 @@ pub fn rebuild_spatial_hash(
 
 /// Compute ORCA-adjusted velocities for all units.
 ///
-/// Reads `PreferredVelocity` (desired direction from pathfinding) and
+/// Reads `PreferredVelocity` (desired direction from flow field / movement) and
 /// `LinearVelocity` (current velocity from last frame's ORCA output).
 /// Writes the ORCA result to `LinearVelocity`.
 pub fn compute_avoidance(

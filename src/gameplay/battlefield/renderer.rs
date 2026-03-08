@@ -13,12 +13,10 @@ use super::{
     zone_center_x,
 };
 use crate::gameplay::combat::{AttackTimer, HealthBarConfig};
-use crate::gameplay::units::UNIT_RADIUS;
 use crate::gameplay::{CombatStats, EntityExtent, Health, Target, TargetingState, Team};
 use crate::screens::GameState;
-use crate::third_party::{NavObstacle, solid_entity_layers};
+use crate::third_party::solid_entity_layers;
 use crate::{Z_BACKGROUND, Z_FORTRESS, Z_GRID, Z_ZONE};
-use vleue_navigator::prelude::*;
 
 use crate::theme::palette;
 
@@ -95,7 +93,6 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
         ))
         .insert((
             EntityExtent::Rect(fortress_size.x / 2.0, fortress_size.y / 2.0),
-            NavObstacle,
             RigidBody::Static,
             Collider::rectangle(fortress_size.x, fortress_size.y),
             solid_entity_layers(),
@@ -178,7 +175,6 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
         ))
         .insert((
             EntityExtent::Rect(fortress_size.x / 2.0, fortress_size.y / 2.0),
-            NavObstacle,
             RigidBody::Static,
             Collider::rectangle(fortress_size.x, fortress_size.y),
             solid_entity_layers(),
@@ -203,23 +199,4 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
             grid_index.insert(col, row, entity);
         }
     }
-
-    // NavMesh for unit pathfinding — covers the full battlefield.
-    // Obstacles (buildings, fortresses with NavObstacle marker) are auto-carved by
-    // NavmeshUpdaterPlugin. Agent radius ensures paths keep unit centers clear.
-    commands.spawn((
-        Name::new("Battlefield NavMesh"),
-        NavMeshSettings {
-            fixed: Triangulation::from_outer_edges(&[
-                Vec2::new(0.0, 0.0),
-                Vec2::new(BATTLEFIELD_WIDTH, 0.0),
-                Vec2::new(BATTLEFIELD_WIDTH, BATTLEFIELD_HEIGHT),
-                Vec2::new(0.0, BATTLEFIELD_HEIGHT),
-            ]),
-            agent_radius: UNIT_RADIUS,
-            ..default()
-        },
-        NavMeshUpdateMode::Direct,
-        DespawnOnExit(GameState::InGame),
-    ));
 }

@@ -1,7 +1,6 @@
 //! Continuous enemy spawning with ramping difficulty.
 
 use bevy::prelude::*;
-use vleue_navigator::prelude::*;
 
 use crate::gameplay::battlefield::EnemyFortress;
 use crate::screens::GameState;
@@ -81,8 +80,6 @@ fn tick_enemy_spawner(
     mut spawn_timer: ResMut<EnemySpawnTimer>,
     unit_assets: Res<UnitAssets>,
     enemy_fortress: Single<&Transform, With<EnemyFortress>>,
-    navmeshes: Option<Res<Assets<NavMesh>>>,
-    navmesh_query: Option<Single<(&ManagedNavMesh, &NavMeshStatus)>>,
     mut commands: Commands,
 ) {
     spawn_timer.elapsed_secs += time.delta_secs();
@@ -93,15 +90,7 @@ fn tick_enemy_spawner(
     }
 
     let fortress_pos = enemy_fortress.translation;
-
-    // Extract navmesh if available and built
-    let navmesh = navmesh_query.and_then(|inner| {
-        let (managed, status) = *inner;
-        let meshes = navmeshes.as_ref()?;
-        (*status == NavMeshStatus::Built).then(|| meshes.get(managed))?
-    });
-
-    let spawn_xy = super::random_navigable_spawn(fortress_pos.xy(), FORTRESS_SPAWN_RADIUS, navmesh);
+    let spawn_xy = super::random_navigable_spawn(fortress_pos.xy(), FORTRESS_SPAWN_RADIUS);
 
     super::spawn_unit(
         &mut commands,

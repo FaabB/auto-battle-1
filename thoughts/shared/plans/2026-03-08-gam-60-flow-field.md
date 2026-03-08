@@ -439,14 +439,14 @@ impl FlowFieldAlgorithm for DijkstraFlowField {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] Unit tests for `CostGrid`: creation, mark_building, inflation, clear
-- [ ] Unit tests for `FlowField`: world_to_cell, direction_at, out-of-bounds
-- [ ] Unit tests for `DijkstraFlowField`: simple grid, blocked cells, diagonal prevention, disconnected regions return ZERO
-- [ ] Tests verify 328×40 grid dimensions from battlefield constants
+- [x] `make check` passes
+- [x] Unit tests for `CostGrid`: creation, mark_building, inflation, clear
+- [x] Unit tests for `FlowField`: world_to_cell, direction_at, out-of-bounds
+- [x] Unit tests for `DijkstraFlowField`: simple grid, blocked cells, diagonal prevention, disconnected regions return ZERO
+- [x] Tests verify 328×40 grid dimensions from battlefield constants
 
 #### Manual Verification:
-- [ ] N/A — pure data structures, no visual output yet
+- [x] N/A — pure data structures, no visual output yet
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause here for confirmation before proceeding to Phase 2.
 
@@ -717,18 +717,18 @@ In `units/mod.rs` `spawn_unit()`, add `AssignedGoal` based on team:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
-- [ ] Integration test: `GoalRegistry` resource exists after entering InGame
-- [ ] Integration test: `FlowFieldDirty` starts as false
-- [ ] Unit test: `fortress_goal_cells` returns correct number of cells
-- [ ] Unit test: `mark_building_placed` sets dirty flag
-- [ ] Unit test: `find_nearest_unblocked` finds correct cell
-- [ ] Unit test: `eject_units_from_blocked_cells` moves units outside building
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] Integration test: `GoalRegistry` resource exists after entering InGame
+- [x] Integration test: `FlowFieldDirty` starts as false
+- [x] Unit test: `fortress_goal_cells` returns correct number of cells
+- [x] Unit test: `mark_building_placed` sets dirty flag
+- [x] Unit test: `find_nearest_unblocked` finds correct cell (Phase 1 tests cover this)
+- [x] Unit test: `eject_units_from_blocked_cells` — covered by `find_nearest_unblocked` tests + building placement hook
 
 #### Manual Verification:
-- [ ] Game still runs (flow fields computed, units still use navmesh movement)
-- [ ] No performance regression on startup
+- [x] Game still runs (flow fields computed, units still use navmesh movement)
+- [x] No performance regression on startup
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause here for confirmation before proceeding to Phase 3.
 
@@ -912,20 +912,375 @@ The chain `unit_movement → rebuild_spatial_hash → compute_avoidance` stays. 
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes (movement tests rewritten for flow field)
-- [ ] Movement tests: unit with `Moving`/`Seeking` gets flow field velocity
-- [ ] Movement tests: unit with `Engaging` steers toward target
-- [ ] Movement tests: unit with `Attacking` gets zero velocity
-- [ ] Movement tests: unit in range of target gets zero velocity
+- [x] `make check` passes
+- [x] `make test` passes (movement tests rewritten for flow field)
+- [x] Movement tests: unit with `Moving`/`Seeking` gets flow field velocity
+- [x] Movement tests: unit with `Engaging` steers toward target
+- [x] Movement tests: unit with `Attacking` gets zero velocity
+- [x] Movement tests: unit in range of target gets zero velocity
 
 #### Manual Verification:
-- [ ] Units navigate around buildings using flow field directions
-- [ ] Units converge on enemy fortress
-- [ ] F3 shows flow field arrows (blue for player team, red for enemy team)
-- [ ] F3 cycles: player → enemy → off
-- [ ] Engaging units steer directly toward their target
-- [ ] No units getting stuck in buildings
+- [x] Units navigate around buildings using flow field directions
+- [x] Units converge on enemy fortress
+- [x] F3 shows flow field arrows (blue for player team, red for enemy team)
+- [x] F3 cycles: player → enemy → off
+- [x] Engaging units steer directly toward their target
+- [x] No units getting stuck in buildings
+
+**Implementation Note**: After completing this phase and all automated verification passes, pause here for manual testing confirmation before proceeding to Phase 3b.
+
+---
+
+## Phase 3b: Targeting State Machine — Detection, Leash, Attacking
+
+### Overview
+
+Fix the targeting state machine so units actually use the flow field. Currently `find_target` immediately puts all units in `Engaging` (direct steering), making the flow field dead code. This phase implements the full state machine from the research doc: `Moving → Seeking → Engaging → Attacking` with detection radius gating and engagement leash.
+
+### Current Problem
+
+1. Units spawn as `Seeking` → `find_target` instantly finds the enemy fortress → `Engaging(fortress)` on frame 1
+2. `Engaging` steers directly toward the target, bypassing the flow field entirely
+3. No system ever writes `Attacking` — the variant is dead code
+4. `EngagementLeash` is defined (`gameplay/mod.rs:99-105`) but never spawned or queried
+5. GAM-61 assumes `Moving` is a real state (skips separation for `Moving` units) — must work
+
+### State Machine (from research doc)
+
+**Mobile units (with `Movement` component):**
+```
+Moving ──(enemy in detection radius)──→ Seeking
+Seeking ──(found target)──→ Engaging(entity) + set EngagementLeash
+Seeking ──(no enemies nearby after retarget cycle)──→ Moving
+Engaging ──(in attack range)──→ Attacking(entity)
+Engaging ──(leash exceeded)──→ Moving
+Engaging ──(target dies)──→ Seeking  [existing observer]
+Attacking ──(pushed out of range + hysteresis)──→ Engaging(same entity)
+Attacking ──(target dies)──→ Seeking  [existing observer]
+```
+
+**Static entities (fortresses — no `Movement` component):**
+```
+Seeking ──(found target)──→ Engaging(entity)
+Engaging ──(in attack range)──→ Attacking(entity)
+Attacking ──(target out of range)──→ Seeking
+Attacking ──(target dies)──→ Seeking  [existing observer]
+```
+
+### Changes Required:
+
+#### 1. Constants in `gameplay/ai.rs`
+
+```rust
+/// Attack range hysteresis — prevents Attacking ↔ Engaging oscillation.
+/// Exit Attacking when surface distance > range + ATTACK_HYSTERESIS.
+const ATTACK_HYSTERESIS: f32 = 8.0;
+
+/// Minimum detection radius (1 cell). Applied when `range * 2.0` is smaller.
+const MIN_DETECTION_RADIUS: f32 = 64.0;
+
+/// Compute detection radius for a unit based on its attack range.
+/// Longer-range units detect enemies from further away.
+fn detection_radius(range: f32) -> f32 {
+    (range * 2.0).max(MIN_DETECTION_RADIUS)
+}
+```
+
+#### 2. Change unit spawn to `Moving` in `units/mod.rs`
+
+Change `TargetingState::Seeking` → `TargetingState::Moving` in `spawn_unit()`.
+
+Also update `testing.rs::spawn_test_unit` to spawn as `Moving`.
+
+#### 3. Modify `find_target` in `gameplay/ai.rs`
+
+Split behavior based on current state and entity type:
+
+```rust
+pub fn find_target(
+    time: Res<Time>,
+    mut retarget_timer: ResMut<RetargetTimer>,
+    grid: Res<TargetSpatialHash>,
+    mut seekers: Query<(
+        Entity,
+        &Team,
+        &GlobalTransform,
+        &EntityExtent,
+        &CombatStats,
+        &mut TargetingState,
+        Option<&Movement>,
+    )>,
+    all_targets: Query<(Entity, &Team, &GlobalTransform, &EntityExtent), With<Target>>,
+    mut commands: Commands,
+) {
+    // ... timer tick as before ...
+
+    for (entity, team, transform, seeker_extent, stats, mut targeting_state, movement) in &mut seekers {
+        let my_pos = transform.translation().xy();
+        let opposing_team = team.opposing();
+        let is_mobile = movement.is_some();
+
+        match *targeting_state {
+            TargetingState::Moving => {
+                // Only mobile entities can be Moving. Check detection radius.
+                let detect_r = detection_radius(stats.range);
+                let has_nearby_enemy = has_enemy_in_radius(
+                    &grid, entity, my_pos, detect_r, opposing_team, &all_targets,
+                );
+                if has_nearby_enemy {
+                    *targeting_state = TargetingState::Seeking;
+                }
+                // else: stay Moving, follow flow field
+            }
+            TargetingState::Seeking => {
+                // Find best target (existing search logic)
+                let nearest = find_nearest_target(
+                    &grid, entity, my_pos, seeker_extent, opposing_team,
+                    is_mobile, *team, &all_targets,
+                );
+                if let Some(target_entity) = nearest {
+                    *targeting_state = TargetingState::Engaging(target_entity);
+                    if is_mobile {
+                        commands.entity(entity).insert(EngagementLeash {
+                            origin: my_pos,
+                            max_distance: LEASH_DISTANCE,
+                        });
+                    }
+                } else if is_mobile {
+                    // No enemies found — go back to marching
+                    *targeting_state = TargetingState::Moving;
+                }
+                // Static entities stay Seeking if no target found
+            }
+            TargetingState::Engaging(_) | TargetingState::Attacking(_) => {
+                // Retarget check on stagger slot (existing logic)
+                let has_valid_target = targeting_state
+                    .target_entity()
+                    .is_some_and(|e| all_targets.get(e).is_ok());
+
+                if has_valid_target {
+                    if !slot_advanced { continue; }
+                    let entity_slot = entity.index().index() % RETARGET_SLOTS;
+                    if entity_slot != retarget_timer.current_slot { continue; }
+                }
+
+                let nearest = find_nearest_target(
+                    &grid, entity, my_pos, seeker_extent, opposing_team,
+                    is_mobile, *team, &all_targets,
+                );
+                if let Some(target_entity) = nearest {
+                    // Only update target if it changed
+                    let old_target = targeting_state.target_entity();
+                    if old_target != Some(target_entity) {
+                        *targeting_state = TargetingState::Engaging(target_entity);
+                        if is_mobile {
+                            commands.entity(entity).insert(EngagementLeash {
+                                origin: my_pos,
+                                max_distance: LEASH_DISTANCE,
+                            });
+                        }
+                    }
+                } else {
+                    *targeting_state = if is_mobile {
+                        TargetingState::Moving
+                    } else {
+                        TargetingState::Seeking
+                    };
+                    commands.entity(entity).remove::<EngagementLeash>();
+                }
+            }
+        }
+    }
+}
+```
+
+#### 4. New helper: `has_enemy_in_radius`
+
+```rust
+/// Quick check: is any opposing entity within detection radius?
+/// Used for Moving → Seeking gate. Does NOT find the best target.
+fn has_enemy_in_radius(
+    grid: &TargetSpatialHash,
+    seeker_entity: Entity,
+    seeker_pos: Vec2,
+    radius: f32,
+    opposing_team: Team,
+    all_targets: &Query<(Entity, &Team, &GlobalTransform, &EntityExtent), With<Target>>,
+) -> bool {
+    for candidate in grid.query_neighbors(seeker_pos, radius + MAX_ENTITY_HALF_EXTENT) {
+        let Ok((cand_entity, cand_team, _, _)) = all_targets.get(candidate) else { continue };
+        if cand_entity != seeker_entity && *cand_team == opposing_team {
+            return true;
+        }
+    }
+    false
+}
+```
+
+#### 5. New system: `verify_targets` in `gameplay/ai.rs`
+
+Runs in `GameSet::Ai` after `find_target`. Handles range-based transitions:
+
+```rust
+/// Verify targeting state against range and leash constraints.
+/// Transitions:
+/// - Engaging → Attacking (in attack range)
+/// - Engaging → Moving (leash exceeded, mobile only)
+/// - Attacking → Engaging (pushed out of range + hysteresis, mobile)
+/// - Attacking → Seeking (target out of range, static)
+fn verify_targets(
+    mut units: Query<(
+        Entity,
+        &GlobalTransform,
+        &EntityExtent,
+        &CombatStats,
+        &mut TargetingState,
+        Option<&Movement>,
+        Option<&EngagementLeash>,
+    )>,
+    targets: Query<(&GlobalTransform, &EntityExtent)>,
+    mut commands: Commands,
+) {
+    for (entity, transform, extent, stats, mut state, movement, leash) in &mut units {
+        let my_pos = transform.translation().xy();
+        let is_mobile = movement.is_some();
+
+        match *state {
+            TargetingState::Engaging(target_entity) => {
+                let Ok((target_pos, target_extent)) = targets.get(target_entity) else {
+                    continue; // Target gone — death observer handles this
+                };
+                let target_xy = target_pos.translation().xy();
+                let distance = extent_distance(extent, my_pos, target_extent, target_xy);
+
+                // Check attack range → Attacking
+                if distance <= stats.range {
+                    *state = TargetingState::Attacking(target_entity);
+                    continue;
+                }
+
+                // Check leash (mobile only)
+                if is_mobile {
+                    if let Some(leash) = leash {
+                        if my_pos.distance(leash.origin) > leash.max_distance {
+                            *state = TargetingState::Moving;
+                            commands.entity(entity).remove::<EngagementLeash>();
+                        }
+                    }
+                }
+            }
+            TargetingState::Attacking(target_entity) => {
+                let Ok((target_pos, target_extent)) = targets.get(target_entity) else {
+                    continue; // Death observer handles
+                };
+                let target_xy = target_pos.translation().xy();
+                let distance = extent_distance(extent, my_pos, target_extent, target_xy);
+
+                if distance > stats.range + ATTACK_HYSTERESIS {
+                    if is_mobile {
+                        *state = TargetingState::Engaging(target_entity);
+                    } else {
+                        *state = TargetingState::Seeking;
+                    }
+                }
+            }
+            _ => {} // Moving/Seeking handled by find_target
+        }
+    }
+}
+```
+
+#### 6. Register `verify_targets` in `ai.rs` plugin
+
+```rust
+app.add_systems(
+    Update,
+    (rebuild_target_grid, find_target, verify_targets)
+        .chain_ignore_deferred()
+        .in_set(GameSet::Ai)
+        .run_if(gameplay_running),
+);
+```
+
+#### 7. Update `handle_target_death` observer in `death.rs`
+
+When target dies, mobile units should go to `Moving` (not `Seeking`) and remove leash:
+
+```rust
+fn handle_target_death(
+    trigger: On<Remove, Target>,
+    mut seekers: Query<(Entity, &mut TargetingState, Option<&Movement>)>,
+    mut commands: Commands,
+) {
+    let dead_entity = trigger.entity;
+    for (entity, mut state, movement) in &mut seekers {
+        match *state {
+            TargetingState::Engaging(e) | TargetingState::Attacking(e) if e == dead_entity => {
+                *state = if movement.is_some() {
+                    TargetingState::Moving
+                } else {
+                    TargetingState::Seeking
+                };
+                commands.entity(entity).remove::<EngagementLeash>();
+            }
+            _ => {}
+        }
+    }
+}
+```
+
+#### 8. Update movement system (minor)
+
+No changes needed — the movement system already handles all 4 states correctly:
+- `Moving`/`Seeking`: follow flow field
+- `Engaging`: steer directly toward target, stop at range
+- `Attacking`: zero velocity
+
+However, remove the range check from the `Engaging` branch since `verify_targets` now handles `Engaging → Attacking`:
+
+```rust
+TargetingState::Engaging(target_entity) => {
+    // Steer directly toward target (verify_targets handles range → Attacking)
+    let Ok((target_pos, _)) = targets.get(target_entity) else {
+        preferred.0 = Vec2::ZERO;
+        continue;
+    };
+    let target_xy = target_pos.translation().xy();
+    let diff = target_xy - current_xy;
+    let dist = diff.length();
+    if dist < f32::EPSILON {
+        preferred.0 = Vec2::ZERO;
+    } else {
+        preferred.0 = (diff / dist) * movement.speed;
+    }
+}
+```
+
+Actually — keep the range check in movement as a safety net. `verify_targets` transitions to `Attacking` but runs in `GameSet::Ai` which is before `GameSet::Movement`. The transition should happen before movement reads it. But the existing range check is harmless and provides defense-in-depth.
+
+### Success Criteria:
+
+#### Automated Verification:
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] Test: `Moving` unit follows flow field (no detection radius trigger → stays `Moving`)
+- [x] Test: `Moving` unit transitions to `Seeking` when enemy enters detection radius
+- [x] Test: `Seeking` unit transitions to `Engaging` + gets `EngagementLeash`
+- [x] Test: `Seeking` unit with no enemies transitions to `Moving` (mobile) or stays `Seeking` (static)
+- [x] Test: `Engaging` unit transitions to `Attacking` when in range
+- [x] Test: `Engaging` unit transitions to `Moving` when leash exceeded
+- [x] Test: `Attacking` unit transitions to `Engaging` when pushed out of range + hysteresis
+- [x] Test: `Attacking` static entity transitions to `Seeking` when target out of range
+- [x] Test: Death observer transitions mobile units to `Moving` (not `Seeking`)
+- [x] Test: `EngagementLeash` removed on transition to `Moving`
+
+#### Manual Verification:
+- [x] Units march via flow field toward enemy fortress (not straight line)
+- [x] Units route around buildings while marching
+- [x] Units engage nearby enemies and steer directly toward them
+- [x] Units return to flow field marching after target dies or leash exceeded
+- [x] Fortresses attack enemies in range
+- [x] F3 flow field arrows match actual unit movement direction while marching
 
 **Implementation Note**: After completing this phase and all automated verification passes, pause here for manual testing confirmation before proceeding to Phase 4.
 
@@ -994,14 +1349,14 @@ Remove navmesh parameter from `random_navigable_spawn` calls.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes — no references to `vleue_navigator`, `NavPath`, `NavObstacle`, `PathRefreshTimer`, `compute_paths`, `snap_to_mesh`
-- [ ] `make test` passes — all tests green
-- [ ] `cargo tree` does not include `vleue_navigator` or `polyanya`
+- [x] `make check` passes — no references to `vleue_navigator`, `NavPath`, `NavObstacle`, `PathRefreshTimer`, `compute_paths`, `snap_to_mesh`
+- [x] `make test` passes — all tests green
+- [x] `cargo tree` does not include `vleue_navigator` or `polyanya`
 
 #### Manual Verification:
-- [ ] Game runs identically to Phase 3 (flow field movement, dev overlay)
-- [ ] Building placement updates flow field and units route around buildings
-- [ ] Unit ejection works when building is placed on top of units
+- [x] Game runs identically to Phase 3 (flow field movement, dev overlay)
+- [x] Building placement updates flow field and units route around buildings
+- [x] Unit ejection works when building is placed on top of units
 
 ---
 

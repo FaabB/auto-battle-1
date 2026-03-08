@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use crate::gameplay::{Health, Target, TargetingState};
+use crate::gameplay::{EngagementLeash, Health, Movement, Target, TargetingState};
 use crate::{GameSet, gameplay_running};
 
 /// `SystemSet` for death detection. Other systems can order against this
@@ -20,13 +20,22 @@ fn check_death(mut commands: Commands, query: Query<(Entity, &Health)>) {
 }
 
 /// When a targetable entity dies (Target removed during despawn),
-/// transition all orphaned Engaging/Attacking units to Seeking.
-fn handle_target_death(trigger: On<Remove, Target>, mut seekers: Query<&mut TargetingState>) {
+/// transition orphaned units: mobile → Moving, static → Seeking. Remove leash.
+fn handle_target_death(
+    trigger: On<Remove, Target>,
+    mut seekers: Query<(Entity, &mut TargetingState, Option<&Movement>)>,
+    mut commands: Commands,
+) {
     let dead_entity = trigger.entity;
-    for mut state in &mut seekers {
+    for (entity, mut state, movement) in &mut seekers {
         match *state {
             TargetingState::Engaging(e) | TargetingState::Attacking(e) if e == dead_entity => {
-                *state = TargetingState::Seeking;
+                *state = if movement.is_some() {
+                    TargetingState::Moving
+                } else {
+                    TargetingState::Seeking
+                };
+                commands.entity(entity).remove::<EngagementLeash>();
             }
             _ => {}
         }
@@ -57,8 +66,15 @@ mod observer_tests {
         app
     }
 
-    /// Spawn a minimal entity with TargetingState that can be orphaned.
-    fn spawn_seeker(world: &mut World, state: TargetingState) -> Entity {
+    /// Spawn a mobile seeker (has Movement) with TargetingState that can be orphaned.
+    fn spawn_mobile_seeker(world: &mut World, state: TargetingState) -> Entity {
+        world
+            .spawn((Team::Player, state, Movement { speed: 50.0 }))
+            .id()
+    }
+
+    /// Spawn a static seeker (no Movement) with TargetingState that can be orphaned.
+    fn spawn_static_seeker(world: &mut World, state: TargetingState) -> Entity {
         world.spawn((Team::Player, state)).id()
     }
 
@@ -77,22 +93,46 @@ mod observer_tests {
     }
 
     #[test]
-    fn orphaned_engaging_unit_transitions_to_seeking() {
+    fn orphaned_mobile_engaging_transitions_to_moving() {
         let mut app = create_observer_test_app();
         let target = spawn_mortal_target(app.world_mut());
-        let seeker = spawn_seeker(app.world_mut(), TargetingState::Engaging(target));
+        let seeker = spawn_mobile_seeker(app.world_mut(), TargetingState::Engaging(target));
 
         app.update(); // check_death despawns target → observer fires
+
+        let state = app.world().get::<TargetingState>(seeker).unwrap();
+        assert_eq!(*state, TargetingState::Moving);
+    }
+
+    #[test]
+    fn orphaned_static_engaging_transitions_to_seeking() {
+        let mut app = create_observer_test_app();
+        let target = spawn_mortal_target(app.world_mut());
+        let seeker = spawn_static_seeker(app.world_mut(), TargetingState::Engaging(target));
+
+        app.update();
 
         let state = app.world().get::<TargetingState>(seeker).unwrap();
         assert_eq!(*state, TargetingState::Seeking);
     }
 
     #[test]
-    fn orphaned_attacking_unit_transitions_to_seeking() {
+    fn orphaned_mobile_attacking_transitions_to_moving() {
         let mut app = create_observer_test_app();
         let target = spawn_mortal_target(app.world_mut());
-        let seeker = spawn_seeker(app.world_mut(), TargetingState::Attacking(target));
+        let seeker = spawn_mobile_seeker(app.world_mut(), TargetingState::Attacking(target));
+
+        app.update();
+
+        let state = app.world().get::<TargetingState>(seeker).unwrap();
+        assert_eq!(*state, TargetingState::Moving);
+    }
+
+    #[test]
+    fn orphaned_static_attacking_transitions_to_seeking() {
+        let mut app = create_observer_test_app();
+        let target = spawn_mortal_target(app.world_mut());
+        let seeker = spawn_static_seeker(app.world_mut(), TargetingState::Attacking(target));
 
         app.update();
 
@@ -105,7 +145,7 @@ mod observer_tests {
         let mut app = create_observer_test_app();
         let _target = spawn_mortal_target(app.world_mut());
         let other = app.world_mut().spawn((Team::Enemy, Target)).id();
-        let seeker = spawn_seeker(app.world_mut(), TargetingState::Engaging(other));
+        let seeker = spawn_mobile_seeker(app.world_mut(), TargetingState::Engaging(other));
 
         app.update(); // target dies, but seeker is engaging `other`
 
@@ -117,7 +157,7 @@ mod observer_tests {
     fn seeking_unit_unaffected_by_death() {
         let mut app = create_observer_test_app();
         let _target = spawn_mortal_target(app.world_mut());
-        let seeker = spawn_seeker(app.world_mut(), TargetingState::Seeking);
+        let seeker = spawn_static_seeker(app.world_mut(), TargetingState::Seeking);
 
         app.update();
 
@@ -129,16 +169,43 @@ mod observer_tests {
     fn multiple_orphans_all_transition() {
         let mut app = create_observer_test_app();
         let target = spawn_mortal_target(app.world_mut());
-        let s1 = spawn_seeker(app.world_mut(), TargetingState::Engaging(target));
-        let s2 = spawn_seeker(app.world_mut(), TargetingState::Attacking(target));
-        let s3 = spawn_seeker(app.world_mut(), TargetingState::Engaging(target));
+        let s1 = spawn_mobile_seeker(app.world_mut(), TargetingState::Engaging(target));
+        let s2 = spawn_static_seeker(app.world_mut(), TargetingState::Attacking(target));
+        let s3 = spawn_mobile_seeker(app.world_mut(), TargetingState::Engaging(target));
 
         app.update();
 
-        for seeker in [s1, s2, s3] {
-            let state = app.world().get::<TargetingState>(seeker).unwrap();
-            assert_eq!(*state, TargetingState::Seeking);
-        }
+        // Mobile units → Moving, static → Seeking
+        assert_eq!(
+            *app.world().get::<TargetingState>(s1).unwrap(),
+            TargetingState::Moving
+        );
+        assert_eq!(
+            *app.world().get::<TargetingState>(s2).unwrap(),
+            TargetingState::Seeking
+        );
+        assert_eq!(
+            *app.world().get::<TargetingState>(s3).unwrap(),
+            TargetingState::Moving
+        );
+    }
+
+    #[test]
+    fn death_removes_engagement_leash() {
+        let mut app = create_observer_test_app();
+        let target = spawn_mortal_target(app.world_mut());
+        let seeker = spawn_mobile_seeker(app.world_mut(), TargetingState::Engaging(target));
+        app.world_mut().entity_mut(seeker).insert(EngagementLeash {
+            origin: Vec2::new(100.0, 100.0),
+            max_distance: 192.0,
+        });
+
+        app.update();
+
+        assert!(
+            app.world().get::<EngagementLeash>(seeker).is_none(),
+            "Leash should be removed on target death"
+        );
     }
 }
 

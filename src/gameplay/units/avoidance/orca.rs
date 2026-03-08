@@ -1,7 +1,7 @@
 //! ORCA (Optimal Reciprocal Collision Avoidance) — pure math, no Bevy dependency.
 //!
 //! Computes collision-free velocities for agents moving in 2D.
-//! Only handles agent-agent avoidance; static obstacles are handled by navmesh pathfinding.
+//! Only handles agent-agent avoidance; static obstacles are handled by flow field routing.
 //!
 //! Based on the RVO2 reference implementation (Agent.cpp).
 
@@ -23,7 +23,7 @@ pub struct AgentSnapshot {
     pub position: Vec2,
     /// Current velocity (from last frame's ORCA output).
     pub velocity: Vec2,
-    /// Desired velocity (from pathfinding).
+    /// Desired velocity (from flow field / movement logic).
     pub preferred: Vec2,
     pub radius: f32,
     pub max_speed: f32,

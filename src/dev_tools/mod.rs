@@ -4,17 +4,24 @@
 //! This module is stripped from release builds.
 
 use bevy::prelude::*;
-use vleue_navigator::prelude::NavMeshesDebug;
 
 use avian2d::prelude::LinearVelocity;
 
+use crate::gameplay::Team;
+use crate::gameplay::flow_field::GoalRegistry;
 use crate::gameplay::units::Unit;
 use crate::gameplay::units::avoidance::PreferredVelocity;
-use crate::gameplay::units::pathfinding::NavPath;
 
 /// Marker resource: when present, the world inspector is shown.
 #[derive(Resource)]
 struct ShowWorldInspector;
+
+/// Marker resource: when present, flow field debug arrows are drawn.
+#[derive(Resource, Debug)]
+struct FlowFieldDebug {
+    /// Which team's flow field to display.
+    show_team: Team,
+}
 
 pub fn plugin(app: &mut App) {
     // Inspector requires EguiPlugin which needs the render backend.
@@ -28,12 +35,12 @@ pub fn plugin(app: &mut App) {
         app.add_systems(Update, toggle_world_inspector);
     }
 
-    // Navmesh + path debug overlays start OFF. Press F3 to toggle.
-    app.add_systems(Update, toggle_navmesh_debug);
+    // Flow field + avoidance debug overlays. Press F3 to toggle flow field.
+    app.add_systems(Update, toggle_flow_field_debug);
     app.add_systems(
         Update,
-        (debug_draw_unit_paths, debug_draw_avoidance)
-            .run_if(crate::gameplay_running.and(resource_exists::<NavMeshesDebug>)),
+        (debug_draw_flow_field, debug_draw_avoidance)
+            .run_if(crate::gameplay_running.and(resource_exists::<FlowFieldDebug>)),
     );
 }
 
@@ -52,17 +59,66 @@ fn toggle_world_inspector(
     }
 }
 
-/// Toggle navmesh debug overlay and path gizmos with F3.
-fn toggle_navmesh_debug(
+/// Toggle flow field debug overlay with F3. Cycles: player → enemy → off.
+fn toggle_flow_field_debug(
     mut commands: Commands,
     input: Res<ButtonInput<KeyCode>>,
-    existing: Option<Res<NavMeshesDebug>>,
+    existing: Option<Res<FlowFieldDebug>>,
 ) {
     if input.just_pressed(KeyCode::F3) {
-        if existing.is_some() {
-            commands.remove_resource::<NavMeshesDebug>();
+        if let Some(debug) = existing {
+            match debug.show_team {
+                Team::Player => {
+                    commands.insert_resource(FlowFieldDebug {
+                        show_team: Team::Enemy,
+                    });
+                }
+                Team::Enemy => {
+                    commands.remove_resource::<FlowFieldDebug>();
+                }
+            }
         } else {
-            commands.insert_resource(NavMeshesDebug(Color::srgba(1.0, 0.0, 0.0, 0.15)));
+            commands.insert_resource(FlowFieldDebug {
+                show_team: Team::Player,
+            });
+        }
+    }
+}
+
+/// Draw flow field direction arrows.
+#[allow(clippy::cast_precision_loss)]
+fn debug_draw_flow_field(
+    debug: Res<FlowFieldDebug>,
+    registry: Option<Res<GoalRegistry>>,
+    mut gizmos: Gizmos,
+) {
+    let Some(registry) = registry else { return };
+
+    let flow_field = match debug.show_team {
+        // Player units go toward enemy fortress
+        Team::Player => &registry.enemy_fortress.flow_field,
+        // Enemy units go toward player fortress
+        Team::Enemy => &registry.player_fortress.flow_field,
+    };
+
+    let color = match debug.show_team {
+        Team::Player => Color::srgba(0.0, 0.5, 1.0, 0.6),
+        Team::Enemy => Color::srgba(1.0, 0.3, 0.3, 0.6),
+    };
+
+    // Draw an arrow for every cell
+    for row in 0..flow_field.rows {
+        for col in 0..flow_field.cols {
+            let idx = flow_field.index(col, row);
+            let dir = flow_field.directions[idx];
+            if dir == Vec2::ZERO {
+                continue;
+            }
+            let center = Vec2::new(
+                (col as f32 + 0.5) * flow_field.cell_size,
+                (row as f32 + 0.5) * flow_field.cell_size,
+            );
+            gizmos.arrow_2d(center, center + dir * 20.0, color);
         }
     }
 }
@@ -76,7 +132,7 @@ fn debug_draw_avoidance(
     for (transform, velocity, preferred) in &units {
         let pos = transform.translation().xy();
 
-        // Green arrow: preferred velocity (where pathfinding wants to go)
+        // Green arrow: preferred velocity (where flow field wants to go)
         if preferred.0.length_squared() > f32::EPSILON {
             gizmos.arrow_2d(pos, pos + preferred.0 * scale, Color::srgb(0.0, 1.0, 0.0));
         }
@@ -84,25 +140,6 @@ fn debug_draw_avoidance(
         // Cyan arrow: actual velocity (ORCA-adjusted)
         if velocity.0.length_squared() > f32::EPSILON {
             gizmos.arrow_2d(pos, pos + velocity.0 * scale, Color::srgb(0.0, 1.0, 1.0));
-        }
-    }
-}
-
-/// Draw yellow lines showing each unit's remaining navmesh path.
-fn debug_draw_unit_paths(
-    units: Query<(&GlobalTransform, &NavPath), With<Unit>>,
-    mut gizmos: Gizmos,
-) {
-    for (transform, nav_path) in &units {
-        if nav_path.waypoints.is_empty() {
-            continue;
-        }
-        let mut points = vec![transform.translation().xy()];
-        for &wp in &nav_path.waypoints[nav_path.current_index..] {
-            points.push(wp);
-        }
-        if points.len() >= 2 {
-            gizmos.linestrip_2d(points, Color::srgb(1.0, 1.0, 0.0));
         }
     }
 }
