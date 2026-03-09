@@ -21,8 +21,6 @@ pub const AVOIDANCE_RADIUS: f32 = UNIT_RADIUS * 2.0;
 const DEFAULT_TIME_HORIZON: f32 = 5.0;
 /// Maximum neighbors to consider per agent.
 const DEFAULT_MAX_NEIGHBORS: u32 = 10;
-/// Velocity smoothing blend factor (0.0 = keep old, 1.0 = fully ORCA).
-const DEFAULT_VELOCITY_SMOOTHING: f32 = 1.0;
 /// Number of iterations for `resolve_overlaps`. Multiple passes improve convergence
 /// in dense groups where a single pass can't fully separate all overlapping pairs.
 const OVERLAP_ITERATIONS: u32 = 3;
@@ -56,16 +54,12 @@ pub struct AdjustedVelocity(pub Vec2);
 pub struct AvoidanceAgent {
     /// Avoidance radius (typically matches collider radius).
     pub radius: f32,
-    /// How much of the avoidance adjustment this agent absorbs (0.0–1.0).
-    /// 0.5 = symmetric (both agents dodge equally). 1.0 = this agent takes full responsibility.
-    pub responsibility: f32,
 }
 
 impl Default for AvoidanceAgent {
     fn default() -> Self {
         Self {
             radius: AVOIDANCE_RADIUS,
-            responsibility: 0.5,
         }
     }
 }
@@ -82,8 +76,6 @@ pub struct AvoidanceConfig {
     pub max_neighbors: u32,
     /// Search radius for neighbors (pixels). Should be >= `max_speed * time_horizon`.
     pub neighbor_distance: f32,
-    /// Blend factor for velocity smoothing (0.0 = old velocity, 1.0 = raw ORCA result).
-    pub velocity_smoothing: f32,
     /// Shorter time horizon for stationary (attacking) neighbors.
     pub static_time_horizon: f32,
 }
@@ -94,7 +86,6 @@ impl Default for AvoidanceConfig {
             time_horizon: DEFAULT_TIME_HORIZON,
             neighbor_distance: DEFAULT_TIME_HORIZON.mul_add(50.0, AVOIDANCE_RADIUS * 2.0),
             max_neighbors: DEFAULT_MAX_NEIGHBORS,
-            velocity_smoothing: DEFAULT_VELOCITY_SMOOTHING,
             static_time_horizon: 0.5,
         }
     }
@@ -131,6 +122,16 @@ pub fn rebuild_spatial_hash(
     }
 }
 
+/// Snapshot for separation computation.
+struct SeparationSnapshot {
+    entity: Entity,
+    pos: Vec2,
+    preferred: Vec2,
+    max_speed: f32,
+    target: Option<Entity>,
+    team: Team,
+}
+
 /// Boids-style reactive repulsion between same-team units.
 ///
 /// - Same-team only — opposing units are invisible
@@ -154,54 +155,53 @@ pub fn apply_separation(
     targets: Query<&GlobalTransform>,
 ) {
     // Snapshot: can't read neighbor data while iterating query mutably
-    let snapshots: Vec<(Entity, Vec2, Vec2, f32, Option<Entity>, Team)> = units
+    let snapshots: Vec<SeparationSnapshot> = units
         .iter()
-        .map(|(e, gt, pv, mv, ts, team)| {
-            (
-                e,
-                gt.translation().xy(),
-                pv.0,
-                mv.speed,
-                ts.target_entity(),
-                *team,
-            )
+        .map(|(e, gt, pv, mv, ts, team)| SeparationSnapshot {
+            entity: e,
+            pos: gt.translation().xy(),
+            preferred: pv.0,
+            max_speed: mv.speed,
+            target: ts.target_entity(),
+            team: *team,
         })
         .collect();
 
     let index_map: HashMap<Entity, usize> = snapshots
         .iter()
         .enumerate()
-        .map(|(i, (e, ..))| (*e, i))
+        .map(|(i, s)| (s.entity, i))
         .collect();
+
+    let sep_radius_sq = SEPARATION_RADIUS * SEPARATION_RADIUS;
 
     let results: Vec<(Entity, Vec2)> = snapshots
         .iter()
-        .map(|(entity, pos, preferred, max_speed, target, team)| {
+        .map(|snap| {
             // Skip stationary units
-            if preferred.length_squared() < f32::EPSILON {
-                return (*entity, *preferred);
+            if snap.preferred.length_squared() < f32::EPSILON {
+                return (snap.entity, snap.preferred);
             }
 
             let mut separation = Vec2::ZERO;
-            let neighbors = hash.query_neighbors(*pos, SEPARATION_RADIUS);
+            let neighbors = hash.query_neighbors(snap.pos, SEPARATION_RADIUS);
 
             for neighbor_entity in neighbors {
-                if neighbor_entity == *entity {
+                if neighbor_entity == snap.entity {
                     continue;
                 }
                 let Some(&idx) = index_map.get(&neighbor_entity) else {
                     continue;
                 };
-                let (_, n_pos, _, _, n_target, n_team) = &snapshots[idx];
+                let neighbor = &snapshots[idx];
 
                 // Same-team only
-                if n_team != team {
+                if neighbor.team != snap.team {
                     continue;
                 }
 
-                let diff = *pos - *n_pos;
+                let diff = snap.pos - neighbor.pos;
                 let dist_sq = diff.length_squared();
-                let sep_radius_sq = SEPARATION_RADIUS * SEPARATION_RADIUS;
                 if dist_sq >= sep_radius_sq || dist_sq < f32::EPSILON {
                     continue;
                 }
@@ -211,10 +211,10 @@ pub fn apply_separation(
 
                 // Tangential push for shared targets
                 let radial = diff / dist;
-                let push_dir = if *target == *n_target && target.is_some() {
-                    let target_entity = target.unwrap();
+                let push_dir = if snap.target == neighbor.target && snap.target.is_some() {
+                    let target_entity = snap.target.unwrap();
                     targets.get(target_entity).map_or(radial, |target_gt| {
-                        let to_unit = *pos - target_gt.translation().xy();
+                        let to_unit = snap.pos - target_gt.translation().xy();
                         if to_unit.length_squared() > f32::EPSILON {
                             // Perpendicular to target→unit line
                             let tangent = Vec2::new(-to_unit.y, to_unit.x).normalize();
@@ -235,12 +235,12 @@ pub fn apply_separation(
                 separation += push_dir * strength;
             }
 
-            let mut new_preferred = *preferred + separation;
+            let mut new_preferred = snap.preferred + separation;
             // Clamp to max speed
-            if new_preferred.length_squared() > max_speed * max_speed {
-                new_preferred = new_preferred.normalize() * max_speed;
+            if new_preferred.length_squared() > snap.max_speed * snap.max_speed {
+                new_preferred = new_preferred.normalize() * snap.max_speed;
             }
-            (*entity, new_preferred)
+            (snap.entity, new_preferred)
         })
         .collect();
 
@@ -363,10 +363,7 @@ pub fn compute_avoidance(
 
             let orca_vel =
                 orca::compute_avoiding_velocity(agent.preferred, agent.max_speed, &lines);
-
-            // Velocity smoothing: blend ORCA result with current velocity
-            let smoothed = agent.velocity.lerp(orca_vel, config.velocity_smoothing);
-            (*entity, smoothed)
+            (*entity, orca_vel)
         })
         .collect();
 

@@ -432,6 +432,14 @@ fn search_radius(
     nearest.map(|(e, _)| e)
 }
 
+/// Per-engager data for cap enforcement sorting.
+struct EngagerInfo {
+    entity: Entity,
+    distance: f32,
+    is_attacking: bool,
+    is_mobile: bool,
+}
+
 /// Evict excess engagers from unit targets. Keeps closest N, kicks farthest to Moving/Seeking.
 /// Attacking units get priority (never evicted). Only applies to unit targets.
 fn enforce_engager_cap(
@@ -445,7 +453,7 @@ fn enforce_engager_cap(
     mut commands: Commands,
 ) {
     // Group engagers by target
-    let mut engagers_by_target: HashMap<Entity, Vec<(Entity, f32, bool, bool)>> = HashMap::new();
+    let mut engagers_by_target: HashMap<Entity, Vec<EngagerInfo>> = HashMap::new();
 
     for (entity, transform, state, movement) in &units {
         let (TargetingState::Engaging(target_entity) | TargetingState::Attacking(target_entity)) =
@@ -458,17 +466,16 @@ fn enforce_engager_cap(
             continue;
         };
 
-        let is_attacking = matches!(*state, TargetingState::Attacking(_));
         let target_pos = target_gt.translation().xy();
-        let distance = transform.translation().xy().distance(target_pos);
-        let is_mobile = movement.is_some();
-
-        engagers_by_target.entry(target_entity).or_default().push((
-            entity,
-            distance,
-            is_attacking,
-            is_mobile,
-        ));
+        engagers_by_target
+            .entry(target_entity)
+            .or_default()
+            .push(EngagerInfo {
+                entity,
+                distance: transform.translation().xy().distance(target_pos),
+                is_attacking: matches!(*state, TargetingState::Attacking(_)),
+                is_mobile: movement.is_some(),
+            });
     }
 
     // Enforce cap per target
@@ -479,21 +486,22 @@ fn enforce_engager_cap(
 
         // Sort: attacking first (never evicted), then by distance (closest first)
         engagers.sort_by(|a, b| {
-            b.2.cmp(&a.2) // attacking = true sorts first
-                .then(a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            b.is_attacking.cmp(&a.is_attacking).then(
+                a.distance
+                    .partial_cmp(&b.distance)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
         });
 
         // Evict excess (from the end — farthest non-attacking)
-        for &(entity, _, _, is_mobile) in
-            engagers.iter().skip(MAX_ENGAGERS_PER_UNIT_TARGET as usize)
-        {
-            if let Ok((_, _, mut state, _)) = units.get_mut(entity) {
-                *state = if is_mobile {
+        for engager in engagers.iter().skip(MAX_ENGAGERS_PER_UNIT_TARGET as usize) {
+            if let Ok((_, _, mut state, _)) = units.get_mut(engager.entity) {
+                *state = if engager.is_mobile {
                     TargetingState::Moving
                 } else {
                     TargetingState::Seeking
                 };
-                commands.entity(entity).remove::<EngagementLeash>();
+                commands.entity(engager.entity).remove::<EngagementLeash>();
             }
         }
     }

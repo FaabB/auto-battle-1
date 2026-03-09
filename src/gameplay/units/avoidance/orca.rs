@@ -86,34 +86,26 @@ pub fn compute_orca_line(a: &AgentSnapshot, b: &AgentSnapshot, time_horizon: f32
             // Project on legs.
             let leg = (dist_sq - combined_radius_sq).sqrt();
 
-            if det(rel_pos, w) > 0.0 {
-                // Project on left leg.
-                let direction = Vec2::new(
+            let direction = if det(rel_pos, w) > 0.0 {
+                // Left leg.
+                Vec2::new(
                     rel_pos.x.mul_add(leg, -(rel_pos.y * combined_radius)),
                     rel_pos.x.mul_add(combined_radius, rel_pos.y * leg),
-                ) / dist_sq;
-
-                let dot_product_2 = rel_vel.dot(direction);
-                let u = dot_product_2 * direction - rel_vel;
-
-                OrcaLine {
-                    point: a.velocity + a.responsibility * u,
-                    direction,
-                }
+                ) / dist_sq
             } else {
-                // Project on right leg.
-                let direction = -Vec2::new(
+                // Right leg.
+                -Vec2::new(
                     rel_pos.x.mul_add(leg, rel_pos.y * combined_radius),
                     (-rel_pos.x).mul_add(combined_radius, rel_pos.y * leg),
-                ) / dist_sq;
+                ) / dist_sq
+            };
 
-                let dot_product_2 = rel_vel.dot(direction);
-                let u = dot_product_2 * direction - rel_vel;
+            let dot_product_2 = rel_vel.dot(direction);
+            let u = dot_product_2 * direction - rel_vel;
 
-                OrcaLine {
-                    point: a.velocity + a.responsibility * u,
-                    direction,
-                }
+            OrcaLine {
+                point: a.velocity + a.responsibility * u,
+                direction,
             }
         }
     } else {
@@ -319,7 +311,6 @@ fn linear_program_3(lines: &[OrcaLine], fail_line: usize, current: Vec2, max_spe
         }
 
         // Optimize along the perpendicular of line i (pointing into the valid half-plane).
-        let temp_result = result;
         let opt_direction = Vec2::new(-lines[i].direction.y, lines[i].direction.x);
 
         // Use LP2 on projected lines with direction optimization (matching RVO2).
@@ -331,10 +322,6 @@ fn linear_program_3(lines: &[OrcaLine], fail_line: usize, current: Vec2, max_spe
         }
 
         distance = det(lines[i].direction, lines[i].point - result);
-
-        if result == temp_result && distance > f32::EPSILON {
-            // No progress. Expected in very dense crowds. Keep going.
-        }
     }
 
     result

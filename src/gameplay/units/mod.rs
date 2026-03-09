@@ -217,6 +217,7 @@ pub(super) fn plugin(app: &mut App) {
             avoidance::apply_separation,
             avoidance::compute_avoidance,
             avoidance::apply_movement,
+            avoidance::rebuild_spatial_hash, // Rebuild with post-movement positions
             avoidance::resolve_overlaps,
         )
             .chain_ignore_deferred()
