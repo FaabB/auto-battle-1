@@ -7,9 +7,7 @@ pub mod spawn;
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
-use self::avoidance::{
-    AdjustedVelocity, AvoidanceSpatialHash, PreferredVelocity, SEPARATION_RADIUS,
-};
+use self::avoidance::{AvoidanceSpatialHash, PreferredVelocity, SEPARATION_RADIUS};
 use crate::gameplay::combat::{
     AttackTimer, HealthBarConfig, UNIT_HEALTH_BAR_HEIGHT, UNIT_HEALTH_BAR_WIDTH,
     UNIT_HEALTH_BAR_Y_OFFSET,
@@ -138,7 +136,6 @@ pub fn spawn_unit(
             Collider::circle(UNIT_RADIUS),
             solid_entity_layers(),
             LockedAxes::ROTATION_LOCKED,
-            AdjustedVelocity::default(),
             PreferredVelocity::default(),
         ))
         .id()
@@ -193,8 +190,7 @@ fn setup_unit_assets(
 pub(super) fn plugin(app: &mut App) {
     app.register_type::<Unit>()
         .register_type::<UnitType>()
-        .register_type::<PreferredVelocity>()
-        .register_type::<AdjustedVelocity>();
+        .register_type::<PreferredVelocity>();
 
     app.insert_resource(AvoidanceSpatialHash(SpatialHash::new(SEPARATION_RADIUS)));
 
@@ -208,9 +204,7 @@ pub(super) fn plugin(app: &mut App) {
             movement::unit_movement,
             avoidance::rebuild_spatial_hash,
             avoidance::apply_separation,
-            avoidance::finalize_velocity,
             avoidance::apply_movement,
-            avoidance::rebuild_spatial_hash, // Rebuild with post-movement positions
             avoidance::resolve_overlaps,
         )
             .chain_ignore_deferred()

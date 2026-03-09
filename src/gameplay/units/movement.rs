@@ -13,8 +13,8 @@ use crate::gameplay::{EntityExtent, extent_distance};
 /// - `Engaging`: steer directly toward target; stop if in attack range.
 /// - `Attacking`: zero velocity.
 ///
-/// The downstream separation + `finalize_velocity` systems read `PreferredVelocity`
-/// and write the final `AdjustedVelocity`.
+/// The downstream `apply_separation` system adjusts `PreferredVelocity` in-place,
+/// then `apply_movement` integrates it into `Transform`.
 ///
 /// Runs in `GameSet::Movement`.
 pub(super) fn unit_movement(

@@ -23,17 +23,12 @@ const SEPARATION_STRENGTH: f32 = 30.0;
 
 // === Components ===
 
-/// The velocity the unit wants to move at (from flow field / movement logic).
-/// Written by `unit_movement`, read by `apply_separation` and `apply_movement`.
+/// The unit's velocity after movement + separation adjustment.
+/// Written by `unit_movement`, adjusted by `apply_separation`,
+/// read by `apply_movement` and `resolve_overlaps`.
 #[derive(Component, Debug, Clone, Copy, Reflect, Default)]
 #[reflect(Component)]
 pub struct PreferredVelocity(pub Vec2);
-
-/// The final velocity after avoidance adjustment.
-/// Written by `finalize_velocity`, read by `apply_movement` and `resolve_overlaps`.
-#[derive(Component, Debug, Clone, Copy, Reflect, Default)]
-#[reflect(Component)]
-pub struct AdjustedVelocity(pub Vec2);
 
 // === Resources ===
 
@@ -198,21 +193,11 @@ pub fn apply_separation(
     }
 }
 
-/// Copy `PreferredVelocity` (after separation) to `AdjustedVelocity`.
-/// Bridges the separation output to the movement/overlap pipeline.
-pub fn finalize_velocity(
-    mut units: Query<(&PreferredVelocity, &mut AdjustedVelocity), With<Unit>>,
-) {
-    for (preferred, mut adjusted) in &mut units {
-        adjusted.0 = preferred.0;
-    }
-}
-
-/// Apply adjusted velocity to transform directly.
+/// Apply preferred velocity to transform directly.
 /// Replaces avian2d physics integration for unit movement.
 pub fn apply_movement(
     time: Res<Time>,
-    mut units: Query<(&AdjustedVelocity, &mut Transform), With<Unit>>,
+    mut units: Query<(&PreferredVelocity, &mut Transform), With<Unit>>,
 ) {
     let dt = time.delta_secs();
     for (velocity, mut transform) in &mut units {
@@ -235,7 +220,7 @@ pub fn apply_movement(
 /// Applies to ALL teams (cross-team overlap resolution).
 pub fn resolve_overlaps(
     hash: Res<AvoidanceSpatialHash>,
-    mut units: Query<(Entity, &mut Transform, &AdjustedVelocity), With<Unit>>,
+    mut units: Query<(Entity, &mut Transform, &PreferredVelocity), With<Unit>>,
 ) {
     let min_dist = UNIT_RADIUS * 2.0;
     let min_dist_sq = min_dist * min_dist;
@@ -334,49 +319,61 @@ mod tests {
                 Transform::from_xyz(x, y, 0.0),
                 GlobalTransform::from(Transform::from_xyz(x, y, 0.0)),
                 PreferredVelocity(preferred),
-                AdjustedVelocity::default(),
                 TargetingState::Moving,
                 team,
             ))
             .id()
     }
 
-    // === finalize_velocity tests ===
+    /// Spawn a minimal unit for overlap tests (only needs Unit + Transform + PreferredVelocity).
+    fn spawn_overlap_unit(world: &mut World, x: f32, y: f32, velocity: Vec2) -> Entity {
+        world
+            .spawn((
+                Unit,
+                Transform::from_xyz(x, y, 0.0),
+                GlobalTransform::from(Transform::from_xyz(x, y, 0.0)),
+                PreferredVelocity(velocity),
+            ))
+            .id()
+    }
+
+    // === apply_movement tests ===
 
     #[test]
-    fn finalize_copies_preferred_to_adjusted() {
+    fn apply_movement_integrates_velocity() {
         let mut app = create_test_app();
-        app.add_systems(Update, finalize_velocity);
+        app.add_systems(Update, apply_movement);
 
-        let unit = spawn_unit(
-            app.world_mut(),
-            100.0,
-            100.0,
-            Vec2::new(50.0, 0.0),
-            Team::Player,
-        );
+        let unit = spawn_overlap_unit(app.world_mut(), 100.0, 100.0, Vec2::new(50.0, -20.0));
 
         app.update();
 
-        let vel = app.world().get::<AdjustedVelocity>(unit).unwrap();
+        let pos = app.world().get::<Transform>(unit).unwrap().translation.xy();
+        // Position should have moved from (100, 100) by velocity * dt
         assert!(
-            (vel.0 - Vec2::new(50.0, 0.0)).length() < f32::EPSILON,
-            "Should copy preferred to adjusted, got {:?}",
-            vel.0
+            pos.x > 100.0,
+            "X should increase with positive velocity, got {pos:?}"
+        );
+        assert!(
+            pos.y < 100.0,
+            "Y should decrease with negative velocity, got {pos:?}"
         );
     }
 
     #[test]
-    fn zero_preferred_stays_zero() {
+    fn apply_movement_zero_velocity_no_change() {
         let mut app = create_test_app();
-        app.add_systems(Update, finalize_velocity);
+        app.add_systems(Update, apply_movement);
 
-        let unit = spawn_unit(app.world_mut(), 100.0, 100.0, Vec2::ZERO, Team::Player);
+        let unit = spawn_overlap_unit(app.world_mut(), 100.0, 100.0, Vec2::ZERO);
 
         app.update();
 
-        let vel = app.world().get::<AdjustedVelocity>(unit).unwrap();
-        assert!(vel.0.length() < f32::EPSILON);
+        let pos = app.world().get::<Transform>(unit).unwrap().translation.xy();
+        assert!(
+            (pos - Vec2::new(100.0, 100.0)).length() < f32::EPSILON,
+            "Zero velocity should not move, got {pos:?}"
+        );
     }
 
     // === resolve_overlaps tests ===
@@ -390,24 +387,8 @@ mod tests {
         );
 
         // Two units 5px apart (min_dist = 2*UNIT_RADIUS = 12)
-        let a = app
-            .world_mut()
-            .spawn((
-                Unit,
-                Transform::from_xyz(100.0, 100.0, 0.0),
-                GlobalTransform::from(Transform::from_xyz(100.0, 100.0, 0.0)),
-                AdjustedVelocity(Vec2::new(50.0, 0.0)),
-            ))
-            .id();
-        let b = app
-            .world_mut()
-            .spawn((
-                Unit,
-                Transform::from_xyz(105.0, 100.0, 0.0),
-                GlobalTransform::from(Transform::from_xyz(105.0, 100.0, 0.0)),
-                AdjustedVelocity(Vec2::new(50.0, 0.0)),
-            ))
-            .id();
+        let a = spawn_overlap_unit(app.world_mut(), 100.0, 100.0, Vec2::new(50.0, 0.0));
+        let b = spawn_overlap_unit(app.world_mut(), 105.0, 100.0, Vec2::new(50.0, 0.0));
 
         app.update();
 
@@ -429,24 +410,8 @@ mod tests {
             (rebuild_spatial_hash, resolve_overlaps).chain_ignore_deferred(),
         );
 
-        let stationary = app
-            .world_mut()
-            .spawn((
-                Unit,
-                Transform::from_xyz(100.0, 100.0, 0.0),
-                GlobalTransform::from(Transform::from_xyz(100.0, 100.0, 0.0)),
-                AdjustedVelocity(Vec2::ZERO),
-            ))
-            .id();
-        let moving = app
-            .world_mut()
-            .spawn((
-                Unit,
-                Transform::from_xyz(105.0, 100.0, 0.0),
-                GlobalTransform::from(Transform::from_xyz(105.0, 100.0, 0.0)),
-                AdjustedVelocity(Vec2::new(50.0, 0.0)),
-            ))
-            .id();
+        let stationary = spawn_overlap_unit(app.world_mut(), 100.0, 100.0, Vec2::ZERO);
+        let moving = spawn_overlap_unit(app.world_mut(), 105.0, 100.0, Vec2::new(50.0, 0.0));
 
         app.update();
 
@@ -470,6 +435,67 @@ mod tests {
         assert!(
             move_pos.x > 105.0,
             "Moving unit should be pushed away from stationary, got {move_pos:?}"
+        );
+    }
+
+    #[test]
+    fn resolve_overlaps_both_stationary_split_equally() {
+        let mut app = create_test_app();
+        app.add_systems(
+            Update,
+            (rebuild_spatial_hash, resolve_overlaps).chain_ignore_deferred(),
+        );
+
+        // Both stationary, overlapping at 5px apart (min_dist = 12)
+        let a = spawn_overlap_unit(app.world_mut(), 100.0, 100.0, Vec2::ZERO);
+        let b = spawn_overlap_unit(app.world_mut(), 105.0, 100.0, Vec2::ZERO);
+
+        app.update();
+
+        let pos_a = app.world().get::<Transform>(a).unwrap().translation.xy();
+        let pos_b = app.world().get::<Transform>(b).unwrap().translation.xy();
+
+        // Both should move (split equally)
+        assert!(
+            pos_a.x < 100.0,
+            "Stationary A should be pushed left, got {pos_a:?}"
+        );
+        assert!(
+            pos_b.x > 105.0,
+            "Stationary B should be pushed right, got {pos_b:?}"
+        );
+        // Midpoint should be preserved (symmetric split)
+        let midpoint = (pos_a.x + pos_b.x) / 2.0;
+        assert!(
+            (midpoint - 102.5).abs() < 0.1,
+            "Midpoint should be preserved, got {midpoint}"
+        );
+    }
+
+    #[test]
+    fn resolve_overlaps_non_overlapping_units_unchanged() {
+        let mut app = create_test_app();
+        app.add_systems(
+            Update,
+            (rebuild_spatial_hash, resolve_overlaps).chain_ignore_deferred(),
+        );
+
+        // Two units far apart (> min_dist of 12)
+        let a = spawn_overlap_unit(app.world_mut(), 100.0, 100.0, Vec2::new(50.0, 0.0));
+        let b = spawn_overlap_unit(app.world_mut(), 200.0, 100.0, Vec2::new(50.0, 0.0));
+
+        app.update();
+
+        let pos_a = app.world().get::<Transform>(a).unwrap().translation.xy();
+        let pos_b = app.world().get::<Transform>(b).unwrap().translation.xy();
+
+        assert!(
+            (pos_a - Vec2::new(100.0, 100.0)).length() < f32::EPSILON,
+            "Non-overlapping A should not move, got {pos_a:?}"
+        );
+        assert!(
+            (pos_b - Vec2::new(200.0, 100.0)).length() < f32::EPSILON,
+            "Non-overlapping B should not move, got {pos_b:?}"
         );
     }
 
@@ -520,6 +546,111 @@ mod tests {
         assert!(
             (new_pv - preferred).length() < f32::EPSILON,
             "Opposing team should not trigger separation, got {new_pv:?}"
+        );
+    }
+
+    #[test]
+    fn apply_separation_skips_stationary_units() {
+        let mut app = create_test_app();
+        app.add_systems(
+            Update,
+            (rebuild_spatial_hash, apply_separation).chain_ignore_deferred(),
+        );
+
+        // Stationary unit (zero velocity) should not be modified even with a close neighbor
+        let stationary = spawn_unit(app.world_mut(), 100.0, 100.0, Vec2::ZERO, Team::Player);
+        let _neighbor = spawn_unit(
+            app.world_mut(),
+            110.0,
+            100.0,
+            Vec2::new(50.0, 0.0),
+            Team::Player,
+        );
+
+        app.update();
+
+        let pv = app.world().get::<PreferredVelocity>(stationary).unwrap().0;
+        assert!(
+            pv.length() < f32::EPSILON,
+            "Stationary unit should keep zero velocity, got {pv:?}"
+        );
+    }
+
+    #[test]
+    fn apply_separation_clamps_to_max_speed() {
+        let mut app = create_test_app();
+        app.add_systems(
+            Update,
+            (rebuild_spatial_hash, apply_separation).chain_ignore_deferred(),
+        );
+
+        // Two very close same-team units — strong separation force
+        let preferred = Vec2::new(50.0, 0.0);
+        let a = spawn_unit(app.world_mut(), 100.0, 100.0, preferred, Team::Player);
+        // Place neighbor very close (2px apart) for maximum separation force
+        let _b = spawn_unit(app.world_mut(), 102.0, 100.0, preferred, Team::Player);
+
+        app.update();
+
+        let new_pv = app.world().get::<PreferredVelocity>(a).unwrap().0;
+        let speed = new_pv.length();
+        assert!(
+            speed <= 50.0 + f32::EPSILON,
+            "Velocity should be clamped to max speed 50.0, got {speed}"
+        );
+    }
+
+    #[test]
+    fn apply_separation_tangential_push_for_shared_target() {
+        let mut app = create_test_app();
+        app.add_systems(
+            Update,
+            (rebuild_spatial_hash, apply_separation).chain_ignore_deferred(),
+        );
+
+        // Spawn a target entity for the units to share
+        let target = app
+            .world_mut()
+            .spawn((
+                Transform::from_xyz(200.0, 100.0, 0.0),
+                GlobalTransform::from(Transform::from_xyz(200.0, 100.0, 0.0)),
+            ))
+            .id();
+
+        let preferred = Vec2::new(50.0, 0.0);
+        // Two same-team units engaging the same target, one behind the other
+        let a = app
+            .world_mut()
+            .spawn((
+                Unit,
+                Movement { speed: 50.0 },
+                Transform::from_xyz(100.0, 100.0, 0.0),
+                GlobalTransform::from(Transform::from_xyz(100.0, 100.0, 0.0)),
+                PreferredVelocity(preferred),
+                TargetingState::Engaging(target),
+                Team::Player,
+            ))
+            .id();
+        let _b = app
+            .world_mut()
+            .spawn((
+                Unit,
+                Movement { speed: 50.0 },
+                Transform::from_xyz(110.0, 100.0, 0.0),
+                GlobalTransform::from(Transform::from_xyz(110.0, 100.0, 0.0)),
+                PreferredVelocity(preferred),
+                TargetingState::Engaging(target),
+                Team::Player,
+            ))
+            .id();
+
+        app.update();
+
+        let new_pv = app.world().get::<PreferredVelocity>(a).unwrap().0;
+        // Tangential push should add Y component (perpendicular to the X-axis target line)
+        assert!(
+            new_pv.y.abs() > 0.1,
+            "Tangential push should add perpendicular component, got {new_pv:?}"
         );
     }
 }

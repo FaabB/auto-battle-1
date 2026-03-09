@@ -5,8 +5,6 @@
 
 use bevy::prelude::*;
 
-use crate::gameplay::units::avoidance::AdjustedVelocity;
-
 use crate::gameplay::flow_field::GoalRegistry;
 use crate::gameplay::units::Unit;
 use crate::gameplay::units::avoidance::PreferredVelocity;
@@ -123,23 +121,14 @@ fn debug_draw_flow_field(
     }
 }
 
-/// Draw ORCA debug visualization: green = preferred velocity, cyan = actual (ORCA-adjusted).
-/// Also draws target lines: yellow = Engaging, red = Attacking.
+/// Draw avoidance debug visualization: green = velocity, target lines: yellow/red.
 fn debug_draw_avoidance(
-    units: Query<
-        (
-            &GlobalTransform,
-            &AdjustedVelocity,
-            &PreferredVelocity,
-            &TargetingState,
-        ),
-        With<Unit>,
-    >,
+    units: Query<(&GlobalTransform, &PreferredVelocity, &TargetingState), With<Unit>>,
     targets: Query<&GlobalTransform, With<Target>>,
     mut gizmos: Gizmos,
 ) {
     let scale = 0.5; // Scale arrows to be visible but not overwhelming
-    for (transform, adjusted, preferred, targeting_state) in &units {
+    for (transform, preferred, targeting_state) in &units {
         let pos = transform.translation().xy();
 
         // Target lines
@@ -159,14 +148,9 @@ fn debug_draw_avoidance(
             _ => {}
         }
 
-        // Green arrow: preferred velocity (where flow field wants to go)
+        // Green arrow: velocity (after separation adjustment)
         if preferred.0.length_squared() > f32::EPSILON {
             gizmos.arrow_2d(pos, pos + preferred.0 * scale, Color::srgb(0.0, 1.0, 0.0));
-        }
-
-        // Cyan arrow: actual velocity (ORCA-adjusted)
-        if adjusted.0.length_squared() > f32::EPSILON {
-            gizmos.arrow_2d(pos, pos + adjusted.0 * scale, Color::srgb(0.0, 1.0, 1.0));
         }
     }
 }

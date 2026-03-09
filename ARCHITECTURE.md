@@ -101,7 +101,7 @@ src/
 │       ├── movement.rs  # Unit movement toward targets (preferred velocity)
 │       ├── pathfinding.rs # NavPath component and navmesh path computation
 │       └── avoidance/   # Boids separation + overlap resolution
-│           └── mod.rs   # PreferredVelocity, AdjustedVelocity, separation, resolve_overlaps
+│           └── mod.rs   # PreferredVelocity, separation, resolve_overlaps
 ├── theme/               # Shared color palette and UI widget constructors
 │   ├── mod.rs           # Theme plugin compositor
 │   ├── palette.rs       # Color constants + font size tokens
@@ -313,7 +313,7 @@ Each entity type has a canonical component bundle documented in `gameplay/mod.rs
 
 | Entity | Spawn Location | Key Components |
 |--------|---------------|----------------|
-| Unit | `units/mod.rs:spawn_unit()` | `Unit`, `UnitType`, `Team`, `Target`, `Health`, `CombatStats`, `Movement`, `AttackTimer`, `Mesh2d`, `RigidBody::Kinematic`, `Collider`, `PreferredVelocity`, `AdjustedVelocity` |
+| Unit | `units/mod.rs:spawn_unit()` | `Unit`, `UnitType`, `Team`, `Target`, `Health`, `CombatStats`, `Movement`, `AttackTimer`, `Mesh2d`, `RigidBody::Kinematic`, `Collider`, `PreferredVelocity` |
 | Building | `building/placement.rs` | `Building`, `BuildingType`, `Team`, `Target`, `Health`, `ProductionTimer`/`IncomeTimer`, `RigidBody::Static`, `Collider`, `NavObstacle` |
 | Fortress | `battlefield/renderer.rs` | `PlayerFortress`/`EnemyFortress`, `Team`, `Target`, `CurrentTarget`, `Health`, `CombatStats`, `AttackTimer`, `RigidBody::Static`, `Collider`, `NavObstacle` |
 | Projectile | `combat/attack.rs` | `Projectile`, `Team`, `Hitbox`, `Sensor`, `RigidBody::Kinematic`, `Collider`, `CollidingEntities` |
@@ -401,7 +401,7 @@ In Bevy 0.18, `.chain()` auto-inserts `ApplyDeferred` between chained systems. U
 - `.chain()` in `battlefield/mod.rs:205` — `spawn_battlefield` then `setup_camera_for_battlefield` (camera needs battlefield entities)
 - `.chain_ignore_deferred()` in `combat/attack.rs:192` — `attack` → `move_projectiles` → `handle_projectile_hits` (newly spawned projectiles shouldn't move until next frame)
 - `.chain_ignore_deferred()` in `building/mod.rs:223` — `update_grid_cursor` → `handle_building_placement` (cursor position read, not entity spawns)
-- `.chain_ignore_deferred()` in `units/mod.rs` — `unit_movement` → `rebuild_spatial_hash` → `apply_separation` → `finalize_velocity` → `apply_movement` → `rebuild_spatial_hash` → `resolve_overlaps` (movement + avoidance pipeline, no intermediate spawns)
+- `.chain_ignore_deferred()` in `units/mod.rs` — `unit_movement` → `rebuild_spatial_hash` → `apply_separation` → `apply_movement` → `resolve_overlaps` (movement + avoidance pipeline, no intermediate spawns)
 
 ---
 

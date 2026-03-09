@@ -11,7 +11,7 @@ use bevy::window::WindowPlugin;
 
 use crate::gameplay::combat::AttackTimer;
 use crate::gameplay::flow_field::AssignedGoal;
-use crate::gameplay::units::avoidance::{AdjustedVelocity, PreferredVelocity};
+use crate::gameplay::units::avoidance::PreferredVelocity;
 use crate::gameplay::units::{UNIT_RADIUS, Unit, UnitType, unit_stats};
 use crate::gameplay::{CombatStats, EntityExtent, Health, Movement, Target, TargetingState, Team};
 
@@ -147,7 +147,7 @@ pub fn init_input_resources(app: &mut App) {
 ///
 /// Includes: Unit, UnitType::Soldier, Team, Target, TargetingState::Moving,
 /// Health, CombatStats, Movement, AttackTimer, Transform, GlobalTransform,
-/// Collider, LinearVelocity.
+/// Collider, PreferredVelocity.
 ///
 /// Callers can override specific components via `world.entity_mut(id).insert(...)`.
 #[allow(dead_code)]
@@ -179,7 +179,6 @@ pub fn spawn_test_unit(world: &mut World, team: Team, x: f32, y: f32) -> Entity 
             Collider::circle(UNIT_RADIUS),
         ))
         .insert((
-            AdjustedVelocity::default(),
             PreferredVelocity::default(),
             match team {
                 Team::Player => AssignedGoal::EnemyFortress,
