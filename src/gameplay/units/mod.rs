@@ -205,6 +205,12 @@ pub(super) fn plugin(app: &mut App) {
             avoidance::rebuild_spatial_hash,
             avoidance::apply_separation,
             avoidance::apply_movement,
+            // Note: resolve_overlaps uses the spatial hash built before apply_movement,
+            // so positions are ~0.8px stale (one frame of movement). This is fine because
+            // the hash is only used for candidate neighbor lookup (24px cells vs 0.8px drift).
+            // If faster units or low framerates cause missed overlaps, switch
+            // rebuild_spatial_hash to read Transform instead of GlobalTransform and add
+            // a second rebuild here.
             avoidance::resolve_overlaps,
         )
             .chain_ignore_deferred()

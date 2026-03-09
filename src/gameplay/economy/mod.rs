@@ -13,7 +13,7 @@ use crate::screens::GameState;
 // === Constants ===
 
 /// Starting gold when entering `InGame`.
-pub const STARTING_GOLD: u32 = 20000;
+pub const STARTING_GOLD: u32 = 200;
 
 /// Gold awarded per enemy kill.
 pub const KILL_REWARD: u32 = 5;
