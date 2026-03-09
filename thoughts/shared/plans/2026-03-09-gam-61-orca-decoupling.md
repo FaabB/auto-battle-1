@@ -65,7 +65,7 @@ rebuild_target_grid → find_target → enforce_engager_cap → verify_targets
 - Cross-team separation/ORCA (causes units to avoid enemies)
 - Removing avian2d entirely (that's GAM-62)
 - Increasing attack range (separate concern)
-- Optimizing `resolve_overlaps` with spatial hash (future work)
+- Further `resolve_overlaps` tuning (iteration count, convergence rate)
 
 ## DO NOT TRY (Anti-patterns from learnings)
 
@@ -387,11 +387,21 @@ Update all test assertions that read `LinearVelocity` to read `AdjustedVelocity`
 ## Phase 3: Add `resolve_overlaps` System
 
 ### Overview
-Add hard positional overlap correction as a safety net after movement. Asymmetric: moving units get pushed, attacking units stay planted. Uses visual `UNIT_RADIUS`, not inflated avoidance radius.
+Add hard positional overlap correction as a safety net after movement. Uses `AvoidanceSpatialHash` for O(n × k) neighbor lookup instead of O(n²) pairwise. Runs multiple iterations for better convergence in dense groups. Asymmetric: moving units get pushed, attacking units stay planted. Uses visual `UNIT_RADIUS`, not inflated avoidance radius.
 
 ### Changes Required:
 
-#### 1. New system: `resolve_overlaps`
+#### 1. New constant
+
+**File**: `src/gameplay/units/avoidance/mod.rs`
+
+```rust
+/// Number of iterations for resolve_overlaps. Multiple passes improve convergence
+/// in dense groups where a single pass can't fully separate all overlapping pairs.
+const OVERLAP_ITERATIONS: u32 = 3;
+```
+
+#### 2. New system: `resolve_overlaps`
 
 **File**: `src/gameplay/units/avoidance/mod.rs`
 
@@ -400,7 +410,10 @@ Add after `apply_movement`:
 ```rust
 /// Hard positional overlap correction. Runs after `apply_movement` as a safety net.
 ///
-/// Detects overlapping unit pairs (center distance < 2× UNIT_RADIUS) and pushes them apart.
+/// Uses `AvoidanceSpatialHash` for O(n × k) neighbor lookup per iteration.
+/// Runs `OVERLAP_ITERATIONS` passes for better convergence in dense groups.
+///
+/// Overlap rules:
 /// - Moving unit vs moving: split equally
 /// - Moving unit vs stationary (attacking): only the moving unit gets pushed
 /// - Both stationary: split equally to unstick
@@ -408,71 +421,95 @@ Add after `apply_movement`:
 /// Uses visual UNIT_RADIUS (not inflated AVOIDANCE_RADIUS) so units can stand side-by-side.
 /// Applies to ALL teams (cross-team overlap resolution).
 pub fn resolve_overlaps(
+    hash: Res<AvoidanceSpatialHash>,
     mut units: Query<(Entity, &mut Transform, &AdjustedVelocity), With<Unit>>,
 ) {
     let min_dist = UNIT_RADIUS * 2.0;
     let min_dist_sq = min_dist * min_dist;
 
-    // Snapshot positions for consistent reads
-    let snapshots: Vec<(Entity, Vec2, bool)> = units
-        .iter()
-        .map(|(e, t, v)| {
-            let is_stationary = v.0.length_squared() < f32::EPSILON;
-            (e, t.translation.xy(), is_stationary)
-        })
-        .collect();
+    for _ in 0..OVERLAP_ITERATIONS {
+        // Snapshot positions for consistent reads within this iteration
+        let snapshots: Vec<(Entity, Vec2, bool)> = units
+            .iter()
+            .map(|(e, t, v)| {
+                let is_stationary = v.0.length_squared() < f32::EPSILON;
+                (e, t.translation.xy(), is_stationary)
+            })
+            .collect();
 
-    // Pairwise overlap check (O(n²) — acceptable for current unit counts)
-    for i in 0..snapshots.len() {
-        for j in (i + 1)..snapshots.len() {
-            let (entity_a, pos_a, stationary_a) = snapshots[i];
-            let (entity_b, pos_b, stationary_b) = snapshots[j];
+        let index_map: HashMap<Entity, usize> = snapshots
+            .iter()
+            .enumerate()
+            .map(|(i, (e, ..))| (*e, i))
+            .collect();
 
-            let diff = pos_b - pos_a;
-            let dist_sq = diff.length_squared();
+        // Collect corrections (entity → displacement) to apply after iteration
+        let mut corrections: HashMap<Entity, Vec2> = HashMap::new();
 
-            if dist_sq >= min_dist_sq || dist_sq < f32::EPSILON * f32::EPSILON {
-                continue;
+        for &(entity_a, pos_a, stationary_a) in &snapshots {
+            // Use spatial hash for neighbor lookup instead of all-pairs
+            let neighbors = hash.query_neighbors(pos_a, min_dist);
+
+            for neighbor_entity in neighbors {
+                // Only process each pair once (a < b by entity index)
+                if neighbor_entity.index() <= entity_a.index() {
+                    continue;
+                }
+
+                let Some(&idx_b) = index_map.get(&neighbor_entity) else {
+                    continue;
+                };
+                let (entity_b, pos_b, stationary_b) = snapshots[idx_b];
+
+                let diff = pos_b - pos_a;
+                let dist_sq = diff.length_squared();
+
+                if dist_sq >= min_dist_sq || dist_sq < f32::EPSILON * f32::EPSILON {
+                    continue;
+                }
+
+                let dist = dist_sq.sqrt();
+                let overlap = min_dist - dist;
+                let direction = diff / dist;
+
+                match (stationary_a, stationary_b) {
+                    (false, true) => {
+                        // Only push the moving unit (a) away
+                        *corrections.entry(entity_a).or_default() -= direction * overlap;
+                    }
+                    (true, false) => {
+                        // Only push the moving unit (b) away
+                        *corrections.entry(entity_b).or_default() += direction * overlap;
+                    }
+                    _ => {
+                        // Both moving or both stationary: split equally
+                        let half_overlap = overlap * 0.5;
+                        *corrections.entry(entity_a).or_default() -= direction * half_overlap;
+                        *corrections.entry(entity_b).or_default() += direction * half_overlap;
+                    }
+                }
             }
+        }
 
-            let dist = dist_sq.sqrt();
-            let overlap = min_dist - dist;
-            let direction = diff / dist;
-
-            match (stationary_a, stationary_b) {
-                (false, true) => {
-                    // Only push the moving unit (a) away
-                    if let Ok((_, mut transform_a, _)) = units.get_mut(entity_a) {
-                        transform_a.translation.x -= direction.x * overlap;
-                        transform_a.translation.y -= direction.y * overlap;
-                    }
-                }
-                (true, false) => {
-                    // Only push the moving unit (b) away
-                    if let Ok((_, mut transform_b, _)) = units.get_mut(entity_b) {
-                        transform_b.translation.x += direction.x * overlap;
-                        transform_b.translation.y += direction.y * overlap;
-                    }
-                }
-                _ => {
-                    // Both moving or both stationary: split equally
-                    let half_overlap = overlap * 0.5;
-                    if let Ok((_, mut transform_a, _)) = units.get_mut(entity_a) {
-                        transform_a.translation.x -= direction.x * half_overlap;
-                        transform_a.translation.y -= direction.y * half_overlap;
-                    }
-                    if let Ok((_, mut transform_b, _)) = units.get_mut(entity_b) {
-                        transform_b.translation.x += direction.x * half_overlap;
-                        transform_b.translation.y += direction.y * half_overlap;
-                    }
-                }
+        // Apply accumulated corrections
+        for (entity, correction) in corrections {
+            if let Ok((_, mut transform, _)) = units.get_mut(entity) {
+                transform.translation.x += correction.x;
+                transform.translation.y += correction.y;
             }
         }
     }
 }
 ```
 
-#### 2. Wire into system chain
+**Key design decisions:**
+- Uses `AvoidanceSpatialHash` (already rebuilt every frame) for O(n × k) neighbor lookup
+- Entity index comparison (`neighbor.index() <= entity_a.index()`) ensures each pair is processed exactly once
+- Corrections are accumulated per-entity per iteration, then applied — prevents order-dependent results within an iteration
+- `OVERLAP_ITERATIONS = 3` — each pass resolves more of the remaining overlap, converging toward separation
+- The spatial hash cell size (150px+) is much larger than `min_dist` (12px), so all overlapping neighbors are guaranteed to be found
+
+#### 3. Wire into system chain
 
 **File**: `src/gameplay/units/mod.rs`
 
@@ -498,6 +535,7 @@ Add `resolve_overlaps` to the chain after `apply_movement`:
 #### Manual Verification:
 - [ ] Units don't visually overlap when bunching around targets
 - [ ] Attacking units stay in place (don't get pushed by resolve_overlaps)
+- [ ] Dense groups resolve cleanly (no jittering from insufficient iterations)
 
 **Pause for manual testing before proceeding.**
 
@@ -1306,7 +1344,7 @@ Run `make check` and fix any:
 | `apply_separation` | O(n × k) | k = avg neighbors in SEPARATION_RADIUS |
 | `compute_avoidance` | O(n × m) | m = max_neighbors (capped at 10) |
 | `apply_movement` | O(n) | Trivial |
-| `resolve_overlaps` | **O(n²)** | Pairwise — future: use spatial hash |
+| `resolve_overlaps` | O(n × k × iter) | Spatial hash lookup, 3 iterations |
 | `enforce_engager_cap` | O(n log n) | Sort per target group |
 
 ## References
