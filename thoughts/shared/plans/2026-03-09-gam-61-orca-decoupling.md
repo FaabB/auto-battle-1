@@ -1090,7 +1090,7 @@ pub fn apply_separation(
     >,
     targets: Query<&GlobalTransform>,
 ) {
-    // Snapshot for consistent reads
+    // Snapshot: can't read neighbor data while iterating query mutably
     let snapshots: Vec<(Entity, Vec2, Vec2, f32, Option<Entity>, Team)> = units
         .iter()
         .map(|(e, gt, pv, mv, ts, team)| {
