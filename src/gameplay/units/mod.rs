@@ -8,7 +8,7 @@ use avian2d::prelude::*;
 use bevy::prelude::*;
 
 use self::avoidance::{
-    AdjustedVelocity, AvoidanceAgent, AvoidanceConfig, AvoidanceSpatialHash, PreferredVelocity,
+    AdjustedVelocity, AvoidanceSpatialHash, PreferredVelocity, SEPARATION_RADIUS,
 };
 use crate::gameplay::combat::{
     AttackTimer, HealthBarConfig, UNIT_HEALTH_BAR_HEIGHT, UNIT_HEALTH_BAR_WIDTH,
@@ -140,7 +140,6 @@ pub fn spawn_unit(
             LockedAxes::ROTATION_LOCKED,
             AdjustedVelocity::default(),
             PreferredVelocity::default(),
-            AvoidanceAgent::default(),
         ))
         .id()
 }
@@ -195,15 +194,9 @@ pub(super) fn plugin(app: &mut App) {
     app.register_type::<Unit>()
         .register_type::<UnitType>()
         .register_type::<PreferredVelocity>()
-        .register_type::<AdjustedVelocity>()
-        .register_type::<AvoidanceAgent>()
-        .register_type::<AvoidanceConfig>()
-        .init_resource::<AvoidanceConfig>();
+        .register_type::<AdjustedVelocity>();
 
-    let config = AvoidanceConfig::default();
-    app.insert_resource(AvoidanceSpatialHash(SpatialHash::new(
-        config.neighbor_distance,
-    )));
+    app.insert_resource(AvoidanceSpatialHash(SpatialHash::new(SEPARATION_RADIUS)));
 
     app.add_systems(OnEnter(GameState::InGame), setup_unit_assets);
 
@@ -215,7 +208,7 @@ pub(super) fn plugin(app: &mut App) {
             movement::unit_movement,
             avoidance::rebuild_spatial_hash,
             avoidance::apply_separation,
-            avoidance::compute_avoidance,
+            avoidance::finalize_velocity,
             avoidance::apply_movement,
             avoidance::rebuild_spatial_hash, // Rebuild with post-movement positions
             avoidance::resolve_overlaps,

@@ -11,7 +11,7 @@ use bevy::window::WindowPlugin;
 
 use crate::gameplay::combat::AttackTimer;
 use crate::gameplay::flow_field::AssignedGoal;
-use crate::gameplay::units::avoidance::{AdjustedVelocity, AvoidanceAgent, PreferredVelocity};
+use crate::gameplay::units::avoidance::{AdjustedVelocity, PreferredVelocity};
 use crate::gameplay::units::{UNIT_RADIUS, Unit, UnitType, unit_stats};
 use crate::gameplay::{CombatStats, EntityExtent, Health, Movement, Target, TargetingState, Team};
 
@@ -181,7 +181,6 @@ pub fn spawn_test_unit(world: &mut World, team: Team, x: f32, y: f32) -> Entity 
         .insert((
             AdjustedVelocity::default(),
             PreferredVelocity::default(),
-            AvoidanceAgent::default(),
             match team {
                 Team::Player => AssignedGoal::EnemyFortress,
                 Team::Enemy => AssignedGoal::PlayerFortress,
