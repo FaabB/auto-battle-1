@@ -5,12 +5,12 @@
 
 use bevy::prelude::*;
 
-use avian2d::prelude::LinearVelocity;
+use crate::gameplay::units::avoidance::AdjustedVelocity;
 
-use crate::gameplay::Team;
 use crate::gameplay::flow_field::GoalRegistry;
 use crate::gameplay::units::Unit;
 use crate::gameplay::units::avoidance::PreferredVelocity;
+use crate::gameplay::{Target, TargetingState, Team};
 
 /// Marker resource: when present, the world inspector is shown.
 #[derive(Resource)]
@@ -124,13 +124,40 @@ fn debug_draw_flow_field(
 }
 
 /// Draw ORCA debug visualization: green = preferred velocity, cyan = actual (ORCA-adjusted).
+/// Also draws target lines: yellow = Engaging, red = Attacking.
 fn debug_draw_avoidance(
-    units: Query<(&GlobalTransform, &LinearVelocity, &PreferredVelocity), With<Unit>>,
+    units: Query<
+        (
+            &GlobalTransform,
+            &AdjustedVelocity,
+            &PreferredVelocity,
+            &TargetingState,
+        ),
+        With<Unit>,
+    >,
+    targets: Query<&GlobalTransform, With<Target>>,
     mut gizmos: Gizmos,
 ) {
     let scale = 0.5; // Scale arrows to be visible but not overwhelming
-    for (transform, velocity, preferred) in &units {
+    for (transform, adjusted, preferred, targeting_state) in &units {
         let pos = transform.translation().xy();
+
+        // Target lines
+        match targeting_state {
+            TargetingState::Engaging(target) => {
+                if let Ok(target_gt) = targets.get(*target) {
+                    let target_pos = target_gt.translation().xy();
+                    gizmos.line_2d(pos, target_pos, Color::srgb(1.0, 1.0, 0.0)); // Yellow
+                }
+            }
+            TargetingState::Attacking(target) => {
+                if let Ok(target_gt) = targets.get(*target) {
+                    let target_pos = target_gt.translation().xy();
+                    gizmos.line_2d(pos, target_pos, Color::srgb(1.0, 0.0, 0.0)); // Red
+                }
+            }
+            _ => {}
+        }
 
         // Green arrow: preferred velocity (where flow field wants to go)
         if preferred.0.length_squared() > f32::EPSILON {
@@ -138,8 +165,8 @@ fn debug_draw_avoidance(
         }
 
         // Cyan arrow: actual velocity (ORCA-adjusted)
-        if velocity.0.length_squared() > f32::EPSILON {
-            gizmos.arrow_2d(pos, pos + velocity.0 * scale, Color::srgb(0.0, 1.0, 1.0));
+        if adjusted.0.length_squared() > f32::EPSILON {
+            gizmos.arrow_2d(pos, pos + adjusted.0 * scale, Color::srgb(0.0, 1.0, 1.0));
         }
     }
 }

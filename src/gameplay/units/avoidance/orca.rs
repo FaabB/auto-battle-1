@@ -7,6 +7,10 @@
 
 use bevy::math::Vec2;
 
+/// Minimum time horizon for overlapping agents.
+/// Matches RVO2 reference: generates maximum-urgency separation constraint.
+const MIN_TAU: f32 = 1e-3;
+
 /// A half-plane constraint in velocity space.
 /// Valid velocities lie on the left side of the directed line (where `direction.perp()` points).
 #[derive(Debug, Clone, Copy)]
@@ -33,12 +37,9 @@ pub struct AgentSnapshot {
 
 /// Compute the ORCA half-plane constraint for agent `a` avoiding agent `b`.
 ///
-/// Returns `None` if agents are at the same position (degenerate case).
-pub fn compute_orca_line(
-    a: &AgentSnapshot,
-    b: &AgentSnapshot,
-    time_horizon: f32,
-) -> Option<OrcaLine> {
+/// Always produces a constraint. When agents overlap, uses `MIN_TAU` for aggressive
+/// separation matching the RVO2 reference implementation.
+pub fn compute_orca_line(a: &AgentSnapshot, b: &AgentSnapshot, time_horizon: f32) -> OrcaLine {
     let rel_pos = b.position - a.position;
     let rel_vel = a.velocity - b.velocity;
     let combined_radius = a.radius + b.radius;
@@ -61,16 +62,26 @@ pub fn compute_orca_line(
             // Project on cutoff circle (closest to the circular truncation).
             let w_length = w_length_sq.sqrt();
             if w_length < f32::EPSILON {
-                return None;
+                // Degenerate: use fallback direction based on relative position
+                let fallback_dir = if rel_pos.length_squared() > f32::EPSILON {
+                    rel_pos.normalize()
+                } else {
+                    Vec2::new(1.0, 0.0)
+                };
+                let direction = Vec2::new(fallback_dir.y, -fallback_dir.x);
+                return OrcaLine {
+                    point: a.velocity,
+                    direction,
+                };
             }
             let unit_w = w / w_length;
             let direction = Vec2::new(unit_w.y, -unit_w.x);
             let u = combined_radius.mul_add(inv_time_horizon, -w_length) * unit_w;
 
-            Some(OrcaLine {
+            OrcaLine {
                 point: a.velocity + a.responsibility * u,
                 direction,
-            })
+            }
         } else {
             // Project on legs.
             let leg = (dist_sq - combined_radius_sq).sqrt();
@@ -85,10 +96,10 @@ pub fn compute_orca_line(
                 let dot_product_2 = rel_vel.dot(direction);
                 let u = dot_product_2 * direction - rel_vel;
 
-                Some(OrcaLine {
+                OrcaLine {
                     point: a.velocity + a.responsibility * u,
                     direction,
-                })
+                }
             } else {
                 // Project on right leg.
                 let direction = -Vec2::new(
@@ -99,18 +110,34 @@ pub fn compute_orca_line(
                 let dot_product_2 = rel_vel.dot(direction);
                 let u = dot_product_2 * direction - rel_vel;
 
-                Some(OrcaLine {
+                OrcaLine {
                     point: a.velocity + a.responsibility * u,
                     direction,
-                })
+                }
             }
         }
     } else {
-        // Agents are already overlapping — skip ORCA constraint.
-        // The physics engine (avian2d pushbox) handles overlap separation.
-        // Generating emergency constraints here causes deadlocks in dense
-        // groups because the contradictory constraints collapse velocity to zero.
-        None
+        // Agents are already overlapping — generate aggressive separation constraint.
+        // Uses MIN_TAU (matching RVO2 reference) for maximum-urgency separation.
+        let inv_tau = 1.0 / MIN_TAU;
+        let w = rel_vel - inv_tau * rel_pos;
+        let w_length = w.length();
+
+        // Degenerate case: agents at exactly the same position
+        let unit_w = if w_length < f32::EPSILON {
+            // Fallback direction — arbitrary but deterministic
+            Vec2::new(1.0, 0.0)
+        } else {
+            w / w_length
+        };
+
+        let direction = Vec2::new(unit_w.y, -unit_w.x);
+        let u = combined_radius.mul_add(inv_tau, -w_length) * unit_w;
+
+        OrcaLine {
+            point: a.velocity + a.responsibility * u,
+            direction,
+        }
     }
 }
 
@@ -342,7 +369,7 @@ mod tests {
             Vec2::new(-50.0, 0.0),
         );
 
-        let line = compute_orca_line(&a, &b, 3.0).expect("should produce a constraint");
+        let line = compute_orca_line(&a, &b, 3.0);
         let result = compute_avoiding_velocity(a.preferred, a.max_speed, &[line]);
 
         // Result should have a lateral (y) component to dodge.
@@ -365,7 +392,7 @@ mod tests {
             Vec2::new(0.0, 50.0),
         );
 
-        let line = compute_orca_line(&a, &b, 3.0).expect("should produce a constraint");
+        let line = compute_orca_line(&a, &b, 3.0);
         let result = compute_avoiding_velocity(a.preferred, a.max_speed, &[line]);
 
         // Result should differ from preferred when paths cross.
@@ -387,7 +414,7 @@ mod tests {
             Vec2::new(20.0, 0.0),
         );
 
-        let line = compute_orca_line(&a, &b, 3.0).expect("should produce a constraint");
+        let line = compute_orca_line(&a, &b, 3.0);
         let result = compute_avoiding_velocity(a.preferred, a.max_speed, &[line]);
 
         // The faster agent should get a lateral component to overtake.
@@ -412,30 +439,45 @@ mod tests {
         );
 
         let line = compute_orca_line(&a, &b, 3.0);
-        if let Some(line) = line {
-            let result = compute_avoiding_velocity(a.preferred, a.max_speed, &[line]);
-            // Should stay close to preferred since agents are moving apart.
-            let diff = (result - a.preferred).length();
-            assert!(
-                diff < 10.0,
-                "Diverging agents should have minimal adjustment, got diff={diff}"
-            );
-        }
-        // `None` is also acceptable — degenerate cases.
+        let result = compute_avoiding_velocity(a.preferred, a.max_speed, &[line]);
+        // Should stay close to preferred since agents are moving apart.
+        let diff = (result - a.preferred).length();
+        assert!(
+            diff < 10.0,
+            "Diverging agents should have minimal adjustment, got diff={diff}"
+        );
     }
 
     #[test]
-    fn overlapping_agents_return_none() {
+    fn overlapping_agents_produce_separation_constraint() {
         // Agents at the same x position, overlapping.
         let a = agent(Vec2::new(0.0, 0.0), Vec2::ZERO, Vec2::new(50.0, 0.0));
         let b = agent(Vec2::new(5.0, 0.0), Vec2::ZERO, Vec2::new(-50.0, 0.0));
 
         // Combined radius = 12, distance = 5 → overlapping.
-        // ORCA skips overlapping agents — physics handles separation.
+        // Now returns OrcaLine directly (no Option).
         let line = compute_orca_line(&a, &b, 3.0);
+
+        // The constraint should push agent a away from b
+        let result = compute_avoiding_velocity(a.preferred, a.max_speed, &[line]);
         assert!(
-            line.is_none(),
-            "Overlapping agents should return None (physics handles separation)"
+            result.length() > 0.1,
+            "Separation constraint should produce non-zero velocity, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn co_located_agents_produce_separation_constraint() {
+        // Agents at exactly the same position — uses fallback direction
+        let a = agent(Vec2::new(0.0, 0.0), Vec2::ZERO, Vec2::new(50.0, 0.0));
+        let b = agent(Vec2::new(0.0, 0.0), Vec2::ZERO, Vec2::new(-50.0, 0.0));
+
+        // Should not panic — produces a valid constraint via fallback direction
+        let line = compute_orca_line(&a, &b, 3.0);
+        let result = compute_avoiding_velocity(a.preferred, a.max_speed, &[line]);
+        assert!(
+            result.length() <= a.max_speed + 0.1,
+            "Result should be within max_speed"
         );
     }
 
@@ -505,13 +547,10 @@ mod tests {
             Vec2::new(-20.0, 30.0),
         );
 
-        let mut lines = Vec::new();
-        if let Some(line) = compute_orca_line(&a, &b, 3.0) {
-            lines.push(line);
-        }
-        if let Some(line) = compute_orca_line(&a, &c, 3.0) {
-            lines.push(line);
-        }
+        let lines = vec![
+            compute_orca_line(&a, &b, 3.0),
+            compute_orca_line(&a, &c, 3.0),
+        ];
 
         let result = compute_avoiding_velocity(a.preferred, a.max_speed, &lines);
         assert!(
@@ -532,7 +571,7 @@ mod tests {
             Vec2::new(-50.0, 0.0),
         );
 
-        let line = compute_orca_line(&a, &b, 3.0).expect("should produce constraint");
+        let line = compute_orca_line(&a, &b, 3.0);
         let result = compute_avoiding_velocity(a.preferred, a.max_speed, &[line]);
 
         // With zero preferred, the LP should find a valid velocity to dodge.
@@ -560,10 +599,10 @@ mod tests {
         a.responsibility = 1.0;
         b.responsibility = 0.0;
 
-        let line_a = compute_orca_line(&a, &b, 3.0).expect("should produce constraint for a");
+        let line_a = compute_orca_line(&a, &b, 3.0);
 
         // b takes no responsibility
-        let line_b = compute_orca_line(&b, &a, 3.0).expect("should produce constraint for b");
+        let line_b = compute_orca_line(&b, &a, 3.0);
 
         let result_a = compute_avoiding_velocity(a.preferred, a.max_speed, &[line_a]);
         let result_b = compute_avoiding_velocity(b.preferred, b.max_speed, &[line_b]);

@@ -220,11 +220,11 @@ fn co_located_agents_produce_separation_constraint() {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes — all existing orca tests pass, new overlap test passes
+- [x] `make check` passes
+- [x] `make test` passes — all existing orca tests pass, new overlap test passes
 
 #### Manual Verification:
-- [ ] None needed — pure algorithm fix
+- [x] None needed — pure algorithm fix
 
 ---
 
@@ -372,13 +372,13 @@ Update all test assertions that read `LinearVelocity` to read `AdjustedVelocity`
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes (no `LinearVelocity` references in unit code)
-- [ ] `make test` passes — all avoidance integration tests work with `AdjustedVelocity`
+- [x] `make check` passes (no `LinearVelocity` references in unit code)
+- [x] `make test` passes — all avoidance integration tests work with `AdjustedVelocity`
 
 #### Manual Verification:
-- [ ] Run game — units move across battlefield following flow field
-- [ ] Units engage and attack enemies
-- [ ] F3 debug overlay shows green (preferred) and cyan (adjusted) velocity arrows
+- [x] Run game — units move across battlefield following flow field
+- [x] Units engage and attack enemies
+- [x] F3 debug overlay shows green (preferred) and cyan (adjusted) velocity arrows
 
 **Pause for manual testing before proceeding.**
 
@@ -529,13 +529,13 @@ Add `resolve_overlaps` to the chain after `apply_movement`:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
+- [x] `make check` passes
+- [x] `make test` passes
 
 #### Manual Verification:
-- [ ] Units don't visually overlap when bunching around targets
-- [ ] Attacking units stay in place (don't get pushed by resolve_overlaps)
-- [ ] Dense groups resolve cleanly (no jittering from insufficient iterations)
+- [x] Units don't visually overlap when bunching around targets
+- [x] Attacking units stay in place (don't get pushed by resolve_overlaps)
+- [x] Dense groups resolve cleanly (no jittering from insufficient iterations)
 
 **Pause for manual testing before proceeding.**
 
@@ -610,7 +610,7 @@ let time_horizon = if neighbor.preferred.length_squared() < f32::EPSILON {
     config.time_horizon
 };
 
-if let Some(line) = orca::compute_orca_line(agent, neighbor, time_horizon) {
+let line = orca::compute_orca_line(agent, neighbor, time_horizon);
 ```
 
 #### 4. Update spatial hash cell size
@@ -631,12 +631,12 @@ app.insert_resource(AvoidanceSpatialHash(SpatialHash::new(
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes — update any tests that assert specific velocity values if tolerance is broken
+- [x] `make check` passes
+- [x] `make test` passes — update any tests that assert specific velocity values if tolerance is broken
 
 #### Manual Verification:
-- [ ] Units avoid each other more proactively (larger avoidance radius visible in behavior)
-- [ ] ORCA corrections feel immediate (no smoothing lag)
+- [x] Units avoid each other more proactively (larger avoidance radius visible in behavior)
+- [x] ORCA corrections feel immediate (no smoothing lag)
 
 **Pause for manual testing before proceeding.**
 
@@ -729,11 +729,11 @@ fn spawn_avoidance_unit(
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
+- [x] `make check` passes
+- [x] `make test` passes
 
 #### Manual Verification:
-- [ ] Marching units yield to engaging units (visible in F3 debug — cyan arrows deflect more for moving units)
+- [x] Marching units yield to engaging units (visible in F3 debug — cyan arrows deflect more for moving units)
 
 ---
 
@@ -859,12 +859,12 @@ fn opposing_team_units_no_avoidance() {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes — including new cross-team test
+- [x] `make check` passes
+- [x] `make test` passes — including new cross-team test
 
 #### Manual Verification:
-- [ ] Units march directly toward enemies without swerving around them
-- [ ] Units still avoid same-team neighbors normally
+- [x] Units march directly toward enemies without swerving around them
+- [x] Units still avoid same-team neighbors normally
 
 **Pause for manual testing before proceeding.**
 
@@ -1033,13 +1033,13 @@ Update `find_nearest_target` and `search_radius` to thread through these new par
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
-- [ ] Add test: spawn 20 player units Seeking 1 enemy → after a few frames, at most 12 are Engaging/Attacking
+- [x] `make check` passes
+- [x] `make test` passes
+- [x] Add test: spawn 20 player units Seeking 1 enemy → after a few frames, at most 12 are Engaging/Attacking
 
 #### Manual Verification:
-- [ ] Units spread across available targets (not all piling onto one)
-- [ ] No "dancing" (units dropping and reacquiring targets)
+- [x] Units spread across available targets (not all piling onto one)
+- [x] No "dancing" (units dropping and reacquiring targets)
 
 **Pause for manual testing before proceeding.**
 
@@ -1215,13 +1215,13 @@ Final 6-system chain:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes
-- [ ] `make test` passes
+- [x] `make check` passes
+- [x] `make test` passes
 
 #### Manual Verification:
-- [ ] Dense marching columns spread out noticeably (boids + ORCA working together)
-- [ ] Units engaging the same target spread around it tangentially (not bunch on one side)
-- [ ] No backwards oscillation when units share a target
+- [x] Dense marching columns spread out noticeably (boids + ORCA working together)
+- [x] Units engaging the same target spread around it tangentially (not bunch on one side)
+- [x] No backwards oscillation when units share a target
 
 **Pause for manual testing before proceeding.**
 
@@ -1299,14 +1299,14 @@ Run `make check` and fix any:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `make check` passes with zero warnings
-- [ ] `make test` passes — all existing + new tests
+- [x] `make check` passes with zero warnings
+- [x] `make test` passes — all existing + new tests
 
 #### Manual Verification:
-- [ ] F3 shows yellow lines (Engaging) and red lines (Attacking) to targets
-- [ ] Green arrows show preferred velocity with separation influence
-- [ ] Cyan arrows show final ORCA-adjusted velocity
-- [ ] Full battle plays correctly: units march, engage, attack, spread, die, retarget
+- [x] F3 shows yellow lines (Engaging) and red lines (Attacking) to targets
+- [x] Green arrows show preferred velocity with separation influence
+- [x] Cyan arrows show final ORCA-adjusted velocity
+- [x] Full battle plays correctly: units march, engage, attack, spread, die, retarget
 
 ---
 

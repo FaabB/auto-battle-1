@@ -7,7 +7,9 @@ pub mod spawn;
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
-use self::avoidance::{AvoidanceAgent, AvoidanceConfig, AvoidanceSpatialHash, PreferredVelocity};
+use self::avoidance::{
+    AdjustedVelocity, AvoidanceAgent, AvoidanceConfig, AvoidanceSpatialHash, PreferredVelocity,
+};
 use crate::gameplay::combat::{
     AttackTimer, HealthBarConfig, UNIT_HEALTH_BAR_HEIGHT, UNIT_HEALTH_BAR_WIDTH,
     UNIT_HEALTH_BAR_Y_OFFSET,
@@ -131,12 +133,12 @@ pub fn spawn_unit(
                 Team::Player => AssignedGoal::EnemyFortress,
                 Team::Enemy => AssignedGoal::PlayerFortress,
             },
-            RigidBody::Dynamic,
+            RigidBody::Kinematic,
             EntityExtent::Circle(UNIT_RADIUS),
             Collider::circle(UNIT_RADIUS),
             solid_entity_layers(),
             LockedAxes::ROTATION_LOCKED,
-            LinearVelocity::ZERO,
+            AdjustedVelocity::default(),
             PreferredVelocity::default(),
             AvoidanceAgent::default(),
         ))
@@ -193,6 +195,7 @@ pub(super) fn plugin(app: &mut App) {
     app.register_type::<Unit>()
         .register_type::<UnitType>()
         .register_type::<PreferredVelocity>()
+        .register_type::<AdjustedVelocity>()
         .register_type::<AvoidanceAgent>()
         .register_type::<AvoidanceConfig>()
         .init_resource::<AvoidanceConfig>();
@@ -211,7 +214,10 @@ pub(super) fn plugin(app: &mut App) {
         (
             movement::unit_movement,
             avoidance::rebuild_spatial_hash,
+            avoidance::apply_separation,
             avoidance::compute_avoidance,
+            avoidance::apply_movement,
+            avoidance::resolve_overlaps,
         )
             .chain_ignore_deferred()
             .in_set(GameSet::Movement)

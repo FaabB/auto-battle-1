@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use avian2d::prelude::*;
+use avian2d::prelude::Collider;
 use bevy::input::InputPlugin;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
@@ -11,7 +11,7 @@ use bevy::window::WindowPlugin;
 
 use crate::gameplay::combat::AttackTimer;
 use crate::gameplay::flow_field::AssignedGoal;
-use crate::gameplay::units::avoidance::{AvoidanceAgent, PreferredVelocity};
+use crate::gameplay::units::avoidance::{AdjustedVelocity, AvoidanceAgent, PreferredVelocity};
 use crate::gameplay::units::{UNIT_RADIUS, Unit, UnitType, unit_stats};
 use crate::gameplay::{CombatStats, EntityExtent, Health, Movement, Target, TargetingState, Team};
 
@@ -179,7 +179,7 @@ pub fn spawn_test_unit(world: &mut World, team: Team, x: f32, y: f32) -> Entity 
             Collider::circle(UNIT_RADIUS),
         ))
         .insert((
-            LinearVelocity::ZERO,
+            AdjustedVelocity::default(),
             PreferredVelocity::default(),
             AvoidanceAgent::default(),
             match team {
