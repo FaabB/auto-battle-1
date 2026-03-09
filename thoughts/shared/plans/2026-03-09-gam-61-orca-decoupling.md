@@ -99,7 +99,20 @@ Add constant at top of file (after imports):
 const MIN_TAU: f32 = 1e-3;
 ```
 
-Replace the overlap branch (`orca.rs:108-114`) — the `else` block of `if dist_sq > combined_radius_sq`:
+**Remove `Option` return type** — with MIN_TAU + fallback directions, `compute_orca_line` always produces a valid constraint. This is cleaner long-term: callers don't need to handle `None`, and every neighbor pair produces a constraint.
+
+**Change signature** (`orca.rs:37`): `pub fn compute_orca_line(...) -> OrcaLine`
+
+**Update doc comment** (`orca.rs:34-36`):
+
+```rust
+/// Compute the ORCA half-plane constraint for agent `a` avoiding agent `b`.
+///
+/// Always produces a constraint. When agents overlap, uses `MIN_TAU` for aggressive
+/// separation matching the RVO2 reference implementation.
+```
+
+**Replace the overlap branch** (`orca.rs:108-114`) — the `else` block of `if dist_sq > combined_radius_sq`:
 
 ```rust
     } else {
@@ -120,36 +133,18 @@ Replace the overlap branch (`orca.rs:108-114`) — the `else` block of `if dist_
         let direction = Vec2::new(unit_w.y, -unit_w.x);
         let u = combined_radius.mul_add(inv_tau, -w_length) * unit_w;
 
-        Some(OrcaLine {
+        OrcaLine {
             point: a.velocity + a.responsibility * u,
             direction,
-        })
+        }
     }
 ```
 
-Update the doc comment on `compute_orca_line` (`orca.rs:34-36`):
-
-```rust
-/// Compute the ORCA half-plane constraint for agent `a` avoiding agent `b`.
-///
-/// When agents overlap, uses `MIN_TAU` for aggressive separation (matching RVO2).
-/// Returns `None` only for degenerate cases (zero-length w with co-located agents).
-```
-
-Wait — actually with the fallback direction, it never returns `None` anymore. Update to:
-
-```rust
-/// Compute the ORCA half-plane constraint for agent `a` avoiding agent `b`.
-///
-/// Always produces a constraint. When agents overlap, uses `MIN_TAU` for aggressive
-/// separation matching the RVO2 reference implementation.
-```
-
-And remove the `Option` return type — change signature to return `OrcaLine` directly. Update the cutoff circle degenerate case (`orca.rs:63-64`) to also use a fallback instead of `None`:
+**Replace the cutoff circle degenerate case** (`orca.rs:63-64`) — instead of returning `None`, use a fallback direction:
 
 ```rust
 if w_length < f32::EPSILON {
-    // Degenerate: use fallback direction
+    // Degenerate: use fallback direction based on relative position
     let fallback_dir = if rel_pos.length_squared() > f32::EPSILON {
         rel_pos.normalize()
     } else {
@@ -163,11 +158,19 @@ if w_length < f32::EPSILON {
 }
 ```
 
-**Wait** — removing `Option` is a larger change that cascades to callers. Let's keep the `Option<OrcaLine>` return type but only return `None` in truly degenerate edge cases (cutoff circle with zero w). The overlap branch now always returns `Some`.
+**Update all `Some(OrcaLine { ... })` returns** to plain `OrcaLine { ... }` (lines 70-73, 88-91, 102-105).
 
-Actually, looking more carefully: the cutoff circle `w_length < f32::EPSILON` case at line 63 can also be handled with a fallback. But let's keep it minimal — just fix the overlap branch, leave the cutoff degenerate as `None`. The caller already handles `None` by skipping that neighbor.
+**Update caller** in `compute_avoidance` (`avoidance/mod.rs:179-184`) — remove the `if let Some(line)` pattern:
 
-Final approach for this phase: **Only change the overlap branch (lines 108-114)**. Keep `Option<OrcaLine>` return type. The cutoff circle degenerate stays as `None`.
+```rust
+let line = orca::compute_orca_line(agent, neighbor, config.time_horizon);
+lines.push(line);
+neighbor_count += 1;
+```
+
+**Update `compute_avoiding_velocity`** — no change needed, it already takes `&[OrcaLine]`.
+
+**Update tests** that called `compute_orca_line` and checked `.expect("should produce a constraint")` — remove the `.expect()` since it returns `OrcaLine` directly now. Tests at lines 345, 368, 390, 535, 563, 566.
 
 #### 2. Update test: `overlapping_agents_return_none` → `overlapping_agents_produce_separation_constraint`
 
@@ -183,15 +186,10 @@ fn overlapping_agents_produce_separation_constraint() {
     let b = agent(Vec2::new(5.0, 0.0), Vec2::ZERO, Vec2::new(-50.0, 0.0));
 
     // Combined radius = 12, distance = 5 → overlapping.
-    // Should produce a separation constraint (not None).
+    // Now returns OrcaLine directly (no Option).
     let line = compute_orca_line(&a, &b, 3.0);
-    assert!(
-        line.is_some(),
-        "Overlapping agents should produce a separation constraint"
-    );
 
     // The constraint should push agent a away from b
-    let line = line.unwrap();
     let result = compute_avoiding_velocity(a.preferred, a.max_speed, &[line]);
     assert!(
         result.length() > 0.1,
@@ -205,14 +203,16 @@ Add new test for co-located agents:
 ```rust
 #[test]
 fn co_located_agents_produce_separation_constraint() {
-    // Agents at exactly the same position
+    // Agents at exactly the same position — uses fallback direction
     let a = agent(Vec2::new(0.0, 0.0), Vec2::ZERO, Vec2::new(50.0, 0.0));
     let b = agent(Vec2::new(0.0, 0.0), Vec2::ZERO, Vec2::new(-50.0, 0.0));
 
+    // Should not panic — produces a valid constraint via fallback direction
     let line = compute_orca_line(&a, &b, 3.0);
+    let result = compute_avoiding_velocity(a.preferred, a.max_speed, &[line]);
     assert!(
-        line.is_some(),
-        "Co-located agents should produce a constraint with fallback direction"
+        result.length() <= a.max_speed + 0.1,
+        "Result should be within max_speed"
     );
 }
 ```
