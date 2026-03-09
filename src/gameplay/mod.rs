@@ -4,7 +4,7 @@
 //!
 //! **Units**: `Unit`, `Team`, `Target`, `TargetingState`, `Health`, `CombatStats`, `Movement`,
 //!           `AttackTimer`, `HealthBarConfig`, `EntityExtent`, `Mesh2d`, `MeshMaterial2d`,
-//!           `RigidBody::Dynamic`, `Collider`, `CollisionLayers`, `LockedAxes`, `LinearVelocity`
+//!           `RigidBody::Kinematic`, `Collider`, `CollisionLayers`, `LockedAxes`, `PreferredVelocity`
 //!
 //! **Buildings**: `Building`, `Team`, `Target`, `Health`, `HealthBarConfig`, `EntityExtent`,
 //!           `ProductionTimer` or `IncomeTimer`, `RigidBody::Static`, `Collider`, `CollisionLayers`

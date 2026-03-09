@@ -1,9 +1,12 @@
 //! AI: target selection for all combat entities (units, fortresses, turrets).
 
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 
 use super::battlefield::CELL_SIZE;
 use super::spatial_hash::SpatialHash;
+use super::units::Unit;
 use super::{
     CombatStats, EngagementLeash, EntityExtent, LEASH_DISTANCE, Movement, Target, TargetingState,
     Team, extent_distance,
@@ -43,6 +46,10 @@ const ATTACK_HYSTERESIS: f32 = 8.0;
 
 /// Minimum detection radius (1 cell). Applied when `range * 2.0` is smaller.
 const MIN_DETECTION_RADIUS: f32 = 64.0;
+
+/// Maximum number of units that can simultaneously engage/attack a single unit target.
+/// Only applies to unit targets (not buildings/fortresses).
+const MAX_ENGAGERS_PER_UNIT_TARGET: u32 = 12;
 
 /// Compute detection radius for a unit based on its attack range.
 /// Longer-range units detect enemies from further away.
@@ -108,6 +115,7 @@ fn rebuild_target_grid(
 /// - `Engaging`/`Attacking`: retarget on stagger slot, switch target or disengage
 ///
 /// Backtrack limit only applies to mobile entities (those with `Movement`).
+#[allow(clippy::too_many_lines)]
 pub fn find_target(
     time: Res<Time>,
     mut retarget_timer: ResMut<RetargetTimer>,
@@ -122,12 +130,21 @@ pub fn find_target(
         Option<&Movement>,
     )>,
     all_targets: Query<(Entity, &Team, &GlobalTransform, &EntityExtent), With<Target>>,
+    unit_markers: Query<(), With<Unit>>,
     mut commands: Commands,
 ) {
     retarget_timer.timer.tick(time.delta());
     let slot_advanced = retarget_timer.timer.just_finished();
     if slot_advanced {
         retarget_timer.current_slot = (retarget_timer.current_slot + 1) % RETARGET_SLOTS;
+    }
+
+    // Count current engagers per unit target (for cap check)
+    let mut engager_counts: HashMap<Entity, u32> = HashMap::new();
+    for (_, _, _, _, _, state, _) in &seekers {
+        if let Some(target) = state.target_entity() {
+            *engager_counts.entry(target).or_default() += 1;
+        }
     }
 
     for (entity, team, transform, seeker_extent, stats, mut targeting_state, movement) in
@@ -164,6 +181,9 @@ pub fn find_target(
                     is_mobile,
                     *team,
                     &all_targets,
+                    &unit_markers,
+                    &engager_counts,
+                    None,
                 );
                 if let Some(target_entity) = nearest {
                     *targeting_state = TargetingState::Engaging(target_entity);
@@ -195,6 +215,7 @@ pub fn find_target(
                     }
                 }
 
+                let current_target = targeting_state.target_entity();
                 let nearest = find_nearest_target(
                     &grid,
                     entity,
@@ -204,6 +225,9 @@ pub fn find_target(
                     is_mobile,
                     *team,
                     &all_targets,
+                    &unit_markers,
+                    &engager_counts,
+                    current_target,
                 );
                 if let Some(target_entity) = nearest {
                     let old_target = targeting_state.target_entity();
@@ -268,6 +292,9 @@ fn find_nearest_target(
     is_mobile: bool,
     seeker_team: Team,
     all_targets: &Query<(Entity, &Team, &GlobalTransform, &EntityExtent), With<Target>>,
+    unit_markers: &Query<(), With<Unit>>,
+    engager_counts: &HashMap<Entity, u32>,
+    current_target: Option<Entity>,
 ) -> Option<Entity> {
     // First pass: nearby targets
     let result = search_radius(
@@ -280,6 +307,9 @@ fn find_nearest_target(
         is_mobile,
         seeker_team,
         all_targets,
+        unit_markers,
+        engager_counts,
+        current_target,
     );
 
     if result.is_some() {
@@ -297,6 +327,9 @@ fn find_nearest_target(
         is_mobile,
         seeker_team,
         all_targets,
+        unit_markers,
+        engager_counts,
+        current_target,
     )
 }
 
@@ -311,6 +344,9 @@ fn search_radius(
     is_mobile: bool,
     seeker_team: Team,
     all_targets: &Query<(Entity, &Team, &GlobalTransform, &EntityExtent), With<Target>>,
+    unit_markers: &Query<(), With<Unit>>,
+    engager_counts: &HashMap<Entity, u32>,
+    current_target: Option<Entity>,
 ) -> Option<Entity> {
     let candidates = grid.query_neighbors(seeker_pos, radius);
 
@@ -325,6 +361,19 @@ fn search_radius(
 
         if cand_entity == seeker_entity || *cand_team != opposing_team {
             continue;
+        }
+
+        // Skip unit targets at engager cap (exclude current target from count)
+        if unit_markers.get(cand_entity).is_ok() {
+            let count = engager_counts.get(&cand_entity).copied().unwrap_or(0);
+            let effective_count = if current_target == Some(cand_entity) {
+                count.saturating_sub(1) // Don't count self
+            } else {
+                count
+            };
+            if effective_count >= MAX_ENGAGERS_PER_UNIT_TARGET {
+                continue;
+            }
         }
 
         let cand_pos = cand_transform.translation().xy();
@@ -381,6 +430,81 @@ fn search_radius(
     }
 
     nearest.map(|(e, _)| e)
+}
+
+/// Per-engager data for cap enforcement sorting.
+struct EngagerInfo {
+    entity: Entity,
+    distance: f32,
+    is_attacking: bool,
+    is_mobile: bool,
+}
+
+/// Evict excess engagers from unit targets. Keeps closest N, kicks farthest to Moving/Seeking.
+/// Attacking units get priority (never evicted). Only applies to unit targets.
+fn enforce_engager_cap(
+    mut units: Query<(
+        Entity,
+        &GlobalTransform,
+        &mut TargetingState,
+        Option<&Movement>,
+    )>,
+    unit_targets: Query<&GlobalTransform, With<Unit>>,
+    mut commands: Commands,
+) {
+    // Group engagers by target
+    let mut engagers_by_target: HashMap<Entity, Vec<EngagerInfo>> = HashMap::new();
+
+    for (entity, transform, state, movement) in &units {
+        let (TargetingState::Engaging(target_entity) | TargetingState::Attacking(target_entity)) =
+            *state
+        else {
+            continue;
+        };
+        // Only cap unit targets
+        let Ok(target_gt) = unit_targets.get(target_entity) else {
+            continue;
+        };
+
+        let target_pos = target_gt.translation().xy();
+        engagers_by_target
+            .entry(target_entity)
+            .or_default()
+            .push(EngagerInfo {
+                entity,
+                distance: transform.translation().xy().distance(target_pos),
+                is_attacking: matches!(*state, TargetingState::Attacking(_)),
+                is_mobile: movement.is_some(),
+            });
+    }
+
+    // Enforce cap per target
+    for (_target, mut engagers) in engagers_by_target {
+        if engagers.len() <= MAX_ENGAGERS_PER_UNIT_TARGET as usize {
+            continue;
+        }
+
+        // Sort: attacking first (never evicted), then by distance (closest first)
+        engagers.sort_by(|a, b| {
+            b.is_attacking.cmp(&a.is_attacking).then(
+                a.distance
+                    .partial_cmp(&b.distance)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
+        });
+
+        // Evict excess (from the end — farthest non-attacking)
+        for engager in engagers.iter().skip(MAX_ENGAGERS_PER_UNIT_TARGET as usize) {
+            if let Ok((_, _, mut state, _)) = units.get_mut(engager.entity) {
+                *state = if engager.is_mobile {
+                    TargetingState::Moving
+                } else {
+                    TargetingState::Seeking
+                };
+                commands.entity(engager.entity).remove::<EngagementLeash>();
+            }
+        }
+    }
 }
 
 /// Verify targeting state against range and leash constraints.
@@ -463,7 +587,12 @@ pub(super) fn plugin(app: &mut App) {
     app.add_systems(OnEnter(GameState::InGame), reset_retarget_timer);
     app.add_systems(
         Update,
-        (rebuild_target_grid, find_target, verify_targets)
+        (
+            rebuild_target_grid,
+            find_target,
+            enforce_engager_cap,
+            verify_targets,
+        )
             .chain_ignore_deferred()
             .in_set(GameSet::Ai)
             .run_if(gameplay_running),
@@ -485,7 +614,13 @@ mod tests {
         )));
         app.add_systems(
             Update,
-            (rebuild_target_grid, find_target, verify_targets).chain_ignore_deferred(),
+            (
+                rebuild_target_grid,
+                find_target,
+                enforce_engager_cap,
+                verify_targets,
+            )
+                .chain_ignore_deferred(),
         );
         app
     }
@@ -942,5 +1077,54 @@ mod tests {
         let ct = app.world().get::<TargetingState>(player).unwrap();
         // No enemies left → Mobile unit: Moving
         assert_eq!(*ct, TargetingState::Moving);
+    }
+
+    // === Engager cap tests ===
+
+    #[test]
+    fn engager_cap_evicts_excess_units() {
+        let mut app = create_ai_test_app();
+
+        // Spawn 1 enemy target
+        let _enemy = crate::testing::spawn_test_unit(app.world_mut(), Team::Enemy, 500.0, 100.0);
+
+        // Spawn 20 player units all Seeking → they should all try to engage the enemy
+        let mut player_units = Vec::new();
+        for i in 0..20 {
+            let unit = crate::testing::spawn_test_unit(
+                app.world_mut(),
+                Team::Player,
+                100.0 + i as f32 * 10.0,
+                100.0,
+            );
+            app.world_mut()
+                .entity_mut(unit)
+                .insert(TargetingState::Seeking);
+            player_units.push(unit);
+        }
+
+        // Run a few frames to let find_target + enforce_engager_cap settle
+        for _ in 0..3 {
+            app.update();
+        }
+
+        // Count how many are Engaging/Attacking
+        let engaged_count = player_units
+            .iter()
+            .filter(|&&unit| {
+                let state = app.world().get::<TargetingState>(unit).unwrap();
+                matches!(
+                    *state,
+                    TargetingState::Engaging(_) | TargetingState::Attacking(_)
+                )
+            })
+            .count();
+
+        assert!(
+            engaged_count <= MAX_ENGAGERS_PER_UNIT_TARGET as usize,
+            "Expected at most {} engagers, got {}",
+            MAX_ENGAGERS_PER_UNIT_TARGET,
+            engaged_count
+        );
     }
 }

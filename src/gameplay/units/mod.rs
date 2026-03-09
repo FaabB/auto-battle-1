@@ -7,7 +7,7 @@ pub mod spawn;
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
-use self::avoidance::{AvoidanceAgent, AvoidanceConfig, AvoidanceSpatialHash, PreferredVelocity};
+use self::avoidance::{AvoidanceSpatialHash, PreferredVelocity, SEPARATION_RADIUS};
 use crate::gameplay::combat::{
     AttackTimer, HealthBarConfig, UNIT_HEALTH_BAR_HEIGHT, UNIT_HEALTH_BAR_WIDTH,
     UNIT_HEALTH_BAR_Y_OFFSET,
@@ -131,14 +131,12 @@ pub fn spawn_unit(
                 Team::Player => AssignedGoal::EnemyFortress,
                 Team::Enemy => AssignedGoal::PlayerFortress,
             },
-            RigidBody::Dynamic,
+            RigidBody::Kinematic,
             EntityExtent::Circle(UNIT_RADIUS),
             Collider::circle(UNIT_RADIUS),
             solid_entity_layers(),
             LockedAxes::ROTATION_LOCKED,
-            LinearVelocity::ZERO,
             PreferredVelocity::default(),
-            AvoidanceAgent::default(),
         ))
         .id()
 }
@@ -192,15 +190,9 @@ fn setup_unit_assets(
 pub(super) fn plugin(app: &mut App) {
     app.register_type::<Unit>()
         .register_type::<UnitType>()
-        .register_type::<PreferredVelocity>()
-        .register_type::<AvoidanceAgent>()
-        .register_type::<AvoidanceConfig>()
-        .init_resource::<AvoidanceConfig>();
+        .register_type::<PreferredVelocity>();
 
-    let config = AvoidanceConfig::default();
-    app.insert_resource(AvoidanceSpatialHash(SpatialHash::new(
-        config.neighbor_distance,
-    )));
+    app.insert_resource(AvoidanceSpatialHash(SpatialHash::new(SEPARATION_RADIUS)));
 
     app.add_systems(OnEnter(GameState::InGame), setup_unit_assets);
 
@@ -211,7 +203,15 @@ pub(super) fn plugin(app: &mut App) {
         (
             movement::unit_movement,
             avoidance::rebuild_spatial_hash,
-            avoidance::compute_avoidance,
+            avoidance::apply_separation,
+            avoidance::apply_movement,
+            // Note: resolve_overlaps uses the spatial hash built before apply_movement,
+            // so positions are ~0.8px stale (one frame of movement). This is fine because
+            // the hash is only used for candidate neighbor lookup (24px cells vs 0.8px drift).
+            // If faster units or low framerates cause missed overlaps, switch
+            // rebuild_spatial_hash to read Transform instead of GlobalTransform and add
+            // a second rebuild here.
+            avoidance::resolve_overlaps,
         )
             .chain_ignore_deferred()
             .in_set(GameSet::Movement)

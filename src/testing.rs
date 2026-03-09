@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use avian2d::prelude::*;
+use avian2d::prelude::Collider;
 use bevy::input::InputPlugin;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
@@ -11,7 +11,7 @@ use bevy::window::WindowPlugin;
 
 use crate::gameplay::combat::AttackTimer;
 use crate::gameplay::flow_field::AssignedGoal;
-use crate::gameplay::units::avoidance::{AvoidanceAgent, PreferredVelocity};
+use crate::gameplay::units::avoidance::PreferredVelocity;
 use crate::gameplay::units::{UNIT_RADIUS, Unit, UnitType, unit_stats};
 use crate::gameplay::{CombatStats, EntityExtent, Health, Movement, Target, TargetingState, Team};
 
@@ -147,7 +147,7 @@ pub fn init_input_resources(app: &mut App) {
 ///
 /// Includes: Unit, UnitType::Soldier, Team, Target, TargetingState::Moving,
 /// Health, CombatStats, Movement, AttackTimer, Transform, GlobalTransform,
-/// Collider, LinearVelocity.
+/// Collider, PreferredVelocity.
 ///
 /// Callers can override specific components via `world.entity_mut(id).insert(...)`.
 #[allow(dead_code)]
@@ -179,9 +179,7 @@ pub fn spawn_test_unit(world: &mut World, team: Team, x: f32, y: f32) -> Entity 
             Collider::circle(UNIT_RADIUS),
         ))
         .insert((
-            LinearVelocity::ZERO,
             PreferredVelocity::default(),
-            AvoidanceAgent::default(),
             match team {
                 Team::Player => AssignedGoal::EnemyFortress,
                 Team::Enemy => AssignedGoal::PlayerFortress,
