@@ -88,8 +88,6 @@ mod tests {
     };
     use crate::gameplay::units::UnitType;
     use crate::gameplay::units::unit_stats;
-    use avian2d::prelude::Collider;
-
     /// Create a GoalRegistry with open-grid flow fields.
     /// Player fortress goal at (0, 20), enemy fortress goal at (327, 20).
     fn test_registry() -> GoalRegistry {
@@ -305,7 +303,6 @@ mod tests {
                 Transform::from_xyz(400.0, 500.0, 0.0),
                 GlobalTransform::from(Transform::from_xyz(400.0, 500.0, 0.0)),
                 EntityExtent::Circle(5.0),
-                Collider::circle(5.0),
             ))
             .id();
         let unit = spawn_unit_at(

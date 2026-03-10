@@ -220,14 +220,14 @@ fn projectile_hit_applies_damage() {
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` succeeds
-- [ ] `cargo test` passes — all rewritten hit tests verify distance-based detection
-- [ ] `cargo clippy` clean
+- [x] `cargo build` succeeds
+- [x] `cargo test` passes — all rewritten hit tests verify distance-based detection
+- [x] `cargo clippy` clean
 
 #### Manual Verification:
-- [ ] Run the game, let units fight — projectiles visually travel to targets and deal damage
-- [ ] Verify enemy HP decreases when hit
-- [ ] Verify units die when HP reaches 0
+- [x] Run the game, let units fight — projectiles visually travel to targets and deal damage
+- [x] Verify enemy HP decreases when hit
+- [x] Verify units die when HP reaches 0
 
 **Implementation Note**: After completing Phase 1, pause for manual verification that projectile behavior is unchanged before proceeding.
 
@@ -346,23 +346,23 @@ These compared `extent_distance` vs GJK `surface_distance` — with physics gone
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `cargo build` succeeds — zero avian2d references
-- [ ] `cargo test` passes — all existing (non-parity) tests still pass
-- [ ] `cargo clippy` clean
-- [ ] `grep -r "avian2d" src/` returns nothing
-- [ ] `grep -r "Collider" src/` returns nothing
-- [ ] `grep -r "RigidBody" src/` returns nothing
-- [ ] `grep -r "CollisionLayers\|CollisionLayer\b" src/` returns nothing (except doc comments if any)
-- [ ] `grep -r "solid_entity_layers" src/` returns nothing
-- [ ] `grep -r "Hitbox" src/` returns nothing
-- [ ] `grep -r "third_party" src/` returns nothing
+- [x] `cargo build` succeeds — zero avian2d references
+- [x] `cargo test` passes — all existing (non-parity) tests still pass
+- [x] `cargo clippy` clean
+- [x] `grep -r "avian2d" src/` returns nothing
+- [x] `grep -r "Collider" src/` returns nothing
+- [x] `grep -r "RigidBody" src/` returns nothing
+- [x] `grep -r "CollisionLayers\|CollisionLayer\b" src/` returns nothing (except doc comments if any)
+- [x] `grep -r "solid_entity_layers" src/` returns nothing
+- [x] `grep -r "Hitbox" src/` returns nothing
+- [x] `grep -r "third_party" src/` returns nothing
 
 #### Manual Verification:
-- [ ] Run the game — all entity types spawn correctly without physics
-- [ ] Units move via flow field + ORCA (unchanged from GAM-61)
-- [ ] Buildings place correctly
-- [ ] Fortresses render at correct positions
-- [ ] No visual regressions
+- [x] Run the game — all entity types spawn correctly without physics
+- [x] Units move via flow field + boids separation (unchanged from GAM-61)
+- [x] Buildings place correctly
+- [x] Fortresses render at correct positions
+- [x] No visual regressions
 
 ---
 

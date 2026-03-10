@@ -1,6 +1,5 @@
 //! Building placement systems: grid cursor spawning, hover tracking, click-to-place.
 
-use avian2d::prelude::*;
 use bevy::prelude::*;
 
 use super::{
@@ -17,7 +16,6 @@ use crate::gameplay::units::Unit;
 use crate::gameplay::{EntityExtent, Health, Target, Team};
 
 use crate::screens::GameState;
-use crate::third_party::solid_entity_layers;
 use crate::{Z_BUILDING, Z_GRID_CURSOR};
 
 /// Spawns the semi-transparent grid cursor entity. Hidden by default.
@@ -149,10 +147,6 @@ pub(super) fn handle_building_placement(
         Transform::from_xyz(world_x, world_y, Z_BUILDING),
         DespawnOnExit(GameState::InGame),
         EntityExtent::Rect(BUILDING_SPRITE_SIZE / 2.0, BUILDING_SPRITE_SIZE / 2.0),
-        // Physics
-        RigidBody::Static,
-        Collider::rectangle(BUILDING_SPRITE_SIZE, BUILDING_SPRITE_SIZE),
-        solid_entity_layers(),
     ));
 
     // Data-driven timer insertion — no per-type match needed

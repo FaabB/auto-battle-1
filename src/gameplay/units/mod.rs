@@ -4,7 +4,6 @@ pub mod avoidance;
 mod movement;
 pub mod spawn;
 
-use avian2d::prelude::*;
 use bevy::prelude::*;
 
 use self::avoidance::{AvoidanceSpatialHash, PreferredVelocity, SEPARATION_RADIUS};
@@ -16,7 +15,6 @@ use crate::gameplay::flow_field::AssignedGoal;
 use crate::gameplay::spatial_hash::SpatialHash;
 use crate::gameplay::{CombatStats, EntityExtent, Health, Movement, Target, TargetingState, Team};
 use crate::screens::GameState;
-use crate::third_party::solid_entity_layers;
 use crate::{GameSet, Z_UNIT, gameplay_running};
 
 // === Constants ===
@@ -131,11 +129,7 @@ pub fn spawn_unit(
                 Team::Player => AssignedGoal::EnemyFortress,
                 Team::Enemy => AssignedGoal::PlayerFortress,
             },
-            RigidBody::Kinematic,
             EntityExtent::Circle(UNIT_RADIUS),
-            Collider::circle(UNIT_RADIUS),
-            solid_entity_layers(),
-            LockedAxes::ROTATION_LOCKED,
             PreferredVelocity::default(),
         ))
         .id()

@@ -8,7 +8,6 @@ pub(crate) mod screens;
 #[cfg(test)]
 pub(crate) mod testing;
 pub(crate) mod theme;
-pub(crate) mod third_party;
 pub(crate) mod ui_camera;
 
 // Re-export types needed by integration tests in `tests/`.
@@ -87,7 +86,6 @@ pub fn plugin(app: &mut App) {
     );
 
     app.add_plugins((
-        third_party::plugin,
         ui_camera::plugin,
         screens::plugin,
         menus::plugin,

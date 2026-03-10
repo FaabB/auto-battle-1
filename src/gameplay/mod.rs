@@ -4,17 +4,15 @@
 //!
 //! **Units**: `Unit`, `Team`, `Target`, `TargetingState`, `Health`, `CombatStats`, `Movement`,
 //!           `AttackTimer`, `HealthBarConfig`, `EntityExtent`, `Mesh2d`, `MeshMaterial2d`,
-//!           `RigidBody::Kinematic`, `Collider`, `CollisionLayers`, `LockedAxes`, `PreferredVelocity`
+//!           `PreferredVelocity`
 //!
 //! **Buildings**: `Building`, `Team`, `Target`, `Health`, `HealthBarConfig`, `EntityExtent`,
-//!           `ProductionTimer` or `IncomeTimer`, `RigidBody::Static`, `Collider`, `CollisionLayers`
+//!           `ProductionTimer` or `IncomeTimer`
 //!
 //! **Fortresses**: `PlayerFortress`/`EnemyFortress`, `Team`, `Target`, `TargetingState`,
-//!           `Health`, `CombatStats`, `AttackTimer`, `HealthBarConfig`, `EntityExtent`,
-//!           `RigidBody::Static`, `Collider`, `CollisionLayers`
+//!           `Health`, `CombatStats`, `AttackTimer`, `HealthBarConfig`, `EntityExtent`
 //!
-//! **Projectiles**: `Projectile`, `Team`, `Hitbox`, `Sensor`, `RigidBody::Kinematic`,
-//!           `Collider`, `CollisionLayers`, `CollisionEventsEnabled`, `CollidingEntities`
+//! **Projectiles**: `Projectile`, `Team`
 
 pub mod ai;
 pub mod battlefield;
@@ -153,7 +151,6 @@ impl EntityExtent {
 }
 
 /// Surface-to-surface distance between two extents. Returns 0.0 if overlapping.
-/// Drop-in replacement for `third_party::surface_distance()`.
 #[must_use]
 #[allow(clippy::similar_names)]
 pub fn extent_distance(a: &EntityExtent, a_pos: Vec2, b: &EntityExtent, b_pos: Vec2) -> f32 {
@@ -326,65 +323,4 @@ mod tests {
         assert!(dist < 0.001);
     }
 
-    // === Parity tests: extent_distance vs GJK surface_distance ===
-
-    #[test]
-    fn parity_circle_circle() {
-        use crate::third_party::surface_distance;
-        use avian2d::prelude::Collider;
-
-        let c1 = EntityExtent::Circle(10.0);
-        let c2 = EntityExtent::Circle(5.0);
-        let gjk = surface_distance(
-            &Collider::circle(10.0),
-            Vec2::ZERO,
-            &Collider::circle(5.0),
-            Vec2::new(25.0, 0.0),
-        );
-        let ours = extent_distance(&c1, Vec2::ZERO, &c2, Vec2::new(25.0, 0.0));
-        assert!(
-            (gjk - ours).abs() < 0.01,
-            "circle-circle: gjk={gjk}, ours={ours}"
-        );
-    }
-
-    #[test]
-    fn parity_circle_rect() {
-        use crate::third_party::surface_distance;
-        use avian2d::prelude::Collider;
-
-        let unit_e = EntityExtent::Circle(6.0);
-        let fort_e = EntityExtent::Rect(64.0, 64.0);
-        let gjk = surface_distance(
-            &Collider::circle(6.0),
-            Vec2::new(100.0, 0.0),
-            &Collider::rectangle(128.0, 128.0),
-            Vec2::ZERO,
-        );
-        let ours = extent_distance(&unit_e, Vec2::new(100.0, 0.0), &fort_e, Vec2::ZERO);
-        assert!(
-            (gjk - ours).abs() < 0.01,
-            "circle-rect: gjk={gjk}, ours={ours}"
-        );
-    }
-
-    #[test]
-    fn parity_rect_rect() {
-        use crate::third_party::surface_distance;
-        use avian2d::prelude::Collider;
-
-        let a_e = EntityExtent::Rect(64.0, 64.0);
-        let b_e = EntityExtent::Rect(20.0, 20.0);
-        let gjk = surface_distance(
-            &Collider::rectangle(128.0, 128.0),
-            Vec2::ZERO,
-            &Collider::rectangle(40.0, 40.0),
-            Vec2::new(200.0, 0.0),
-        );
-        let ours = extent_distance(&a_e, Vec2::ZERO, &b_e, Vec2::new(200.0, 0.0));
-        assert!(
-            (gjk - ours).abs() < 0.01,
-            "rect-rect: gjk={gjk}, ours={ours}"
-        );
-    }
 }
