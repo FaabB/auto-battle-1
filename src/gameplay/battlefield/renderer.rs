@@ -1,6 +1,5 @@
 //! Battlefield zone and entity spawning.
 
-use avian2d::prelude::*;
 use bevy::prelude::*;
 
 use super::{
@@ -15,7 +14,6 @@ use super::{
 use crate::gameplay::combat::{AttackTimer, HealthBarConfig};
 use crate::gameplay::{CombatStats, EntityExtent, Health, Target, TargetingState, Team};
 use crate::screens::GameState;
-use crate::third_party::solid_entity_layers;
 use crate::{Z_BACKGROUND, Z_FORTRESS, Z_GRID, Z_ZONE};
 
 use crate::theme::palette;
@@ -91,12 +89,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
             ),
             DespawnOnExit(GameState::InGame),
         ))
-        .insert((
-            EntityExtent::Rect(fortress_size.x / 2.0, fortress_size.y / 2.0),
-            RigidBody::Static,
-            Collider::rectangle(fortress_size.x, fortress_size.y),
-            solid_entity_layers(),
-        ));
+        .insert(EntityExtent::Rect(fortress_size.x / 2.0, fortress_size.y / 2.0));
 
     // Building zone (dark blue-gray)
     commands.spawn((
@@ -173,12 +166,7 @@ pub(super) fn spawn_battlefield(mut commands: Commands, mut grid_index: ResMut<G
             ),
             DespawnOnExit(GameState::InGame),
         ))
-        .insert((
-            EntityExtent::Rect(fortress_size.x / 2.0, fortress_size.y / 2.0),
-            RigidBody::Static,
-            Collider::rectangle(fortress_size.x, fortress_size.y),
-            solid_entity_layers(),
-        ));
+        .insert(EntityExtent::Rect(fortress_size.x / 2.0, fortress_size.y / 2.0));
 
     // Build slots: 10 rows × 6 cols — visible grid cells, indexed for O(1) lookup
     for row in 0..BATTLEFIELD_ROWS {

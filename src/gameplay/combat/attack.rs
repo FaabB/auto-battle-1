@@ -1,11 +1,9 @@
 //! Attack mechanics: timers, projectiles, and damage application.
 
-use avian2d::prelude::*;
 use bevy::prelude::*;
 
 use crate::gameplay::{CombatStats, EntityExtent, Health, TargetingState, Team, extent_distance};
 use crate::screens::GameState;
-use crate::third_party::CollisionLayer;
 use crate::{GameSet, Z_PROJECTILE, gameplay_running};
 
 // === Constants ===
@@ -35,12 +33,6 @@ pub struct Projectile {
     pub damage: f32,
     pub speed: f32,
 }
-
-/// Marker for hitbox sensor entities (attack colliders that damage hurtbox targets).
-/// Lives on projectiles; future: melee swing entities.
-#[derive(Component, Debug, Clone, Copy, Reflect)]
-#[reflect(Component)]
-pub struct Hitbox;
 
 // === Systems ===
 
@@ -93,7 +85,6 @@ fn attack(
                     speed: PROJECTILE_SPEED,
                 },
                 *team,
-                Hitbox,
                 Sprite::from_color(palette::PROJECTILE, Vec2::splat(PROJECTILE_RADIUS * 2.0)),
                 Transform::from_xyz(
                     attacker_pos.translation().x,
@@ -101,29 +92,23 @@ fn attack(
                     Z_PROJECTILE,
                 ),
                 DespawnOnExit(GameState::InGame),
-                // Physics: sensor hitbox for collision-based damage
-                RigidBody::Kinematic,
-                Collider::circle(PROJECTILE_RADIUS),
-                Sensor,
-                CollisionLayers::new(CollisionLayer::Hitbox, CollisionLayer::Hurtbox),
-                CollisionEventsEnabled,
-                CollidingEntities::default(),
             ));
         }
     }
 }
 
-/// Moves projectiles toward their targets. Snaps to target position on overshoot
-/// so the collision system can detect the hit. If the target no longer exists,
-/// despawns the projectile harmlessly.
+/// Moves projectiles toward their targets. When a projectile reaches its target
+/// (distance-based arrival), applies damage and despawns. If the target no longer
+/// exists, despawns the projectile harmlessly.
 /// Runs in `GameSet::Combat`.
 fn move_projectiles(
     time: Res<Time>,
     mut commands: Commands,
-    mut projectiles: Query<(Entity, &Projectile, &mut Transform)>,
+    mut projectiles: Query<(Entity, &Projectile, &Team, &mut Transform)>,
     positions: Query<&GlobalTransform>,
+    mut targets: Query<(&Team, &mut Health)>,
 ) {
-    for (entity, projectile, mut transform) in &mut projectiles {
+    for (entity, projectile, proj_team, mut transform) in &mut projectiles {
         // Target gone — despawn projectile harmlessly
         let Ok(target_pos) = positions.get(projectile.target) else {
             commands.entity(entity).despawn();
@@ -134,16 +119,16 @@ fn move_projectiles(
         let current_xy = transform.translation.truncate();
         let direction = target_xy - current_xy;
         let distance = direction.length();
-
-        if distance < f32::EPSILON {
-            continue; // At target — collision system handles damage
-        }
-
         let move_amount = projectile.speed * time.delta_secs();
-        if move_amount >= distance {
-            // Snap to target to prevent tunneling (collision handles damage)
-            transform.translation.x = target_xy.x;
-            transform.translation.y = target_xy.y;
+
+        if distance < f32::EPSILON || move_amount >= distance {
+            // Arrived — apply damage and despawn
+            if let Ok((hit_team, mut health)) = targets.get_mut(projectile.target) {
+                if hit_team != proj_team {
+                    health.current = (health.current - projectile.damage).max(0.0);
+                }
+            }
+            commands.entity(entity).despawn();
         } else {
             let dir = direction / distance;
             transform.translation.x = dir.x.mul_add(move_amount, transform.translation.x);
@@ -152,43 +137,18 @@ fn move_projectiles(
     }
 }
 
-/// Checks projectile hitbox overlaps with hurtboxes via `CollidingEntities`.
-/// Damages the first opposing-team entity hit and despawns the projectile.
-/// Runs after `move_projectiles` in the combat chain.
-fn handle_projectile_hits(
-    mut commands: Commands,
-    projectiles: Query<(Entity, &Projectile, &Team, &CollidingEntities), With<Hitbox>>,
-    mut targets: Query<(&Team, &mut Health)>,
-) {
-    for (entity, projectile, proj_team, colliding) in &projectiles {
-        for &hit in &colliding.0 {
-            let Ok((hit_team, mut health)) = targets.get_mut(hit) else {
-                continue;
-            };
-            // No friendly fire
-            if hit_team == proj_team {
-                continue;
-            }
-            health.current = (health.current - projectile.damage).max(0.0);
-            commands.entity(entity).despawn();
-            break; // One hit per projectile
-        }
-    }
-}
-
 // === Plugin ===
 
 pub(super) fn plugin(app: &mut App) {
     app.register_type::<AttackTimer>()
-        .register_type::<Projectile>()
-        .register_type::<Hitbox>();
+        .register_type::<Projectile>();
 
-    // Combat: spawn → move → check hits.
+    // Combat: spawn → move (with hit detection on arrival).
     // chain_ignore_deferred so newly spawned projectiles don't move until next frame
     // (prevents instant-hit invisible projectiles).
     app.add_systems(
         Update,
-        (attack, move_projectiles, handle_projectile_hits)
+        (attack, move_projectiles)
             .chain_ignore_deferred()
             .in_set(GameSet::Combat)
             .run_if(gameplay_running),
@@ -229,6 +189,7 @@ mod integration_tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
         app.add_systems(Update, move_projectiles);
+        app.init_resource::<Time<Virtual>>();
         app.update(); // Initialize time
         app
     }
@@ -311,6 +272,7 @@ mod integration_tests {
                 damage: 10.0,
                 speed: PROJECTILE_SPEED,
             },
+            Team::Player,
             Transform::from_xyz(100.0, 100.0, 0.0),
         ));
 
@@ -340,159 +302,159 @@ mod integration_tests {
         assert_entity_count::<With<Projectile>>(&mut app, 0);
     }
 
-    // === Collision-Based Hit Tests ===
-
-    fn create_hit_test_app() -> App {
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
-        app.add_systems(Update, handle_projectile_hits);
-        app.update(); // Initialize
-        app
-    }
-
-    /// Spawn a projectile with team, damage, and pre-populated `CollidingEntities`.
-    fn spawn_test_projectile(
-        world: &mut World,
-        team: Team,
-        target: Entity,
-        damage: f32,
-        colliding_with: &[Entity],
-    ) -> Entity {
-        use bevy::ecs::entity::hash_set::EntityHashSet;
-        let colliding = CollidingEntities(EntityHashSet::from_iter(colliding_with.iter().copied()));
-        world
-            .spawn((
-                Projectile {
-                    target,
-                    damage,
-                    speed: 200.0,
-                },
-                team,
-                Hitbox,
-                colliding,
-            ))
-            .id()
-    }
+    // === Arrival-Based Hit Tests ===
 
     #[test]
     fn projectile_hit_applies_damage() {
-        let mut app = create_hit_test_app();
+        let mut app = create_projectile_test_app();
 
-        let enemy = app
+        let target = app
             .world_mut()
-            .spawn((Team::Enemy, Health::new(100.0)))
+            .spawn((
+                Team::Enemy,
+                Health::new(100.0),
+                Transform::from_xyz(100.0, 0.0, 0.0),
+                GlobalTransform::from(Transform::from_xyz(100.0, 0.0, 0.0)),
+            ))
             .id();
-        spawn_test_projectile(app.world_mut(), Team::Player, enemy, 25.0, &[enemy]);
 
-        app.update();
+        // Spawn projectile very close — arrives in one frame
+        app.world_mut().spawn((
+            Projectile {
+                target,
+                damage: 25.0,
+                speed: 100_000.0,
+            },
+            Team::Player,
+            Transform::from_xyz(99.0, 0.0, 0.0),
+        ));
 
-        let health = app.world().get::<Health>(enemy).unwrap();
+        advance_and_update(&mut app, Duration::from_millis(100));
+
+        let health = app.world().get::<Health>(target).unwrap();
         assert_eq!(health.current, 75.0);
     }
 
     #[test]
     fn projectile_hit_clamps_health_at_zero() {
-        let mut app = create_hit_test_app();
+        let mut app = create_projectile_test_app();
 
-        let enemy = app.world_mut().spawn((Team::Enemy, Health::new(10.0))).id();
-        // Damage exceeds HP — health should clamp to 0, not go negative
-        spawn_test_projectile(app.world_mut(), Team::Player, enemy, 50.0, &[enemy]);
+        let target = app
+            .world_mut()
+            .spawn((
+                Team::Enemy,
+                Health::new(10.0),
+                Transform::from_xyz(100.0, 0.0, 0.0),
+                GlobalTransform::from(Transform::from_xyz(100.0, 0.0, 0.0)),
+            ))
+            .id();
 
-        app.update();
+        app.world_mut().spawn((
+            Projectile {
+                target,
+                damage: 50.0,
+                speed: 100_000.0,
+            },
+            Team::Player,
+            Transform::from_xyz(99.0, 0.0, 0.0),
+        ));
 
-        let health = app.world().get::<Health>(enemy).unwrap();
-        assert_eq!(health.current, 0.0); // Not -40.0
+        advance_and_update(&mut app, Duration::from_millis(100));
+
+        let health = app.world().get::<Health>(target).unwrap();
+        assert_eq!(health.current, 0.0);
     }
 
     #[test]
     fn projectile_despawns_on_hit() {
-        let mut app = create_hit_test_app();
+        let mut app = create_projectile_test_app();
 
-        let enemy = app
+        let target = app
             .world_mut()
-            .spawn((Team::Enemy, Health::new(100.0)))
+            .spawn((
+                Team::Enemy,
+                Health::new(100.0),
+                Transform::from_xyz(100.0, 0.0, 0.0),
+                GlobalTransform::from(Transform::from_xyz(100.0, 0.0, 0.0)),
+            ))
             .id();
-        spawn_test_projectile(app.world_mut(), Team::Player, enemy, 10.0, &[enemy]);
 
-        app.update();
+        app.world_mut().spawn((
+            Projectile {
+                target,
+                damage: 10.0,
+                speed: 100_000.0,
+            },
+            Team::Player,
+            Transform::from_xyz(99.0, 0.0, 0.0),
+        ));
+
+        advance_and_update(&mut app, Duration::from_millis(100));
 
         assert_entity_count::<With<Projectile>>(&mut app, 0);
     }
 
     #[test]
     fn projectile_does_not_friendly_fire() {
-        let mut app = create_hit_test_app();
+        let mut app = create_projectile_test_app();
 
-        // Player projectile collides with a friendly player unit
+        // Target is same team as projectile
         let friendly = app
             .world_mut()
-            .spawn((Team::Player, Health::new(100.0)))
+            .spawn((
+                Team::Player,
+                Health::new(100.0),
+                Transform::from_xyz(100.0, 0.0, 0.0),
+                GlobalTransform::from(Transform::from_xyz(100.0, 0.0, 0.0)),
+            ))
             .id();
-        let dummy_target = app
-            .world_mut()
-            .spawn((Team::Enemy, Health::new(100.0)))
-            .id();
-        spawn_test_projectile(
-            app.world_mut(),
+
+        app.world_mut().spawn((
+            Projectile {
+                target: friendly,
+                damage: 25.0,
+                speed: 100_000.0,
+            },
             Team::Player,
-            dummy_target,
-            25.0,
-            &[friendly],
-        );
+            Transform::from_xyz(99.0, 0.0, 0.0),
+        ));
 
-        app.update();
+        advance_and_update(&mut app, Duration::from_millis(100));
 
-        // Friendly undamaged, projectile still alive
+        // No damage applied, but projectile still despawns (arrived at target)
         let hp = app.world().get::<Health>(friendly).unwrap();
         assert_eq!(hp.current, 100.0);
-        assert_entity_count::<With<Projectile>>(&mut app, 1);
-    }
-
-    #[test]
-    fn projectile_hits_non_target_enemy() {
-        let mut app = create_hit_test_app();
-
-        // Projectile aimed at enemy_far but collides with enemy_near (different entity)
-        let enemy_near = app
-            .world_mut()
-            .spawn((Team::Enemy, Health::new(100.0)))
-            .id();
-        let enemy_far = app
-            .world_mut()
-            .spawn((Team::Enemy, Health::new(100.0)))
-            .id();
-        spawn_test_projectile(
-            app.world_mut(),
-            Team::Player,
-            enemy_far,
-            25.0,
-            &[enemy_near],
-        );
-
-        app.update();
-
-        // enemy_near takes damage (even though it wasn't the intended target)
-        let near_hp = app.world().get::<Health>(enemy_near).unwrap();
-        assert_eq!(near_hp.current, 75.0);
-        // enemy_far undamaged
-        let far_hp = app.world().get::<Health>(enemy_far).unwrap();
-        assert_eq!(far_hp.current, 100.0);
         assert_entity_count::<With<Projectile>>(&mut app, 0);
     }
 
     #[test]
-    fn projectile_no_collision_yet() {
-        let mut app = create_hit_test_app();
+    fn projectile_in_flight_no_damage() {
+        let mut app = create_projectile_test_app();
 
-        let enemy = app
+        let target = app
             .world_mut()
-            .spawn((Team::Enemy, Health::new(100.0)))
+            .spawn((
+                Team::Enemy,
+                Health::new(100.0),
+                Transform::from_xyz(10_000.0, 0.0, 0.0),
+                GlobalTransform::from(Transform::from_xyz(10_000.0, 0.0, 0.0)),
+            ))
             .id();
-        spawn_test_projectile(app.world_mut(), Team::Player, enemy, 25.0, &[]); // empty
 
-        app.update();
+        // Slow projectile, far target — won't arrive in one frame
+        app.world_mut().spawn((
+            Projectile {
+                target,
+                damage: 25.0,
+                speed: 100.0,
+            },
+            Team::Player,
+            Transform::from_xyz(0.0, 0.0, 0.0),
+        ));
 
-        let health = app.world().get::<Health>(enemy).unwrap();
+        advance_and_update(&mut app, Duration::from_millis(16));
+
+        let health = app.world().get::<Health>(target).unwrap();
         assert_eq!(health.current, 100.0);
         assert_entity_count::<With<Projectile>>(&mut app, 1);
     }
@@ -518,7 +480,6 @@ mod integration_tests {
                 Transform::from_xyz(64.0, 320.0, 0.0),
                 GlobalTransform::from(Transform::from_xyz(64.0, 320.0, 0.0)),
                 crate::gameplay::EntityExtent::Rect(64.0, 64.0),
-                Collider::rectangle(128.0, 128.0),
             ))
             .id();
 
@@ -531,10 +492,4 @@ mod integration_tests {
         advance_and_update(&mut app, Duration::from_millis(100));
         assert_entity_count::<With<Projectile>>(&mut app, 1);
     }
-
-    // NOTE: Tier 2 integration test with PhysicsPlugins was removed because avian2d's
-    // FixedUpdate-based collision pipeline is unreliable under MinimalPlugins (wall-clock
-    // time accumulation is non-deterministic). Collision layer wiring is verified by
-    // manual play testing instead. The Tier 1 tests above with manually populated
-    // CollidingEntities cover the handle_projectile_hits logic thoroughly.
 }

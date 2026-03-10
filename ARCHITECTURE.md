@@ -81,7 +81,7 @@ src/
 │   │   ├── placement.rs # Grid cursor tracking and click-to-place
 │   │   └── production.rs# Barracks unit spawning on timer
 │   ├── combat/          # Attack, death, health bars
-│   │   ├── mod.rs       # Compositor + re-exports (AttackTimer, Hitbox, DeathCheck, HealthBarConfig)
+│   │   ├── mod.rs       # Compositor + re-exports (AttackTimer, DeathCheck, HealthBarConfig)
 │   │   ├── attack.rs    # Projectile spawning, movement, and hit detection
 │   │   ├── death.rs     # DeathCheck SystemSet + despawn dead entities
 │   │   └── health_bar.rs# Health bar spawning and updates
@@ -107,10 +107,6 @@ src/
 │   ├── palette.rs       # Color constants + font size tokens
 │   ├── interaction.rs   # Button hover/press feedback using observers
 │   └── widget.rs        # Reusable widget constructors (header, label, overlay, button)
-├── third_party/         # Third-party plugin isolation
-│   ├── mod.rs           # Compositor + re-exports (CollisionLayer, NavObstacle, surface_distance)
-│   ├── avian.rs         # Avian2d physics: CollisionLayer, solid_entity_layers(), surface_distance()
-│   └── vleue_navigator.rs # vleue_navigator: NavObstacle, navmesh updater, cleanup on exit
 └── dev_tools/           # Debug-only tools (feature-gated on `dev`)
     └── mod.rs           # World inspector (F4), navmesh debug overlay (F3), avoidance gizmos
 ```
@@ -187,9 +183,9 @@ This is the same pattern used by foxtrot and bevy_new_2d: a `Screen` state for w
 Pausing uses two complementary mechanisms:
 
 1. **`run_if` gate**: `gameplay_running()` checks `in_state(GameState::InGame).and(in_state(Menu::None))`. When any menu is open, gameplay systems simply don't run.
-2. **Virtual time pause**: `OnExit(Menu::None)` calls `time.pause()`, `OnEnter(Menu::None)` calls `time.unpause()`. This freezes `Time<Virtual>` so physics, timers, and animations also stop.
+2. **Virtual time pause**: `OnExit(Menu::None)` calls `time.pause()`, `OnEnter(Menu::None)` calls `time.unpause()`. This freezes `Time<Virtual>` so timers and animations also stop.
 
-Both layers are needed — `run_if` prevents system execution, virtual time prevents third-party plugins (physics, navmesh) from advancing.
+Both layers are needed — `run_if` prevents system execution, virtual time prevents timer-based systems from advancing.
 
 ### Importing states
 
@@ -313,10 +309,10 @@ Each entity type has a canonical component bundle documented in `gameplay/mod.rs
 
 | Entity | Spawn Location | Key Components |
 |--------|---------------|----------------|
-| Unit | `units/mod.rs:spawn_unit()` | `Unit`, `UnitType`, `Team`, `Target`, `Health`, `CombatStats`, `Movement`, `AttackTimer`, `Mesh2d`, `RigidBody::Kinematic`, `Collider`, `PreferredVelocity` |
-| Building | `building/placement.rs` | `Building`, `BuildingType`, `Team`, `Target`, `Health`, `ProductionTimer`/`IncomeTimer`, `RigidBody::Static`, `Collider`, `NavObstacle` |
-| Fortress | `battlefield/renderer.rs` | `PlayerFortress`/`EnemyFortress`, `Team`, `Target`, `CurrentTarget`, `Health`, `CombatStats`, `AttackTimer`, `RigidBody::Static`, `Collider`, `NavObstacle` |
-| Projectile | `combat/attack.rs` | `Projectile`, `Team`, `Hitbox`, `Sensor`, `RigidBody::Kinematic`, `Collider`, `CollidingEntities` |
+| Unit | `units/mod.rs:spawn_unit()` | `Unit`, `UnitType`, `Team`, `Target`, `Health`, `CombatStats`, `Movement`, `AttackTimer`, `Mesh2d`, `EntityExtent`, `PreferredVelocity` |
+| Building | `building/placement.rs` | `Building`, `BuildingType`, `Team`, `Target`, `Health`, `EntityExtent`, `ProductionTimer`/`IncomeTimer` |
+| Fortress | `battlefield/renderer.rs` | `PlayerFortress`/`EnemyFortress`, `Team`, `Target`, `TargetingState`, `Health`, `CombatStats`, `AttackTimer`, `EntityExtent` |
+| Projectile | `combat/attack.rs` | `Projectile`, `Team` |
 
 The doc comment at `gameplay/mod.rs:3-17` serves as the canonical archetype reference.
 
@@ -399,7 +395,7 @@ In Bevy 0.18, `.chain()` auto-inserts `ApplyDeferred` between chained systems. U
 **Examples in this codebase:**
 
 - `.chain()` in `battlefield/mod.rs:205` — `spawn_battlefield` then `setup_camera_for_battlefield` (camera needs battlefield entities)
-- `.chain_ignore_deferred()` in `combat/attack.rs:192` — `attack` → `move_projectiles` → `handle_projectile_hits` (newly spawned projectiles shouldn't move until next frame)
+- `.chain_ignore_deferred()` in `combat/attack.rs` — `attack` → `move_projectiles` (newly spawned projectiles shouldn't move until next frame)
 - `.chain_ignore_deferred()` in `building/mod.rs:223` — `update_grid_cursor` → `handle_building_placement` (cursor position read, not entity spawns)
 - `.chain_ignore_deferred()` in `units/mod.rs` — `unit_movement` → `rebuild_spatial_hash` → `apply_separation` → `apply_movement` → `resolve_overlaps` (movement + avoidance pipeline, no intermediate spawns)
 
@@ -511,7 +507,7 @@ fn strip_buildings_before_despawn(
 }
 ```
 
-This fires the `On<Remove, Building>` observer while slot entities still exist. Same pattern in `third_party/vleue_navigator.rs` for `NavObstacle` cleanup.
+This fires the `On<Remove, Building>` observer while slot entities still exist.
 
 **Always guard observer queries** with `Query::get()`:
 
@@ -555,7 +551,7 @@ The `src/dev_tools/` module is feature-gated on `dev`:
 ```toml
 [features]
 default = ["dev"]
-dev = ["bevy/dynamic_linking", "vleue_navigator/debug-with-gizmos", "dep:bevy-inspector-egui"]
+dev = ["bevy/dynamic_linking", "dep:bevy-inspector-egui"]
 ```
 
 - `cargo run` includes dev tools (default features)
@@ -604,83 +600,20 @@ This pattern is used for both F3 (navmesh debug) and F4 (world inspector). The `
 
 ## Third-Party Plugin Isolation
 
-Non-trivial third-party crates are wrapped in `src/third_party/` with one file per crate. The compositor re-exports the types that domain plugins need:
+When adding non-trivial third-party crates, wrap them in `src/third_party/` with one file per crate. The compositor re-exports the types that domain plugins need:
 
 ```rust
 // third_party/mod.rs
-pub use self::vleue_navigator::NavObstacle;
-pub use avian::{CollisionLayer, solid_entity_layers, surface_distance};
+pub use self::some_crate::SomeType;
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_plugins((avian::plugin, vleue_navigator::plugin));
+    app.add_plugins(some_crate::plugin);
 }
 ```
 
-Foxtrot uses the same pattern with 10+ third-party crates. Domain plugins import via `use crate::third_party::{CollisionLayer, NavObstacle, surface_distance};` — never from the third-party crate directly.
+Foxtrot uses this pattern with 10+ third-party crates. Domain plugins import via `use crate::third_party::SomeType;` — never from the third-party crate directly. This isolates upgrade/removal changes to one file.
 
-### Collision Layer System
-
-The game uses avian2d collision layers for physics filtering and damage delivery.
-
-#### `CollisionLayer` enum (`third_party/avian.rs`)
-
-| Layer | Purpose | On which entities |
-|-------|---------|-------------------|
-| `Pushbox` | Physical presence — blocks movement | Units, buildings, fortresses |
-| `Hitbox` | Attack collider — deals damage | Projectiles (future: melee swings) |
-| `Hurtbox` | Damageable surface | Units, buildings, fortresses |
-
-#### Entity collision setup
-
-| Entity | Memberships | Filters |
-|--------|-------------|---------|
-| Unit / Building / Fortress | `[Pushbox, Hurtbox]` | `[Pushbox, Hitbox]` |
-| Projectile | `[Hitbox]` | `[Hurtbox]` |
-
-Pushbox entities push/block each other (Pushbox↔Pushbox). Projectile hitboxes overlap with target hurtboxes (Hitbox↔Hurtbox) without physical response (`Sensor`).
-
-#### `surface_distance()` wrapper (`third_party/avian.rs`)
-
-Game systems use `surface_distance(&collider1, pos1, &collider2, pos2)` for range checks — never `contact_query` directly. This abstracts the physics dependency to one file.
-
-#### Two-tier testing
-
-- **Tier 1** (primary): `MinimalPlugins` with `Collider` components on test entities. `surface_distance()` is a pure geometric function — no physics pipeline needed. `CollidingEntities` manually populated for hitbox tests.
-- **Tier 2** (smoke): Integration tests with `PhysicsPlugins` to validate collision layer wiring. Used sparingly — avian2d's `FixedUpdate` pipeline is unreliable under `MinimalPlugins` (see GAM-29).
-
-### vleue_navigator Integration (`third_party/vleue_navigator.rs`)
-
-Wraps the `vleue_navigator` crate for navmesh pathfinding.
-
-#### `NavObstacle` marker component
-
-Static obstacles (buildings, fortresses) that should carve holes in the navmesh:
-
-```rust
-use crate::third_party::NavObstacle;
-
-commands.spawn((
-    Name::new("Player Fortress"),
-    PlayerFortress,
-    NavObstacle,  // Tells navmesh updater to carve around this entity
-    RigidBody::Static,
-    Collider::rectangle(w, h),
-    // ...
-));
-```
-
-The `NavmeshUpdaterPlugin<Collider, NavObstacle>` automatically rebuilds the navmesh when `NavObstacle` entities are added or removed.
-
-#### Cleanup on state exit
-
-`NavObstacle` components must be stripped **before** `DespawnOnExit` batch-despawns entities, otherwise late navmesh rebuild tasks cause hangs on exit:
-
-```rust
-// In vleue_navigator.rs plugin:
-app.add_systems(OnExit(GameState::InGame), strip_nav_obstacles_before_despawn);
-```
-
-This is the same pattern used by `Building` observer cleanup (see Observer Safety section).
+**Currently**: No third-party plugins are in use (`third_party/` does not exist). avian2d was removed in GAM-62; range checks use `EntityExtent` + `extent_distance()`, projectile hits use distance-based arrival, and unit avoidance uses boids separation.
 
 ---
 
@@ -703,7 +636,7 @@ This is the same pattern used by `Building` observer cleanup (see Observer Safet
 | `init_economy_resources(app)` | Init `Gold` + `Shop` resources |
 | `init_input_resources(app)` | Init `ButtonInput<KeyCode>` + `ButtonInput<MouseButton>` |
 | `spawn_test_unit(world, team, x, y)` | Spawn full Soldier archetype with all components |
-| `spawn_test_target(world, team, x, y)` | Spawn minimal targetable entity (Team + Target + Collider) |
+| `spawn_test_target(world, team, x, y)` | Spawn minimal targetable entity (Team + Target + EntityExtent) |
 
 ### When to use which base app
 
@@ -890,8 +823,6 @@ Use `default-features = false` with explicit feature selection to improve compil
 
 ```toml
 bevy = { version = "0.18", default-features = false, features = ["2d"] }
-avian2d = { version = "0.5", default-features = false, features = ["2d", "parry-f32", "debug-plugin", "parallel"] }
-vleue_navigator = { version = "0.15", default-features = false, features = ["avian2d"] }
 rand = "0.9"
 bevy-inspector-egui = { version = "0.36", optional = true }  # gated on `dev` feature
 ```
@@ -916,7 +847,7 @@ type_complexity = "allow"         # Bevy queries can be complex
 ```toml
 [features]
 default = ["dev"]
-dev = ["bevy/dynamic_linking", "vleue_navigator/debug-with-gizmos", "dep:bevy-inspector-egui"]
+dev = ["bevy/dynamic_linking", "dep:bevy-inspector-egui"]
 ```
 
 ### Build Profiles

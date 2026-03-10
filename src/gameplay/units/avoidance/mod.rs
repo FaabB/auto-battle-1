@@ -193,8 +193,7 @@ pub fn apply_separation(
     }
 }
 
-/// Apply preferred velocity to transform directly.
-/// Replaces avian2d physics integration for unit movement.
+/// Apply adjusted velocity to unit transforms each frame.
 pub fn apply_movement(
     time: Res<Time>,
     mut units: Query<(&PreferredVelocity, &mut Transform), With<Unit>>,

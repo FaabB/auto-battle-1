@@ -602,7 +602,6 @@ pub(super) fn plugin(app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use avian2d::prelude::Collider;
     use pretty_assertions::assert_eq;
 
     fn create_ai_test_app() -> App {
@@ -655,7 +654,6 @@ mod tests {
                 Transform::from_xyz(x, y, 0.0),
                 GlobalTransform::from(Transform::from_xyz(x, y, 0.0)),
                 EntityExtent::Rect(64.0, 64.0),
-                Collider::rectangle(128.0, 128.0),
             ))
             .id()
     }

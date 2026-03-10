@@ -34,8 +34,7 @@ pub fn plugin(app: &mut App) {
     app.add_plugins((main_menu::plugin, pause::plugin, endgame::plugin));
 
     // Pause/unpause virtual time when any menu overlay opens/closes.
-    // This stops physics (avian2d runs in FixedPostUpdate, which accumulates from Time<Virtual>)
-    // and all timer-based systems (production, attack, income, waves).
+    // This stops all timer-based systems (production, attack, income, waves).
     app.add_systems(OnExit(Menu::None), pause_virtual_time);
     app.add_systems(OnEnter(Menu::None), unpause_virtual_time);
 

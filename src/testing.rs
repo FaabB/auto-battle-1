@@ -2,7 +2,6 @@
 
 use std::time::Duration;
 
-use avian2d::prelude::Collider;
 use bevy::input::InputPlugin;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
@@ -147,7 +146,7 @@ pub fn init_input_resources(app: &mut App) {
 ///
 /// Includes: Unit, UnitType::Soldier, Team, Target, TargetingState::Moving,
 /// Health, CombatStats, Movement, AttackTimer, Transform, GlobalTransform,
-/// Collider, PreferredVelocity.
+/// EntityExtent, PreferredVelocity.
 ///
 /// Callers can override specific components via `world.entity_mut(id).insert(...)`.
 #[allow(dead_code)]
@@ -176,7 +175,6 @@ pub fn spawn_test_unit(world: &mut World, team: Team, x: f32, y: f32) -> Entity 
             Transform::from_xyz(x, y, 0.0),
             GlobalTransform::from(Transform::from_xyz(x, y, 0.0)),
             EntityExtent::Circle(UNIT_RADIUS),
-            Collider::circle(UNIT_RADIUS),
         ))
         .insert((
             PreferredVelocity::default(),
@@ -190,7 +188,7 @@ pub fn spawn_test_unit(world: &mut World, team: Team, x: f32, y: f32) -> Entity 
 
 /// Spawn a non-unit targetable entity at `(x, y)`.
 ///
-/// Includes: Team, Target, Transform, GlobalTransform, Collider (5px radius).
+/// Includes: Team, Target, Transform, GlobalTransform, EntityExtent.
 /// Add `Health` via `world.entity_mut(id).insert(Health::new(hp))` for attack tests.
 #[allow(dead_code)]
 pub fn spawn_test_target(world: &mut World, team: Team, x: f32, y: f32) -> Entity {
@@ -201,7 +199,6 @@ pub fn spawn_test_target(world: &mut World, team: Team, x: f32, y: f32) -> Entit
             Transform::from_xyz(x, y, 0.0),
             GlobalTransform::from(Transform::from_xyz(x, y, 0.0)),
             EntityExtent::Circle(5.0),
-            Collider::circle(5.0),
         ))
         .id()
 }
